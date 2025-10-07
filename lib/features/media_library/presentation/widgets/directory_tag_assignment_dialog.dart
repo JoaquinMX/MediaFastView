@@ -17,12 +17,12 @@ class DirectoryTagAssignmentDialog extends ConsumerStatefulWidget {
   });
 
   final DirectoryEntity directory;
-  final ValueChanged<List<String>> onTagsAssigned;
+  final Future<void> Function(List<String>) onTagsAssigned;
 
   static Future<void> show(
     BuildContext context, {
     required DirectoryEntity directory,
-    required ValueChanged<List<String>> onTagsAssigned,
+    required Future<void> Function(List<String>) onTagsAssigned,
   }) {
     return showDialog(
       context: context,
@@ -41,6 +41,8 @@ class DirectoryTagAssignmentDialog extends ConsumerStatefulWidget {
 class _DirectoryTagAssignmentDialogState
     extends ConsumerState<DirectoryTagAssignmentDialog> {
   late List<String> _tempSelectedTagIds;
+  bool _isSaving = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -74,11 +76,35 @@ class _DirectoryTagAssignmentDialogState
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: () {
-            widget.onTagsAssigned(_tempSelectedTagIds);
-            Navigator.of(context).pop();
-          },
-          child: const Text('Save'),
+          onPressed: _isSaving
+              ? null
+              : () async {
+                  setState(() {
+                    _isSaving = true;
+                    _errorMessage = null;
+                  });
+                  try {
+                    await widget.onTagsAssigned(_tempSelectedTagIds);
+                    if (mounted) {
+                      Navigator.of(context).pop();
+                    }
+                  } catch (e) {
+                    if (!mounted) {
+                      return;
+                    }
+                    setState(() {
+                      _isSaving = false;
+                      _errorMessage = 'Failed to save tags: $e';
+                    });
+                  }
+                },
+          child: _isSaving
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
         ),
       ],
     );
@@ -111,6 +137,15 @@ class _DirectoryTagAssignmentDialogState
             ),
           ),
         ),
+        if (_errorMessage != null) ...[
+          const SizedBox(height: 16),
+          Text(
+            _errorMessage!,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -141,6 +176,9 @@ class _DirectoryTagAssignmentDialogState
   }
 
   void _toggleTagSelection(String tagId) {
+    if (_isSaving) {
+      return;
+    }
     setState(() {
       if (_tempSelectedTagIds.contains(tagId)) {
         _tempSelectedTagIds.remove(tagId);
