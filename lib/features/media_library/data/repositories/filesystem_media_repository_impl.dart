@@ -14,10 +14,12 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   FilesystemMediaRepositoryImpl(
     BookmarkService bookmarkService,
     this._directoryRepository,
-    this._localMediaDataSource, [
+    this._localMediaDataSource, {
     PermissionService? permissionService,
-  ]) : _filesystemDataSource = FilesystemMediaDataSource(bookmarkService, permissionService),
-       _permissionService = permissionService ?? PermissionService();
+    FilesystemMediaDataSource? filesystemDataSource,
+  })  : _filesystemDataSource =
+            filesystemDataSource ?? FilesystemMediaDataSource(bookmarkService, permissionService),
+        _permissionService = permissionService ?? PermissionService();
   final DirectoryRepository _directoryRepository;
   final SharedPreferencesMediaDataSource _localMediaDataSource;
   final FilesystemMediaDataSource _filesystemDataSource;
@@ -97,24 +99,30 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<MediaEntity?> getMediaById(String id) async {
-    // Get media from local storage to find which directory it belongs to
     final allMedia = await _localMediaDataSource.getMedia();
     final localMedia = allMedia.where((media) => media.id == id).firstOrNull;
 
     if (localMedia == null) {
-      return null;
+      return _scanDirectoriesForMedia(id);
     }
 
     final directory = await _directoryRepository.getDirectoryById(localMedia.directoryId);
     if (directory == null) {
-      return null;
+      return _modelToEntity(localMedia);
     }
 
-    return getMediaByIdFromDirectory(
+    final refreshedMedia = await getMediaByIdFromDirectory(
       id,
       directory.path,
       bookmarkData: directory.bookmarkData,
+      persistedTagIds: localMedia.tagIds,
     );
+
+    if (refreshedMedia != null) {
+      return refreshedMedia;
+    }
+
+    return _modelToEntity(localMedia);
   }
 
   /// Gets media by ID from a specific directory.
@@ -122,6 +130,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     String id,
     String directoryPath, {
     String? bookmarkData,
+    List<String>? persistedTagIds,
   }) async {
     final directoryId = generateDirectoryId(directoryPath);
     final model = await _filesystemDataSource.getMediaById(
@@ -130,7 +139,15 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       directoryId,
       bookmarkData: bookmarkData,
     );
-    return model != null ? _modelToEntity(model) : null;
+    if (model == null) {
+      return null;
+    }
+
+    final mergedModel = persistedTagIds != null
+        ? model.copyWith(tagIds: persistedTagIds)
+        : model;
+
+    return _modelToEntity(mergedModel);
   }
 
   @override
@@ -262,5 +279,24 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   @override
   Future<void> removeMediaForDirectory(String directoryId) async {
     await _localMediaDataSource.removeMediaForDirectory(directoryId);
+  }
+
+  Future<MediaEntity?> _scanDirectoriesForMedia(String id) async {
+    final directories = await _directoryRepository.getDirectories();
+    for (final directory in directories) {
+      final directoryId = generateDirectoryId(directory.path);
+      final model = await _filesystemDataSource.getMediaById(
+        id,
+        directory.path,
+        directoryId,
+        bookmarkData: directory.bookmarkData,
+      );
+
+      if (model != null) {
+        return _modelToEntity(model);
+      }
+    }
+
+    return null;
   }
 }

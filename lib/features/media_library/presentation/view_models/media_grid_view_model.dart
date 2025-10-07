@@ -415,6 +415,7 @@ final mediaViewModelProvider = StateNotifierProvider.autoDispose
           ref.watch(bookmarkServiceProvider),
           ref.watch(directoryRepositoryProvider),
           ref.watch(mediaDataSourceProvider),
+          permissionService: ref.watch(permissionServiceProvider),
         ),
         sharedPreferencesDataSource: ref.watch(mediaDataSourceProvider),
       ),

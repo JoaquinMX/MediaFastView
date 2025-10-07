@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/logging_service.dart';
 import '../../../../features/media_library/domain/entities/media_entity.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/tag_entity.dart';
 import '../../domain/use_cases/assign_tag_use_case.dart';
 import '../states/tag_state.dart';
@@ -37,7 +39,7 @@ class _TagManagementDialogState extends ConsumerState<TagManagementDialog> {
     return Consumer(
       builder: (context, ref, child) {
         final future = widget.media != null
-            ? ref.read(mediaRepositoryProvider).getMediaById(widget.media!.id).then((media) => media?.tagIds ?? <String>[])
+            ? _loadInitialTags(ref)
             : Future.value(<String>[]);
 
         return FutureBuilder<List<String>>(
@@ -249,7 +251,19 @@ class _TagManagementDialogState extends ConsumerState<TagManagementDialog> {
 
     try {
       if (widget.media!.type == MediaType.directory) {
-        await assignTagUseCase.toggleTagOnDirectory(widget.media!.id, tag);
+        final directoryId = _resolveDirectoryId(widget.media!);
+        LoggingService.instance.debug(
+          'TagManagementDialog toggling directory tag',
+          {
+            'directoryId': directoryId,
+            'directoryPath': widget.media!.path,
+            'tagId': tag.id,
+          },
+        );
+        if (directoryId == null) {
+          throw StateError('Unable to resolve directory identifier for ${widget.media!.path}');
+        }
+        await assignTagUseCase.toggleTagOnDirectory(directoryId, tag);
       } else {
         await assignTagUseCase.toggleTagOnMedia(widget.media!.id, tag);
       }
@@ -268,5 +282,46 @@ class _TagManagementDialogState extends ConsumerState<TagManagementDialog> {
         );
       }
     }
+  }
+
+  Future<List<String>> _loadInitialTags(WidgetRef ref) {
+    final media = widget.media!;
+    if (media.type == MediaType.directory) {
+      final directoryId = _resolveDirectoryId(media);
+      LoggingService.instance.debug(
+        'Loading tags for directory in TagManagementDialog',
+        {
+          'directoryId': directoryId,
+          'directoryPath': media.path,
+        },
+      );
+      if (directoryId == null) {
+        return Future.value(<String>[]);
+      }
+      return ref
+          .read(directoryRepositoryProvider)
+          .getDirectoryById(directoryId)
+          .then((directory) => directory?.tagIds ?? <String>[]);
+    }
+
+    return ref
+        .read(mediaRepositoryProvider)
+        .getMediaById(media.id)
+        .then((value) => value?.tagIds ?? <String>[]);
+  }
+
+  String? _resolveDirectoryId(MediaEntity media) {
+    if (media.type != MediaType.directory) {
+      return null;
+    }
+    final path = media.path.trim();
+    if (path.isEmpty) {
+      LoggingService.instance.warning(
+        'Received directory media with empty path when resolving ID',
+        {'mediaId': media.id},
+      );
+      return null;
+    }
+    return generateDirectoryId(path);
   }
 }

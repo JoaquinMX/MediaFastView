@@ -157,7 +157,25 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       // Continue without bookmark - this allows the app to work on non-macOS platforms
     }
 
-    final model = _entityToModel(directory.copyWith(bookmarkData: bookmarkData));
+    final preservedTagIds = directory.tagIds.isNotEmpty
+        ? directory.tagIds
+        : (existing?.tagIds ?? const <String>[]);
+
+    String? resolvedBookmarkData;
+    if (bookmarkData != null && bookmarkData.isNotEmpty) {
+      resolvedBookmarkData = bookmarkData;
+    } else if (directory.bookmarkData != null && directory.bookmarkData!.isNotEmpty) {
+      resolvedBookmarkData = directory.bookmarkData;
+    } else {
+      resolvedBookmarkData = existing?.bookmarkData;
+    }
+
+    final directoryToPersist = directory.copyWith(
+      tagIds: preservedTagIds,
+      bookmarkData: resolvedBookmarkData,
+    );
+
+    final model = _entityToModel(directoryToPersist);
     if (existing != null) {
       // Update existing directory
       await _directoryDataSource.updateDirectory(model);
@@ -204,11 +222,30 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     String directoryId,
     List<String> tagIds,
   ) async {
+    LoggingService.instance.debug(
+      'Updating directory tags',
+      {
+        'directoryId': directoryId,
+        'tagIds': tagIds,
+      },
+    );
     final directory = await getDirectoryById(directoryId);
     if (directory != null) {
       final updatedDirectory = directory.copyWith(tagIds: tagIds);
       final model = _entityToModel(updatedDirectory);
       await _directoryDataSource.updateDirectory(model);
+      LoggingService.instance.info(
+        'Directory tags updated',
+        {
+          'directoryId': directoryId,
+          'tagCount': tagIds.length,
+        },
+      );
+    } else {
+      LoggingService.instance.warning(
+        'Attempted to update tags for missing directory',
+        {'directoryId': directoryId},
+      );
     }
   }
 
