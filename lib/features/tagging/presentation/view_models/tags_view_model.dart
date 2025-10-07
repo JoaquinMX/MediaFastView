@@ -231,26 +231,38 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
   Future<TagSection> _buildSectionForTag(TagEntity tag) async {
     final filterResults = await _filterByTagsUseCase.getFilteredResults([tag.id]);
-    final directoryIds = filterResults.directories.map((dir) => dir.id).toSet();
 
-    final mediaByDirectory = <String, List<MediaEntity>>{};
-    final standaloneMedia = <MediaEntity>[];
+    final collectedMediaIds = <String>{};
+    final directorySections = <TagDirectoryContent>[];
 
-    for (final media in filterResults.media) {
-      if (directoryIds.contains(media.directoryId)) {
-        mediaByDirectory.putIfAbsent(media.directoryId, () => []).add(media);
-      } else {
-        standaloneMedia.add(media);
+    for (final directory in filterResults.directories) {
+      List<MediaEntity> directoryMedia = const [];
+      try {
+        directoryMedia = await _filterByTagsUseCase.filterMediaInDirectory(
+          directory.id,
+          [tag.id],
+        );
+      } catch (e, stackTrace) {
+        LoggingService.instance.error(
+          'Failed to load media for directory ${directory.id} and tag ${tag.id}: $e',
+          stackTrace: stackTrace,
+        );
       }
+
+      if (directoryMedia.isNotEmpty) {
+        collectedMediaIds.addAll(directoryMedia.map((media) => media.id));
+      }
+
+      directorySections.add(
+        TagDirectoryContent(
+          directory: directory,
+          media: directoryMedia,
+        ),
+      );
     }
 
-    final directorySections = filterResults.directories
-        .map(
-          (directory) => TagDirectoryContent(
-            directory: directory,
-            media: mediaByDirectory[directory.id] ?? const [],
-          ),
-        )
+    final standaloneMedia = filterResults.media
+        .where((media) => !collectedMediaIds.contains(media.id))
         .toList();
 
     return TagSection(
