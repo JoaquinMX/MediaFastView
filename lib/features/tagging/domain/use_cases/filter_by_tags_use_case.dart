@@ -34,18 +34,32 @@ class FilterByTagsUseCase {
 
   /// Filters media within a specific directory by tag IDs.
   Future<List<MediaEntity>> filterMediaInDirectory(
-    String directoryId,
+    DirectoryEntity directory,
     List<String> tagIds,
   ) async {
-    if (tagIds.isEmpty) {
-      return mediaRepository.getMediaForDirectory(directoryId);
+    List<MediaEntity> filtered = const [];
+    try {
+      filtered = await mediaRepository.filterMediaByTagsForDirectory(
+        tagIds,
+        directory.path,
+        bookmarkData: directory.bookmarkData,
+      );
+    } catch (_) {
+      filtered = const [];
     }
 
-    final allMediaInDirectory = await mediaRepository.getMediaForDirectory(
-      directoryId,
-    );
-    return allMediaInDirectory
-        .where((media) => media.tagIds.any((tagId) => tagIds.contains(tagId)))
+    if (filtered.isNotEmpty || tagIds.isEmpty) {
+      return filtered;
+    }
+
+    final cachedMedia = await mediaRepository.getMediaForDirectory(directory.id);
+    if (tagIds.isEmpty) {
+      return cachedMedia;
+    }
+
+    final tagIdSet = tagIds.toSet();
+    return cachedMedia
+        .where((media) => media.tagIds.any(tagIdSet.contains))
         .toList();
   }
 
