@@ -157,7 +157,25 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       // Continue without bookmark - this allows the app to work on non-macOS platforms
     }
 
-    final model = _entityToModel(directory.copyWith(bookmarkData: bookmarkData));
+    final preservedTagIds = directory.tagIds.isNotEmpty
+        ? directory.tagIds
+        : (existing?.tagIds ?? const <String>[]);
+
+    String? resolvedBookmarkData;
+    if (bookmarkData != null && bookmarkData.isNotEmpty) {
+      resolvedBookmarkData = bookmarkData;
+    } else if (directory.bookmarkData != null && directory.bookmarkData!.isNotEmpty) {
+      resolvedBookmarkData = directory.bookmarkData;
+    } else {
+      resolvedBookmarkData = existing?.bookmarkData;
+    }
+
+    final directoryToPersist = directory.copyWith(
+      tagIds: preservedTagIds,
+      bookmarkData: resolvedBookmarkData,
+    );
+
+    final model = _entityToModel(directoryToPersist);
     if (existing != null) {
       // Update existing directory
       await _directoryDataSource.updateDirectory(model);
