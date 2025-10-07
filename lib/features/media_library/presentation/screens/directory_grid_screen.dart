@@ -569,35 +569,22 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     );
   }
 
-  Future<void> _assignTagsToDirectory(DirectoryEntity directory, List<String> tagIds) async {
+  Future<void> _assignTagsToDirectory(
+    DirectoryEntity directory,
+    List<String> tagIds,
+  ) async {
+    final assignTagUseCase = ref.read(assignTagUseCaseProvider);
+
     try {
-      final assignTagUseCase = ref.read(assignTagUseCaseProvider);
-      final currentTagIds = directory.tagIds.toSet();
-
-      // Remove tags that are no longer selected
-      for (final tagId in currentTagIds.difference(tagIds.toSet())) {
-        final tag = await ref.read(tagRepositoryProvider).getTagById(tagId);
-        if (tag != null) {
-          await assignTagUseCase.removeTagFromDirectory(directory.id, tag);
-        }
-      }
-
-      // Add new tags
-      for (final tagId in tagIds.toSet().difference(currentTagIds)) {
-        final tag = await ref.read(tagRepositoryProvider).getTagById(tagId);
-        if (tag != null) {
-          await assignTagUseCase.assignTagToDirectory(directory.id, tag);
-        }
-      }
-
-      // Refresh the directory list to show updated tags
-      ref.read(directoryViewModelProvider.notifier).loadDirectories();
+      await assignTagUseCase.setTagsForDirectory(directory.id, tagIds);
+      await ref.read(directoryViewModelProvider.notifier).loadDirectories();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to assign tags: $e')),
         );
       }
+      rethrow;
     }
   }
 }

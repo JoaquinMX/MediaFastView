@@ -16,7 +16,7 @@ class DirectoryGridItem extends StatefulWidget {
   final DirectoryEntity directory;
   final VoidCallback onTap;
   final VoidCallback onDelete;
-  final ValueChanged<List<String>> onAssignTags;
+  final Future<void> Function(List<String>) onAssignTags;
 
   @override
   State<DirectoryGridItem> createState() => _DirectoryGridItemState();

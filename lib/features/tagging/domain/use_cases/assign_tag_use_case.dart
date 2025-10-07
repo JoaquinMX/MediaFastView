@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import '../../../media_library/domain/repositories/directory_repository.dart';
 import '../../../media_library/domain/repositories/media_repository.dart';
 import '../entities/tag_entity.dart';
@@ -12,6 +14,28 @@ class AssignTagUseCase {
 
   final DirectoryRepository directoryRepository;
   final MediaRepository mediaRepository;
+
+  /// Replaces the tags assigned to a directory with the provided collection.
+  ///
+  /// The [tagIds] list will be de-duplicated while keeping the first
+  /// occurrence of each identifier so the repository only persists meaningful
+  /// updates.
+  Future<void> setTagsForDirectory(
+    String directoryId,
+    List<String> tagIds,
+  ) async {
+    final directory = await directoryRepository.getDirectoryById(directoryId);
+    if (directory == null) {
+      return;
+    }
+
+    final sanitizedTagIds =
+        List<String>.unmodifiable(LinkedHashSet<String>.from(tagIds));
+    await directoryRepository.updateDirectoryTags(
+      directoryId,
+      sanitizedTagIds,
+    );
+  }
 
   /// Assigns a tag to a directory.
   Future<void> assignTagToDirectory(String directoryId, TagEntity tag) async {
