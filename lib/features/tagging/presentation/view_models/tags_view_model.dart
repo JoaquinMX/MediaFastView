@@ -58,12 +58,22 @@ class TagsLoading extends TagsState {
 }
 
 class TagsLoaded extends TagsState {
-  const TagsLoaded({required this.sections});
+  const TagsLoaded({
+    required this.sections,
+    required this.selectedTagIds,
+  });
 
   final List<TagSection> sections;
+  final List<String> selectedTagIds;
 
-  TagsLoaded copyWith({List<TagSection>? sections}) {
-    return TagsLoaded(sections: sections ?? this.sections);
+  TagsLoaded copyWith({
+    List<TagSection>? sections,
+    List<String>? selectedTagIds,
+  }) {
+    return TagsLoaded(
+      sections: sections ?? this.sections,
+      selectedTagIds: selectedTagIds ?? this.selectedTagIds,
+    );
   }
 }
 
@@ -89,6 +99,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
   final FilterByTagsUseCase _filterByTagsUseCase;
   final FavoritesRepository _favoritesRepository;
   final SharedPreferencesMediaDataSource _mediaDataSource;
+  List<String> _selectedTagIds = const [];
 
   Future<void> loadTags() async {
     state = const TagsLoading();
@@ -108,11 +119,19 @@ class TagsViewModel extends StateNotifier<TagsState> {
             currentState.sections.where((section) => !section.isFavorites).toList();
 
         if (favoritesSection != null) {
-          state = TagsLoaded(sections: [favoritesSection, ...otherSections]);
+          final updatedSections = [favoritesSection, ...otherSections];
+          state = TagsLoaded(
+            sections: updatedSections,
+            selectedTagIds: _syncSelectionWithSections(updatedSections),
+          );
         } else if (otherSections.isEmpty) {
+          _selectedTagIds = const [];
           state = const TagsEmpty();
         } else {
-          state = TagsLoaded(sections: otherSections);
+          state = TagsLoaded(
+            sections: otherSections,
+            selectedTagIds: _syncSelectionWithSections(otherSections),
+          );
         }
       } else {
         await _reloadSections();
@@ -142,9 +161,13 @@ class TagsViewModel extends StateNotifier<TagsState> {
       }
 
       if (sections.isEmpty) {
+        _selectedTagIds = const [];
         state = const TagsEmpty();
       } else {
-        state = TagsLoaded(sections: sections);
+        state = TagsLoaded(
+          sections: sections,
+          selectedTagIds: _syncSelectionWithSections(sections),
+        );
       }
     } catch (e, stackTrace) {
       LoggingService.instance.error('Failed to load tags: $e', stackTrace: stackTrace);
@@ -152,6 +175,37 @@ class TagsViewModel extends StateNotifier<TagsState> {
         return;
       }
       state = TagsError(e.toString());
+    }
+  }
+
+  void setTagSelected(String tagId, bool isSelected) {
+    final updatedSelection = List<String>.from(_selectedTagIds);
+    if (isSelected) {
+      if (!updatedSelection.contains(tagId)) {
+        updatedSelection.add(tagId);
+      }
+    } else {
+      updatedSelection.remove(tagId);
+    }
+    _updateSelection(updatedSelection);
+  }
+
+  void clearSelection() {
+    _updateSelection(const []);
+  }
+
+  List<String> _syncSelectionWithSections(List<TagSection> sections) {
+    final availableIds = sections.map((section) => section.id).toSet();
+    _selectedTagIds =
+        _selectedTagIds.where((tagId) => availableIds.contains(tagId)).toList();
+    return List<String>.from(_selectedTagIds);
+  }
+
+  void _updateSelection(List<String> newSelection) {
+    _selectedTagIds = newSelection;
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(selectedTagIds: List<String>.from(_selectedTagIds));
     }
   }
 
