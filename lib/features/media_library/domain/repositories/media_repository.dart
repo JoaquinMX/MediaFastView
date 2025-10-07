@@ -29,4 +29,7 @@ abstract class MediaRepository {
 
   /// Updates the tags for a media item.
   Future<void> updateMediaTags(String mediaId, List<String> tagIds);
+
+  /// Removes all cached media entries for a directory.
+  Future<void> removeMediaForDirectory(String directoryId);
 }

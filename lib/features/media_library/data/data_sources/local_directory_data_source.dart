@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/logging_service.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/directory_entity.dart';
 
 /// Data source for local directory operations on the file system.
@@ -242,8 +243,8 @@ class LocalDirectoryDataSource {
     }
   }
 
-  /// Generates a unique ID from directory path using hash.
+  /// Generates a unique ID from directory path using a shared hash strategy.
   String _generateId(String directoryPath) {
-    return directoryPath.hashCode.toString();
+    return generateDirectoryId(directoryPath);
   }
 }

@@ -7,6 +7,7 @@ import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/permission_service.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
 
 /// Implementation of DirectoryRepository using SharedPreferences and local file system.
 class DirectoryRepositoryImpl implements DirectoryRepository {
@@ -28,41 +29,51 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     final entities = <DirectoryEntity>[];
 
     for (final model in models) {
+      final normalizedModel = await _ensureStableDirectoryId(model);
       DirectoryEntity entity;
       try {
-        if (model.bookmarkData != null && model.bookmarkData!.isNotEmpty) {
+        if (normalizedModel.bookmarkData != null &&
+            normalizedModel.bookmarkData!.isNotEmpty) {
           final validationResult = await _permissionService.validateAndRenewBookmark(
-            model.bookmarkData!,
-            model.path,
+            normalizedModel.bookmarkData!,
+            normalizedModel.path,
           );
 
           if (validationResult.renewedBookmarkData != null) {
             // Update stored bookmark data
-            await updateDirectoryBookmark(model.id, validationResult.renewedBookmarkData);
-            LoggingService.instance.info('Bookmark renewed and updated for directory ${model.path}');
+            await updateDirectoryBookmark(
+              normalizedModel.id,
+              validationResult.renewedBookmarkData,
+            );
+            LoggingService.instance.info('Bookmark renewed and updated for directory ${normalizedModel.path}');
           }
 
           if (validationResult.isValid) {
-            entity = await _resolveBookmarkForModel(model.copyWith(bookmarkData: validationResult.renewedBookmarkData ?? model.bookmarkData));
+            entity = await _resolveBookmarkForModel(
+              normalizedModel.copyWith(
+                bookmarkData:
+                    validationResult.renewedBookmarkData ?? normalizedModel.bookmarkData,
+              ),
+            );
           } else {
             // Bookmark invalid and renewal failed
             throw BookmarkInvalidError(
-              'Bookmark for directory ${model.path} is invalid and could not be renewed. Please re-select the directory.',
-              model.id,
-              model.path,
+              'Bookmark for directory ${normalizedModel.path} is invalid and could not be renewed. Please re-select the directory.',
+              normalizedModel.id,
+              normalizedModel.path,
             );
           }
         } else {
-          LoggingService.instance.debug('No bookmark data available for directory ${model.path}, using stored path');
-          entity = _modelToEntity(model);
+          LoggingService.instance.debug('No bookmark data available for directory ${normalizedModel.path}, using stored path');
+          entity = _modelToEntity(normalizedModel);
         }
       } catch (e) {
         if (e is BookmarkInvalidError) {
           rethrow; // Re-throw bookmark errors to be handled by UI
         }
-        LoggingService.instance.error('Failed to resolve bookmark for directory ${model.path}: $e');
+        LoggingService.instance.error('Failed to resolve bookmark for directory ${normalizedModel.path}: $e');
         // Fall back to the stored path if bookmark resolution fails
-        entity = _modelToEntity(model);
+        entity = _modelToEntity(normalizedModel);
       }
       entities.add(entity);
     }
@@ -119,7 +130,10 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
               }
               // Update directory path if different
               if (recoveryResult.directoryPath != directory.path) {
-                directory = directory.copyWith(path: recoveryResult.directoryPath, id: recoveryResult.directoryPath.hashCode.toString());
+                directory = directory.copyWith(
+                  path: recoveryResult.directoryPath,
+                  id: generateDirectoryId(recoveryResult.directoryPath),
+                );
               }
             } else {
               LoggingService.instance.error('Recovery failed for directory ${directory.path}');
@@ -203,6 +217,26 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       final model = _entityToModel(updatedDirectory);
       await _directoryDataSource.updateDirectory(model);
     }
+  }
+
+  /// Ensures that stored directory IDs use the shared hashing strategy.
+  Future<DirectoryModel> _ensureStableDirectoryId(DirectoryModel model) async {
+    final expectedId = generateDirectoryId(model.path);
+    if (model.id == expectedId) {
+      return model;
+    }
+
+    LoggingService.instance.warning(
+      'Detected legacy directory ID for ${model.path}. Updating to stable SHA-256 hash.',
+    );
+
+    final updatedModel = model.copyWith(id: expectedId);
+
+    // Replace the legacy entry with the updated ID to keep storage consistent.
+    await _directoryDataSource.removeDirectory(model.id);
+    await _directoryDataSource.addDirectory(updatedModel);
+
+    return updatedModel;
   }
 
   /// Converts DirectoryModel to DirectoryEntity.

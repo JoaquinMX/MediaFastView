@@ -1,3 +1,4 @@
+import '../../../../shared/utils/directory_id_utils.dart';
 import '../entities/directory_entity.dart';
 import '../repositories/directory_repository.dart';
 
@@ -11,8 +12,8 @@ class AddDirectoryUseCase {
   /// Creates a DirectoryEntity and delegates validation to the repository.
   /// [silent] if true, skips recovery dialogs for bookmark failures (used for drag-and-drop).
   Future<void> call(String path, {bool silent = false}) async {
-    // Generate ID from path
-    final id = path.hashCode.toString();
+    // Generate ID from path using a stable hash to keep repository layers aligned
+    final id = generateDirectoryId(path);
 
     // Get directory name from path
     final name = path.split('/').lastWhere((element) => element.isNotEmpty, orElse: () => path);
