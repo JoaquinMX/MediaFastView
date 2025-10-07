@@ -100,4 +100,35 @@ class SharedPreferencesMediaDataSource {
     allMedia.removeWhere((media) => media.directoryId == directoryId);
     await saveMedia(allMedia);
   }
+
+  /// Rewrites media entries that reference a legacy directory identifier.
+  Future<void> migrateDirectoryId(
+    String legacyDirectoryId,
+    String stableDirectoryId,
+  ) async {
+    if (legacyDirectoryId == stableDirectoryId) {
+      return;
+    }
+
+    final allMedia = await getMedia();
+    var updatedCount = 0;
+
+    final migratedMedia = allMedia.map((media) {
+      if (media.directoryId == legacyDirectoryId) {
+        updatedCount++;
+        return media.copyWith(directoryId: stableDirectoryId);
+      }
+      return media;
+    }).toList();
+
+    if (updatedCount == 0) {
+      return;
+    }
+
+    LoggingService.instance.info(
+      'Migrating $updatedCount media items from $legacyDirectoryId to $stableDirectoryId',
+    );
+
+    await saveMedia(migratedMedia);
+  }
 }

@@ -468,6 +468,9 @@ final directoryRepositoryProvider = Provider<DirectoryRepository>((ref) {
   return DirectoryRepositoryImpl(
     ref.watch(sharedPreferencesDataSourceProvider),
     ref.watch(localDirectoryDataSourceProvider),
+    ref.watch(bookmarkServiceProvider),
+    ref.watch(permissionServiceProvider),
+    ref.watch(mediaDataSourceProvider),
   );
 });
 
