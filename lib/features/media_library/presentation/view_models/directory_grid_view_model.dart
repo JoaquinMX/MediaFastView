@@ -152,6 +152,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   final LocalDirectoryDataSource _localDirectoryDataSource;
   final PermissionService _permissionService;
 
+  List<DirectoryEntity> _cachedAccessibleDirectories = const [];
+  List<DirectoryEntity> _cachedInaccessibleDirectories = const [];
+  List<DirectoryEntity> _cachedInvalidDirectories = const [];
+
   /// Loads all directories.
   Future<void> loadDirectories() async {
     LoggingService.instance.debug('Starting loadDirectories operation');
@@ -185,6 +189,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
       if (accessibleDirectories.isEmpty && inaccessibleDirectories.isEmpty) {
         LoggingService.instance.info('Setting state to DirectoryEmpty');
+        _updateDirectoryCaches();
         state = const DirectoryEmpty();
       } else if (accessibleDirectories.isNotEmpty && inaccessibleDirectories.isEmpty) {
         // All directories are accessible
@@ -193,6 +198,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         for (final dir in accessibleDirectories) {
           LoggingService.instance.debug('  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}');
         }
+        _updateDirectoryCaches(accessible: accessibleDirectories);
         state = DirectoryLoaded(
           directories: accessibleDirectories,
           searchQuery: '',
@@ -210,6 +216,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         for (final dir in inaccessibleDirectories) {
           LoggingService.instance.debug('  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}');
         }
+        _updateDirectoryCaches(
+          accessible: accessibleDirectories,
+          inaccessible: inaccessibleDirectories,
+        );
         state = DirectoryPermissionRevoked(
           inaccessibleDirectories: inaccessibleDirectories,
           accessibleDirectories: accessibleDirectories,
@@ -223,23 +233,29 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       if (e is BookmarkInvalidError) {
         LoggingService.instance.info('Handling BookmarkInvalidError for directory ${e.directoryPath}');
         // Set to bookmark invalid state
+        final invalidDirectory = DirectoryEntity(
+          id: e.directoryId,
+          path: e.directoryPath,
+          name: e.directoryPath.split('/').last,
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime.now(),
+          bookmarkData: null,
+        );
         state = DirectoryBookmarkInvalid(
-          invalidDirectories: [DirectoryEntity(
-            id: e.directoryId,
-            path: e.directoryPath,
-            name: e.directoryPath.split('/').last,
-            thumbnailPath: null,
-            tagIds: const [],
-            lastModified: DateTime.now(),
-            bookmarkData: null,
-          )],
+          invalidDirectories: [invalidDirectory],
           accessibleDirectories: const [],
           searchQuery: '',
           selectedTagIds: const [],
           columns: 3,
         );
+        _updateDirectoryCaches(
+          accessible: const [],
+          invalid: [invalidDirectory],
+        );
       } else {
         LoggingService.instance.error('Setting state to DirectoryError: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}');
+        _updateDirectoryCaches();
         state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
       }
     }
@@ -281,58 +297,89 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     LoggingService.instance.info('filterByTags called with tagIds: $tagIds');
     LoggingService.instance.debug('Current state type: ${state.runtimeType}');
 
+    final activeSearchQuery = switch (state) {
+      DirectoryLoaded(searchQuery: final value) => value,
+      DirectoryPermissionRevoked(
+        searchQuery: final value,
+        selectedTagIds: _,
+        columns: _,
+        inaccessibleDirectories: _,
+        accessibleDirectories: _,
+      ) =>
+        value,
+      DirectoryBookmarkInvalid(
+        searchQuery: final value,
+        selectedTagIds: _,
+        columns: _,
+        invalidDirectories: _,
+        accessibleDirectories: _,
+      ) =>
+        value,
+      _ => '',
+    };
+
+    final filteredAccessible = _applySearchIfNeeded(
+      _filterDirectoriesByTags(_cachedAccessibleDirectories, tagIds),
+      activeSearchQuery,
+    );
+    final filteredInaccessible = _applySearchIfNeeded(
+      _filterDirectoriesByTags(_cachedInaccessibleDirectories, tagIds),
+      activeSearchQuery,
+    );
+    final filteredInvalid = _applySearchIfNeeded(
+      _filterDirectoriesByTags(_cachedInvalidDirectories, tagIds),
+      activeSearchQuery,
+    );
+
     final filteredState = switch (state) {
-      DirectoryLoaded(:final directories, :final searchQuery, :final columns) => () {
+      DirectoryLoaded(directories: final directories, columns: final columns, searchQuery: _, selectedTagIds: _) => () {
         LoggingService.instance.debug('Filtering DirectoryLoaded state with ${directories.length} directories');
-        final filteredDirectories = _filterDirectoriesByTags(directories, tagIds);
-        LoggingService.instance.info('Filtered directories: ${filteredDirectories.length} out of ${directories.length}');
+        LoggingService.instance.info('Filtered directories: ${filteredAccessible.length} out of ${_cachedAccessibleDirectories.length}');
         LoggingService.instance.debug('Filtered directory details:');
-        for (final dir in filteredDirectories) {
+        for (final dir in filteredAccessible) {
           LoggingService.instance.debug('  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}');
         }
         return DirectoryLoaded(
-          directories: filteredDirectories,
-          searchQuery: searchQuery,
+          directories: filteredAccessible,
+          searchQuery: activeSearchQuery,
           selectedTagIds: tagIds,
           columns: columns,
         );
       }(),
       DirectoryPermissionRevoked(
-        :final inaccessibleDirectories,
-        :final accessibleDirectories,
-        :final searchQuery,
-        :final columns,
+        searchQuery: _,
+        columns: final columns,
+        selectedTagIds: _,
+        inaccessibleDirectories: _,
+        accessibleDirectories: _,
       ) => () {
         LoggingService.instance.debug('Filtering DirectoryPermissionRevoked state');
-        LoggingService.instance.debug('  Accessible directories: ${accessibleDirectories.length}');
-        LoggingService.instance.debug('  Inaccessible directories: ${inaccessibleDirectories.length}');
-        final filteredAccessible = _filterDirectoriesByTags(accessibleDirectories, tagIds);
-        final filteredInaccessible = _filterDirectoriesByTags(inaccessibleDirectories, tagIds);
-        LoggingService.instance.info('Filtered accessible: ${filteredAccessible.length}/${accessibleDirectories.length}, inaccessible: ${filteredInaccessible.length}/${inaccessibleDirectories.length}');
+        LoggingService.instance.debug('  Accessible directories: ${_cachedAccessibleDirectories.length}');
+        LoggingService.instance.debug('  Inaccessible directories: ${_cachedInaccessibleDirectories.length}');
+        LoggingService.instance.info('Filtered accessible: ${filteredAccessible.length}/${_cachedAccessibleDirectories.length}, inaccessible: ${filteredInaccessible.length}/${_cachedInaccessibleDirectories.length}');
         return DirectoryPermissionRevoked(
           inaccessibleDirectories: filteredInaccessible,
           accessibleDirectories: filteredAccessible,
-          searchQuery: searchQuery,
+          searchQuery: activeSearchQuery,
           selectedTagIds: tagIds,
           columns: columns,
         );
       }(),
       DirectoryBookmarkInvalid(
-        :final invalidDirectories,
-        :final accessibleDirectories,
-        :final searchQuery,
-        :final columns,
+        searchQuery: _,
+        columns: final columns,
+        selectedTagIds: _,
+        invalidDirectories: _,
+        accessibleDirectories: _,
       ) => () {
         LoggingService.instance.debug('Filtering DirectoryBookmarkInvalid state');
-        LoggingService.instance.debug('  Accessible directories: ${accessibleDirectories.length}');
-        LoggingService.instance.debug('  Invalid directories: ${invalidDirectories.length}');
-        final filteredAccessible = _filterDirectoriesByTags(accessibleDirectories, tagIds);
-        final filteredInvalid = _filterDirectoriesByTags(invalidDirectories, tagIds);
-        LoggingService.instance.info('Filtered accessible: ${filteredAccessible.length}/${accessibleDirectories.length}, invalid: ${filteredInvalid.length}/${invalidDirectories.length}');
+        LoggingService.instance.debug('  Accessible directories: ${_cachedAccessibleDirectories.length}');
+        LoggingService.instance.debug('  Invalid directories: ${_cachedInvalidDirectories.length}');
+        LoggingService.instance.info('Filtered accessible: ${filteredAccessible.length}/${_cachedAccessibleDirectories.length}, invalid: ${filteredInvalid.length}/${_cachedInvalidDirectories.length}');
         return DirectoryBookmarkInvalid(
           invalidDirectories: filteredInvalid,
           accessibleDirectories: filteredAccessible,
-          searchQuery: searchQuery,
+          searchQuery: activeSearchQuery,
           selectedTagIds: tagIds,
           columns: columns,
         );
@@ -345,6 +392,32 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
     state = filteredState;
     LoggingService.instance.info('filterByTags completed. New selectedTagIds: $tagIds');
+  }
+
+  void _updateDirectoryCaches({
+    List<DirectoryEntity>? accessible,
+    List<DirectoryEntity>? inaccessible,
+    List<DirectoryEntity>? invalid,
+  }) {
+    _cachedAccessibleDirectories = accessible != null
+        ? List<DirectoryEntity>.from(accessible)
+        : const [];
+    _cachedInaccessibleDirectories = inaccessible != null
+        ? List<DirectoryEntity>.from(inaccessible)
+        : const [];
+    _cachedInvalidDirectories = invalid != null
+        ? List<DirectoryEntity>.from(invalid)
+        : const [];
+  }
+
+  List<DirectoryEntity> _applySearchIfNeeded(
+    List<DirectoryEntity> directories,
+    String searchQuery,
+  ) {
+    if (searchQuery.isEmpty) {
+      return directories;
+    }
+    return _searchDirectoriesUseCase(directories, searchQuery);
   }
 
   /// Sets the number of columns for the grid.
