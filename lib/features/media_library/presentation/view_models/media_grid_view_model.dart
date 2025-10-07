@@ -213,6 +213,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   /// Filters media by tag IDs.
   void filterByTags(List<String> tagIds) async {
+    final previousState = state;
+    final previousColumns =
+        previousState is MediaLoaded ? previousState.columns : 3;
     state = const MediaLoading();
     try {
       final media = await _mediaRepository.filterMediaByTagsForDirectory(
@@ -249,7 +252,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         media: media,
         searchQuery: '', // Reset search when filtering
         selectedTagIds: tagIds,
-        columns: state is MediaLoaded ? (state as MediaLoaded).columns : 3,
+        columns: previousColumns,
         currentDirectoryPath: _directoryPath,
         currentDirectoryName: _directoryName,
       );

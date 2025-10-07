@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 
@@ -9,6 +7,7 @@ import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/use_cases/load_media_for_viewing_use_case.dart';
 import '../../domain/entities/viewer_state_entity.dart';
 import '../../../../core/services/logging_service.dart';
@@ -44,7 +43,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       } else {
         // Load media from directory
         // Generate directoryId from path for consistency
-        final directoryId = _generateDirectoryId(directoryPath);
+        final directoryId = generateDirectoryId(directoryPath);
         LoggingService.instance.debug('Generated directoryId: $directoryId');
 
         LoggingService.instance.debug('Calling _loadMediaUseCase.call($directoryPath, $directoryId, bookmarkData: $bookmarkData)');
@@ -344,13 +343,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   void dispose() {
     _videoController?.dispose();
     super.dispose();
-  }
-
-  /// Generate directory ID from path using SHA256
-  String _generateDirectoryId(String directoryPath) {
-    final bytes = utf8.encode(directoryPath);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
   }
 
   /// Helper method to check if an error is permission-related.

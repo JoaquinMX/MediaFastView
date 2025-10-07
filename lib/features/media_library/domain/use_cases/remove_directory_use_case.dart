@@ -69,6 +69,7 @@ class RemoveDirectoryUseCase {
 
       // Finally, remove the directory itself
       await _directoryRepository.removeDirectory(id);
+      await _mediaRepository.removeMediaForDirectory(directory.id);
       LoggingService.instance.info('Successfully removed directory: ${directory.path}');
     } catch (e) {
       LoggingService.instance.error('Failed to remove directory $id: $e');

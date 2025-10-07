@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/media_repository.dart';
 import '../../domain/repositories/directory_repository.dart';
@@ -9,6 +7,7 @@ import '../../../../core/services/permission_service.dart';
 import '../data_sources/filesystem_media_data_source.dart';
 import '../data_sources/local_media_data_source.dart';
 import '../models/media_model.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
 
 /// Implementation of MediaRepository using filesystem scanning.
 class FilesystemMediaRepositoryImpl implements MediaRepository {
@@ -42,7 +41,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     String directoryPath, {
     String? bookmarkData,
   }) async {
-    final directoryId = _generateDirectoryId(directoryPath);
+    final directoryId = generateDirectoryId(directoryPath);
     _permissionService.logPermissionEvent(
       'repository_get_media_start',
       path: directoryPath,
@@ -124,7 +123,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     String directoryPath, {
     String? bookmarkData,
   }) async {
-    final directoryId = _generateDirectoryId(directoryPath);
+    final directoryId = generateDirectoryId(directoryPath);
     final model = await _filesystemDataSource.getMediaById(
       id,
       directoryPath,
@@ -188,7 +187,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     String directoryPath, {
     String? bookmarkData,
   }) async {
-    final directoryId = _generateDirectoryId(directoryPath);
+    final directoryId = generateDirectoryId(directoryPath);
     final models = await _filesystemDataSource.filterMediaByTags(
       directoryPath,
       directoryId,
@@ -260,10 +259,8 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     );
   }
 
-  /// Generates directory ID from path (consistent with other parts of the app)
-  String _generateDirectoryId(String directoryPath) {
-    final bytes = utf8.encode(directoryPath);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
+  @override
+  Future<void> removeMediaForDirectory(String directoryId) async {
+    await _localMediaDataSource.removeMediaForDirectory(directoryId);
   }
 }

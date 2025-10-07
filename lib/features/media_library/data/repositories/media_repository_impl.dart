@@ -1,6 +1,5 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import '../../../../core/services/logging_service.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/media_repository.dart';
 import '../data_sources/local_media_data_source.dart';
@@ -23,7 +22,7 @@ class MediaRepositoryImpl implements MediaRepository {
     String directoryPath, {
     String? bookmarkData,
   }) async {
-    final directoryId = _generateDirectoryId(directoryPath);
+    final directoryId = generateDirectoryId(directoryPath);
     final models = await _mediaDataSource.getMediaForDirectory(directoryId);
     return models.map(_modelToEntity).toList();
   }
@@ -60,7 +59,7 @@ class MediaRepositoryImpl implements MediaRepository {
     String directoryPath, {
     String? bookmarkData,
   }) async {
-    final directoryId = _generateDirectoryId(directoryPath);
+    final directoryId = generateDirectoryId(directoryPath);
     final allMedia = await _mediaDataSource.getMediaForDirectory(directoryId);
 
     if (tagIds.isEmpty) {
@@ -78,6 +77,11 @@ class MediaRepositoryImpl implements MediaRepository {
     await _mediaDataSource.updateMediaTags(mediaId, tagIds);
   }
 
+  @override
+  Future<void> removeMediaForDirectory(String directoryId) async {
+    await _mediaDataSource.removeMediaForDirectory(directoryId);
+  }
+
   /// Converts MediaModel to MediaEntity.
   MediaEntity _modelToEntity(MediaModel model) {
     return MediaEntity(
@@ -92,10 +96,4 @@ class MediaRepositoryImpl implements MediaRepository {
     );
   }
 
-  /// Generates directory ID from path (consistent with other parts of the app)
-  String _generateDirectoryId(String directoryPath) {
-    final bytes = utf8.encode(directoryPath);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
-  }
 }
