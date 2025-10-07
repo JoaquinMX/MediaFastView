@@ -145,14 +145,28 @@ class TagsViewModel extends StateNotifier<TagsState> {
     try {
       final sections = <TagSection>[];
 
-      final favoritesSection = await _buildFavoritesSection();
+      final cachedMediaModels = await _mediaDataSource.getMedia();
+      final cachedMediaEntities =
+          cachedMediaModels.map(_toEntity).toList(growable: false);
+      final cachedMediaById = {
+        for (final media in cachedMediaEntities) media.id: media,
+      };
+      final mediaByTagId = <String, List<MediaEntity>>{};
+      for (final media in cachedMediaEntities) {
+        for (final tagId in media.tagIds) {
+          mediaByTagId.putIfAbsent(tagId, () => <MediaEntity>[]).add(media);
+        }
+      }
+
+      final favoritesSection =
+          await _buildFavoritesSection(cachedMediaById: cachedMediaById);
       if (favoritesSection != null) {
         sections.add(favoritesSection);
       }
 
       final tags = await _getTagsUseCase();
       for (final tag in tags) {
-        final section = await _buildSectionForTag(tag);
+        final section = await _buildSectionForTag(tag, mediaByTagId);
         sections.add(section);
       }
 
@@ -209,13 +223,18 @@ class TagsViewModel extends StateNotifier<TagsState> {
     }
   }
 
-  Future<TagSection?> _buildFavoritesSection() async {
+  Future<TagSection?> _buildFavoritesSection({
+    Map<String, MediaEntity>? cachedMediaById,
+  }) async {
     final favoriteIds = await _favoritesRepository.getFavoriteMediaIds();
     if (favoriteIds.isEmpty) {
       return null;
     }
 
-    final favoritesMedia = await _loadMediaByIds(favoriteIds);
+    final favoritesMedia = await _loadMediaByIds(
+      favoriteIds,
+      cachedMediaById: cachedMediaById,
+    );
     if (favoritesMedia.isEmpty) {
       return null;
     }
@@ -229,8 +248,20 @@ class TagsViewModel extends StateNotifier<TagsState> {
     );
   }
 
-  Future<TagSection> _buildSectionForTag(TagEntity tag) async {
+  Future<TagSection> _buildSectionForTag(
+    TagEntity tag,
+    Map<String, List<MediaEntity>> cachedMediaByTag,
+  ) async {
     final filterResults = await _filterByTagsUseCase.getFilteredResults([tag.id]);
+
+    final cachedMediaForTag =
+        List<MediaEntity>.from(cachedMediaByTag[tag.id] ?? const []);
+    final cachedMediaByDirectoryId = <String, List<MediaEntity>>{};
+    for (final media in cachedMediaForTag) {
+      cachedMediaByDirectoryId
+          .putIfAbsent(media.directoryId, () => <MediaEntity>[])
+          .add(media);
+    }
 
     final collectedMediaIds = <String>{};
     final directorySections = <TagDirectoryContent>[];
@@ -239,13 +270,19 @@ class TagsViewModel extends StateNotifier<TagsState> {
       List<MediaEntity> directoryMedia = const [];
       try {
         directoryMedia = await _filterByTagsUseCase.filterMediaInDirectory(
-          directory.id,
+          directory,
           [tag.id],
         );
       } catch (e, stackTrace) {
         LoggingService.instance.error(
           'Failed to load media for directory ${directory.id} and tag ${tag.id}: $e',
           stackTrace: stackTrace,
+        );
+      }
+
+      if (directoryMedia.isEmpty) {
+        directoryMedia = List<MediaEntity>.from(
+          cachedMediaByDirectoryId[directory.id] ?? const <MediaEntity>[],
         );
       }
 
@@ -261,21 +298,38 @@ class TagsViewModel extends StateNotifier<TagsState> {
       );
     }
 
-    final standaloneMedia = filterResults.media
-        .where((media) => !collectedMediaIds.contains(media.id))
-        .toList();
+    final standaloneCandidates = [
+      ...filterResults.media,
+      for (final media in cachedMediaForTag)
+        if (!collectedMediaIds.contains(media.id)) media,
+    ];
+
+    final uniqueStandalone = <String, MediaEntity>{};
+    for (final media in standaloneCandidates) {
+      uniqueStandalone[media.id] = media;
+    }
 
     return TagSection(
       id: tag.id,
       name: tag.name,
       isFavorites: false,
       directories: directorySections,
-      media: standaloneMedia,
+      media: uniqueStandalone.values.toList(),
       color: Color(tag.color),
     );
   }
 
-  Future<List<MediaEntity>> _loadMediaByIds(List<String> mediaIds) async {
+  Future<List<MediaEntity>> _loadMediaByIds(
+    List<String> mediaIds, {
+    Map<String, MediaEntity>? cachedMediaById,
+  }) async {
+    if (cachedMediaById != null) {
+      return mediaIds
+          .map((mediaId) => cachedMediaById[mediaId])
+          .whereType<MediaEntity>()
+          .toList();
+    }
+
     final storedMedia = await _mediaDataSource.getMedia();
     final mediaMap = {for (final media in storedMedia) media.id: media};
 
