@@ -115,7 +115,7 @@ final mediaRepositoryProvider =
           ref.watch(bookmarkServiceProvider),
           ref.watch(directoryRepositoryProvider),
           ref.watch(mediaDataSourceProvider),
-          ref.watch(permissionServiceProvider),
+          permissionService: ref.watch(permissionServiceProvider),
         ),
       ),
     );
