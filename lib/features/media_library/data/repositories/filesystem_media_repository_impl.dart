@@ -1,0 +1,269 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import '../../domain/entities/media_entity.dart';
+import '../../domain/repositories/media_repository.dart';
+import '../../domain/repositories/directory_repository.dart';
+import '../../../../core/error/app_error.dart';
+import '../../../../core/services/bookmark_service.dart';
+import '../../../../core/services/permission_service.dart';
+import '../data_sources/filesystem_media_data_source.dart';
+import '../data_sources/local_media_data_source.dart';
+import '../models/media_model.dart';
+
+/// Implementation of MediaRepository using filesystem scanning.
+class FilesystemMediaRepositoryImpl implements MediaRepository {
+  FilesystemMediaRepositoryImpl(
+    BookmarkService bookmarkService,
+    this._directoryRepository,
+    this._localMediaDataSource, [
+    PermissionService? permissionService,
+  ]) : _filesystemDataSource = FilesystemMediaDataSource(bookmarkService, permissionService),
+       _permissionService = permissionService ?? PermissionService();
+  final DirectoryRepository _directoryRepository;
+  final SharedPreferencesMediaDataSource _localMediaDataSource;
+  final FilesystemMediaDataSource _filesystemDataSource;
+  final PermissionService _permissionService;
+
+  @override
+  Future<List<MediaEntity>> getMediaForDirectory(String directoryId) async {
+    final directory = await _directoryRepository.getDirectoryById(directoryId);
+    if (directory == null) {
+      return [];
+    }
+
+    return getMediaForDirectoryPath(
+      directory.path,
+      bookmarkData: directory.bookmarkData,
+    );
+  }
+
+  @override
+  Future<List<MediaEntity>> getMediaForDirectoryPath(
+    String directoryPath, {
+    String? bookmarkData,
+  }) async {
+    final directoryId = _generateDirectoryId(directoryPath);
+    _permissionService.logPermissionEvent(
+      'repository_get_media_start',
+      path: directoryPath,
+      details: 'directoryId=$directoryId, bookmark_present=${bookmarkData != null}',
+    );
+
+    // Validate permissions before attempting to scan
+    final validationResult = await _filesystemDataSource.validateDirectoryAccess(
+      directoryPath,
+      bookmarkData: bookmarkData,
+    );
+
+    if (!validationResult.canAccess) {
+      _permissionService.logPermissionEvent(
+        'repository_access_denied',
+        path: directoryPath,
+        error: validationResult.reason,
+      );
+
+      if (validationResult.requiresRecovery) {
+        throw PermissionError('Directory access denied: ${validationResult.reason}. Recovery required.');
+      } else {
+        throw DirectoryAccessDeniedError('Directory access denied: ${validationResult.reason}');
+      }
+    }
+
+    try {
+      final models = await _filesystemDataSource.scanMediaForDirectory(
+        directoryPath,
+        directoryId,
+        bookmarkData: bookmarkData,
+      );
+
+      // Merge tags from local storage
+      final mergedModels = await _mergeTagsWithLocalStorage(models);
+
+      _permissionService.logPermissionEvent(
+        'repository_get_media_success',
+        path: directoryPath,
+        details: 'found=${mergedModels.length} items',
+      );
+
+      return mergedModels.map(_modelToEntity).toList();
+    } catch (e) {
+      _permissionService.logPermissionEvent(
+        'repository_get_media_failed',
+        path: directoryPath,
+        error: e.toString(),
+      );
+      throw DirectoryScanError('Failed to get media for directory: $e');
+    }
+  }
+
+  @override
+  Future<MediaEntity?> getMediaById(String id) async {
+    // Get media from local storage to find which directory it belongs to
+    final allMedia = await _localMediaDataSource.getMedia();
+    final localMedia = allMedia.where((media) => media.id == id).firstOrNull;
+
+    if (localMedia == null) {
+      return null;
+    }
+
+    final directory = await _directoryRepository.getDirectoryById(localMedia.directoryId);
+    if (directory == null) {
+      return null;
+    }
+
+    return getMediaByIdFromDirectory(
+      id,
+      directory.path,
+      bookmarkData: directory.bookmarkData,
+    );
+  }
+
+  /// Gets media by ID from a specific directory.
+  Future<MediaEntity?> getMediaByIdFromDirectory(
+    String id,
+    String directoryPath, {
+    String? bookmarkData,
+  }) async {
+    final directoryId = _generateDirectoryId(directoryPath);
+    final model = await _filesystemDataSource.getMediaById(
+      id,
+      directoryPath,
+      directoryId,
+      bookmarkData: bookmarkData,
+    );
+    return model != null ? _modelToEntity(model) : null;
+  }
+
+  @override
+  Future<List<MediaEntity>> filterMediaByTags(List<String> tagIds) async {
+    if (tagIds.isEmpty) {
+      // If no tags specified, return all media from all directories
+      final directories = await _directoryRepository.getDirectories();
+      final allMedia = <MediaEntity>[];
+      for (final directory in directories) {
+        final media = await getMediaForDirectoryPath(
+          directory.path,
+          bookmarkData: directory.bookmarkData,
+        );
+        allMedia.addAll(media);
+      }
+      return allMedia;
+    }
+
+    // Get media from local storage that have the specified tags
+    final allLocalMedia = await _localMediaDataSource.getMedia();
+    final filteredLocalMedia = allLocalMedia
+        .where((media) => media.tagIds.any((tagId) => tagIds.contains(tagId)))
+        .toList();
+
+    // Group by directoryId to avoid scanning the same directory multiple times
+    final mediaByDirectory = <String, List<String>>{};
+    for (final media in filteredLocalMedia) {
+      mediaByDirectory.putIfAbsent(media.directoryId, () => []).add(media.id);
+    }
+
+    final result = <MediaEntity>[];
+    for (final entry in mediaByDirectory.entries) {
+      final directoryId = entry.key;
+      final mediaIds = entry.value;
+
+      final directory = await _directoryRepository.getDirectoryById(directoryId);
+      if (directory == null) continue;
+
+      final directoryMedia = await getMediaForDirectoryPath(
+        directory.path,
+        bookmarkData: directory.bookmarkData,
+      );
+
+      // Filter to only include media with matching IDs
+      result.addAll(directoryMedia.where((media) => mediaIds.contains(media.id)));
+    }
+
+    return result;
+  }
+
+  @override
+  Future<List<MediaEntity>> filterMediaByTagsForDirectory(
+    List<String> tagIds,
+    String directoryPath, {
+    String? bookmarkData,
+  }) async {
+    final directoryId = _generateDirectoryId(directoryPath);
+    final models = await _filesystemDataSource.filterMediaByTags(
+      directoryPath,
+      directoryId,
+      tagIds,
+      bookmarkData: bookmarkData,
+      sharedPreferencesDataSource: _localMediaDataSource,
+    );
+    final mergedModels = await _mergeTagsWithLocalStorage(models);
+    return mergedModels.map(_modelToEntity).toList();
+  }
+
+  /// Filters media by tags from a specific directory.
+  Future<List<MediaEntity>> filterMediaByTagsFromDirectory(
+    List<String> tagIds,
+    String directoryPath,
+    String directoryId, {
+    String? bookmarkData,
+  }) async {
+    final models = await _filesystemDataSource.filterMediaByTags(
+      directoryPath,
+      directoryId,
+      tagIds,
+      bookmarkData: bookmarkData,
+      sharedPreferencesDataSource: _localMediaDataSource,
+    );
+    final mergedModels = await _mergeTagsWithLocalStorage(models);
+    return mergedModels.map(_modelToEntity).toList();
+  }
+
+  @override
+  Future<void> updateMediaTags(String mediaId, List<String> tagIds) async {
+    await _localMediaDataSource.updateMediaTags(mediaId, tagIds);
+  }
+
+  /// Merges tags from local storage with filesystem-scanned media.
+  Future<List<MediaModel>> _mergeTagsWithLocalStorage(List<MediaModel> scannedMedia) async {
+    final existingMedia = await _localMediaDataSource.getMedia();
+    final existingMediaMap = {for (final m in existingMedia) m.id: m};
+
+    // Convert entities back to models for persistence, merging tagIds from persisted data
+    return scannedMedia.map((entity) {
+      final existing = existingMediaMap[entity.id];
+      return MediaModel(
+        id: entity.id,
+        path: entity.path,
+        name: entity.name,
+        type: entity.type,
+        size: entity.size,
+        lastModified: entity.lastModified,
+        tagIds: existing?.tagIds ?? entity.tagIds, // Merge tagIds from persisted data
+        directoryId: entity.directoryId,
+        bookmarkData: entity.bookmarkData,
+      );
+    }).toList();
+  }
+
+  /// Converts MediaModel to MediaEntity.
+  MediaEntity _modelToEntity(MediaModel model) {
+    return MediaEntity(
+      id: model.id,
+      path: model.path,
+      name: model.name,
+      type: model.type,
+      size: model.size,
+      lastModified: model.lastModified,
+      tagIds: model.tagIds,
+      directoryId: model.directoryId,
+      bookmarkData: model.bookmarkData,
+    );
+  }
+
+  /// Generates directory ID from path (consistent with other parts of the app)
+  String _generateDirectoryId(String directoryPath) {
+    final bytes = utf8.encode(directoryPath);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+}
