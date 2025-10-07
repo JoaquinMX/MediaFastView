@@ -103,6 +103,7 @@ final directoryRepositoryProvider =
           ref.watch(localDirectoryDataSourceProvider),
           ref.watch(bookmarkServiceProvider),
           ref.watch(permissionServiceProvider),
+          ref.watch(mediaDataSourceProvider),
         ),
       ),
     );

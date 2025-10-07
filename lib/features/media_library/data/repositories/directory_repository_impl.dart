@@ -1,6 +1,7 @@
 import '../../domain/entities/directory_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
 import '../data_sources/local_directory_data_source.dart';
+import '../data_sources/local_media_data_source.dart';
 import '../data_sources/shared_preferences_data_source.dart';
 import '../models/directory_model.dart';
 import '../../../../core/error/app_error.dart';
@@ -16,12 +17,14 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     this._localDirectoryDataSource,
     this._bookmarkService,
     this._permissionService,
+    this._mediaDataSource,
   );
 
   final SharedPreferencesDirectoryDataSource _directoryDataSource;
   final LocalDirectoryDataSource _localDirectoryDataSource;
   final BookmarkService _bookmarkService;
   final PermissionService _permissionService;
+  final SharedPreferencesMediaDataSource _mediaDataSource;
 
   @override
   Future<List<DirectoryEntity>> getDirectories() async {
@@ -231,6 +234,8 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     );
 
     final updatedModel = model.copyWith(id: expectedId);
+
+    await _mediaDataSource.migrateDirectoryId(model.id, expectedId);
 
     // Replace the legacy entry with the updated ID to keep storage consistent.
     await _directoryDataSource.removeDirectory(model.id);
