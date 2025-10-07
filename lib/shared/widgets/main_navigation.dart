@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/media_library/presentation/screens/directory_grid_screen.dart';
-import '../../features/favorites/presentation/screens/favorites_screen.dart';
+import '../../features/tagging/presentation/screens/tags_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 
 /// Main navigation widget with bottom navigation bar.
@@ -23,7 +23,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
         index: _selectedIndex,
         children: const <Widget>[
           DirectoryGridScreen(),
-          FavoritesScreen(),
+          TagsScreen(),
           SettingsScreen(),
         ],
       ),
@@ -34,8 +34,8 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
             label: 'Library',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.favorite),
-            label: 'Favorites',
+            icon: Icon(Icons.label),
+            label: 'Tags',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),
