@@ -22,13 +22,25 @@ class TagsScreen extends ConsumerStatefulWidget {
 }
 
 class _TagsScreenState extends ConsumerState<TagsScreen> {
+  late final TextEditingController _searchController;
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
+    _searchController.addListener(_onSearchChanged);
     Future.microtask(() async {
       await ref.read(tagsViewModelProvider.notifier).loadTags();
       await ref.read(favoritesViewModelProvider.notifier).loadFavorites();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -49,20 +61,133 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ),
       body: switch (state) {
         TagsLoading() => const Center(child: CircularProgressIndicator()),
-        TagsLoaded(:final sections) => _buildSections(sections, viewModel),
+        TagsLoaded loaded => _buildSections(loaded, viewModel),
         TagsEmpty() => _buildEmpty(viewModel),
         TagsError(:final message) => _buildError(message, viewModel),
       },
     );
   }
 
-  Widget _buildSections(List<TagSection> sections, TagsViewModel viewModel) {
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text;
+    });
+  }
+
+  Widget _buildSections(TagsLoaded state, TagsViewModel viewModel) {
+    final sections = state.sections;
+    final selectedSections = sections
+        .where((section) => state.selectedTagIds.contains(section.id))
+        .toList();
+
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
-      child: ListView.builder(
+      child: ListView(
         padding: const EdgeInsets.all(16),
-        itemCount: sections.length,
-        itemBuilder: (context, index) => _buildSection(sections[index]),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          _buildSearchField(),
+          const SizedBox(height: 12),
+          _buildTagSelectionCard(state, viewModel),
+          const SizedBox(height: 24),
+          if (selectedSections.isEmpty)
+            _buildSelectionPlaceholder()
+          else
+            ...selectedSections.map(_buildSection),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      decoration: const InputDecoration(
+        labelText: 'Search tags',
+        prefixIcon: Icon(Icons.search),
+        border: OutlineInputBorder(),
+      ),
+    );
+  }
+
+  Widget _buildTagSelectionCard(TagsLoaded state, TagsViewModel viewModel) {
+    final query = _searchQuery.trim().toLowerCase();
+    final filteredSections = state.sections.where((section) {
+      if (query.isEmpty) {
+        return true;
+      }
+      return section.name.toLowerCase().contains(query);
+    }).toList();
+
+    if (filteredSections.isEmpty) {
+      return Card(
+        elevation: 1,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'No tags match your search.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 1,
+      child: Column(
+        children: ListTile.divideTiles(
+          context: context,
+          tiles: filteredSections.map(
+            (section) => CheckboxListTile(
+              value: state.selectedTagIds.contains(section.id),
+              onChanged: (value) =>
+                  viewModel.setTagSelected(section.id, value ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(section.name),
+              subtitle: Text(
+                '${section.itemCount} item${section.itemCount == 1 ? '' : 's'}',
+              ),
+              secondary: section.isFavorites
+                  ? const Icon(Icons.star, color: Colors.amber)
+                  : section.color != null
+                      ? Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: section.color,
+                            shape: BoxShape.circle,
+                          ),
+                        )
+                      : null,
+            ),
+          ),
+        ).toList(),
+      ),
+    );
+  }
+
+  Widget _buildSelectionPlaceholder() {
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Select tags to view their media',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Use the checkboxes above to choose which tags or favorites to display.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }
