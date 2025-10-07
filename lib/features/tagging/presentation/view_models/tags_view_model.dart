@@ -1,0 +1,250 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/services/logging_service.dart';
+import '../../../favorites/domain/repositories/favorites_repository.dart';
+import '../../../media_library/data/data_sources/local_media_data_source.dart';
+import '../../../media_library/data/models/media_model.dart';
+import '../../../media_library/domain/entities/directory_entity.dart';
+import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../tagging/domain/entities/tag_entity.dart';
+import '../../../tagging/domain/use_cases/filter_by_tags_use_case.dart';
+import '../../../tagging/domain/use_cases/get_tags_use_case.dart';
+import '../../../../shared/providers/repository_providers.dart';
+
+@immutable
+class TagDirectoryContent {
+  const TagDirectoryContent({
+    required this.directory,
+    required this.media,
+  });
+
+  final DirectoryEntity directory;
+  final List<MediaEntity> media;
+}
+
+@immutable
+class TagSection {
+  const TagSection({
+    required this.id,
+    required this.name,
+    required this.isFavorites,
+    required this.directories,
+    required this.media,
+    this.color,
+  });
+
+  final String id;
+  final String name;
+  final bool isFavorites;
+  final List<TagDirectoryContent> directories;
+  final List<MediaEntity> media;
+  final Color? color;
+
+  int get itemCount => allMedia.length;
+
+  List<MediaEntity> get allMedia => [
+        ...media,
+        for (final directory in directories) ...directory.media,
+      ];
+}
+
+sealed class TagsState {
+  const TagsState();
+}
+
+class TagsLoading extends TagsState {
+  const TagsLoading();
+}
+
+class TagsLoaded extends TagsState {
+  const TagsLoaded({required this.sections});
+
+  final List<TagSection> sections;
+
+  TagsLoaded copyWith({List<TagSection>? sections}) {
+    return TagsLoaded(sections: sections ?? this.sections);
+  }
+}
+
+class TagsEmpty extends TagsState {
+  const TagsEmpty();
+}
+
+class TagsError extends TagsState {
+  const TagsError(this.message);
+
+  final String message;
+}
+
+class TagsViewModel extends StateNotifier<TagsState> {
+  TagsViewModel(
+    this._getTagsUseCase,
+    this._filterByTagsUseCase,
+    this._favoritesRepository,
+    this._mediaDataSource,
+  ) : super(const TagsLoading());
+
+  final GetTagsUseCase _getTagsUseCase;
+  final FilterByTagsUseCase _filterByTagsUseCase;
+  final FavoritesRepository _favoritesRepository;
+  final SharedPreferencesMediaDataSource _mediaDataSource;
+
+  Future<void> loadTags() async {
+    state = const TagsLoading();
+    await _reloadSections();
+  }
+
+  Future<void> refreshFavorites() async {
+    try {
+      final favoritesSection = await _buildFavoritesSection();
+      if (!mounted) {
+        return;
+      }
+
+      final currentState = state;
+      if (currentState is TagsLoaded) {
+        final otherSections =
+            currentState.sections.where((section) => !section.isFavorites).toList();
+
+        if (favoritesSection != null) {
+          state = TagsLoaded(sections: [favoritesSection, ...otherSections]);
+        } else if (otherSections.isEmpty) {
+          state = const TagsEmpty();
+        } else {
+          state = TagsLoaded(sections: otherSections);
+        }
+      } else {
+        await _reloadSections();
+      }
+    } catch (e, stackTrace) {
+      LoggingService.instance.error('Failed to refresh favorites: $e', stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> _reloadSections() async {
+    try {
+      final sections = <TagSection>[];
+
+      final favoritesSection = await _buildFavoritesSection();
+      if (favoritesSection != null) {
+        sections.add(favoritesSection);
+      }
+
+      final tags = await _getTagsUseCase();
+      for (final tag in tags) {
+        final section = await _buildSectionForTag(tag);
+        sections.add(section);
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      if (sections.isEmpty) {
+        state = const TagsEmpty();
+      } else {
+        state = TagsLoaded(sections: sections);
+      }
+    } catch (e, stackTrace) {
+      LoggingService.instance.error('Failed to load tags: $e', stackTrace: stackTrace);
+      if (!mounted) {
+        return;
+      }
+      state = TagsError(e.toString());
+    }
+  }
+
+  Future<TagSection?> _buildFavoritesSection() async {
+    final favoriteIds = await _favoritesRepository.getFavoriteMediaIds();
+    if (favoriteIds.isEmpty) {
+      return null;
+    }
+
+    final favoritesMedia = await _loadMediaByIds(favoriteIds);
+    if (favoritesMedia.isEmpty) {
+      return null;
+    }
+
+    return TagSection(
+      id: 'favorites',
+      name: 'Favorites',
+      isFavorites: true,
+      directories: const [],
+      media: favoritesMedia,
+    );
+  }
+
+  Future<TagSection> _buildSectionForTag(TagEntity tag) async {
+    final filterResults = await _filterByTagsUseCase.getFilteredResults([tag.id]);
+    final directoryIds = filterResults.directories.map((dir) => dir.id).toSet();
+
+    final mediaByDirectory = <String, List<MediaEntity>>{};
+    final standaloneMedia = <MediaEntity>[];
+
+    for (final media in filterResults.media) {
+      if (directoryIds.contains(media.directoryId)) {
+        mediaByDirectory.putIfAbsent(media.directoryId, () => []).add(media);
+      } else {
+        standaloneMedia.add(media);
+      }
+    }
+
+    final directorySections = filterResults.directories
+        .map(
+          (directory) => TagDirectoryContent(
+            directory: directory,
+            media: mediaByDirectory[directory.id] ?? const [],
+          ),
+        )
+        .toList();
+
+    return TagSection(
+      id: tag.id,
+      name: tag.name,
+      isFavorites: false,
+      directories: directorySections,
+      media: standaloneMedia,
+      color: Color(tag.color),
+    );
+  }
+
+  Future<List<MediaEntity>> _loadMediaByIds(List<String> mediaIds) async {
+    final storedMedia = await _mediaDataSource.getMedia();
+    final mediaMap = {for (final media in storedMedia) media.id: media};
+
+    final entities = <MediaEntity>[];
+    for (final mediaId in mediaIds) {
+      final mediaModel = mediaMap[mediaId];
+      if (mediaModel != null) {
+        entities.add(_toEntity(mediaModel));
+      }
+    }
+    return entities;
+  }
+
+  MediaEntity _toEntity(MediaModel model) {
+    return MediaEntity(
+      id: model.id,
+      path: model.path,
+      name: model.name,
+      type: model.type,
+      size: model.size,
+      lastModified: model.lastModified,
+      tagIds: model.tagIds,
+      directoryId: model.directoryId,
+      bookmarkData: model.bookmarkData,
+    );
+  }
+}
+
+final tagsViewModelProvider =
+    StateNotifierProvider.autoDispose<TagsViewModel, TagsState>((ref) {
+  final viewModel = TagsViewModel(
+    ref.watch(getTagsUseCaseProvider),
+    ref.watch(filterByTagsUseCaseProvider),
+    ref.watch(favoritesRepositoryProvider),
+    ref.watch(mediaDataSourceProvider),
+  );
+  return viewModel;
+});
