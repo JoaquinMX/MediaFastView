@@ -53,14 +53,21 @@ class _TagManagementDialogState extends ConsumerState<TagManagementDialog> {
   }
 
   Future<List<String>> _loadInitialAssignedTagIds() async {
-    if (widget.media == null) {
+    final requestedMediaId = widget.media?.id;
+
+    if (requestedMediaId == null) {
       _assignedTagIds = <String>[];
       _hasLoadedInitialAssignments = true;
       return const <String>[];
     }
 
     final repository = ref.read(mediaRepositoryProvider);
-    final media = await repository.getMediaById(widget.media!.id);
+    final media = await repository.getMediaById(requestedMediaId);
+
+    if (!mounted || requestedMediaId != widget.media?.id) {
+      return _assignedTagIds;
+    }
+
     final ids = media?.tagIds ?? <String>[];
     _assignedTagIds = List<String>.from(ids);
     _hasLoadedInitialAssignments = true;
