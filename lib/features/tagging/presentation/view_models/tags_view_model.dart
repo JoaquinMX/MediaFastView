@@ -14,10 +14,7 @@ import '../../../../shared/providers/repository_providers.dart';
 
 @immutable
 class TagDirectoryContent {
-  const TagDirectoryContent({
-    required this.directory,
-    required this.media,
-  });
+  const TagDirectoryContent({required this.directory, required this.media});
 
   final DirectoryEntity directory;
   final List<MediaEntity> media;
@@ -44,9 +41,9 @@ class TagSection {
   int get itemCount => allMedia.length;
 
   List<MediaEntity> get allMedia => [
-        ...media,
-        for (final directory in directories) ...directory.media,
-      ];
+    ...media,
+    for (final directory in directories) ...directory.media,
+  ];
 }
 
 sealed class TagsState {
@@ -58,10 +55,7 @@ class TagsLoading extends TagsState {
 }
 
 class TagsLoaded extends TagsState {
-  const TagsLoaded({
-    required this.sections,
-    required this.selectedTagIds,
-  });
+  const TagsLoaded({required this.sections, required this.selectedTagIds});
 
   final List<TagSection> sections;
   final List<String> selectedTagIds;
@@ -119,8 +113,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
       final currentState = state;
       if (currentState is TagsLoaded) {
-        final otherSections =
-            currentState.sections.where((section) => !section.isFavorites).toList();
+        final otherSections = currentState.sections
+            .where((section) => !section.isFavorites)
+            .toList();
 
         if (favoritesSection != null) {
           final updatedSections = [favoritesSection, ...otherSections];
@@ -140,8 +135,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
       } else {
         await _reloadSections();
       }
-    } catch (e, stackTrace) {
-      LoggingService.instance.error('Failed to refresh favorites: $e', stackTrace: stackTrace);
+    } catch (e) {
+      LoggingService.instance.error('Failed to refresh favorites: $e');
     }
   }
 
@@ -150,8 +145,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
       final sections = <TagSection>[];
 
       final cachedMediaModels = await _mediaDataSource.getMedia();
-      final cachedMediaEntities =
-          cachedMediaModels.map(_toEntity).toList(growable: false);
+      final cachedMediaEntities = cachedMediaModels
+          .map(_toEntity)
+          .toList(growable: false);
       final cachedMediaById = {
         for (final media in cachedMediaEntities) media.id: media,
       };
@@ -162,8 +158,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
         }
       }
 
-      final favoritesSection =
-          await _buildFavoritesSection(cachedMediaById: cachedMediaById);
+      final favoritesSection = await _buildFavoritesSection(
+        cachedMediaById: cachedMediaById,
+      );
       if (favoritesSection != null) {
         sections.add(favoritesSection);
       }
@@ -187,8 +184,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
           selectedTagIds: _syncSelectionWithSections(sections),
         );
       }
-    } catch (e, stackTrace) {
-      LoggingService.instance.error('Failed to load tags: $e', stackTrace: stackTrace);
+    } catch (e) {
+      LoggingService.instance.error('Failed to load tags: $e');
       if (!mounted) {
         return;
       }
@@ -214,8 +211,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
   List<String> _syncSelectionWithSections(List<TagSection> sections) {
     final availableIds = sections.map((section) => section.id).toSet();
-    _selectedTagIds =
-        _selectedTagIds.where((tagId) => availableIds.contains(tagId)).toList();
+    _selectedTagIds = _selectedTagIds
+        .where((tagId) => availableIds.contains(tagId))
+        .toList();
     return List<String>.from(_selectedTagIds);
   }
 
@@ -223,7 +221,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
     _selectedTagIds = newSelection;
     final currentState = state;
     if (currentState is TagsLoaded && mounted) {
-      state = currentState.copyWith(selectedTagIds: List<String>.from(_selectedTagIds));
+      state = currentState.copyWith(
+        selectedTagIds: List<String>.from(_selectedTagIds),
+      );
     }
   }
 
@@ -256,10 +256,13 @@ class TagsViewModel extends StateNotifier<TagsState> {
     TagEntity tag,
     Map<String, List<MediaEntity>> cachedMediaByTag,
   ) async {
-    final filterResults = await _filterByTagsUseCase.getFilteredResults([tag.id]);
+    final filterResults = await _filterByTagsUseCase.getFilteredResults([
+      tag.id,
+    ]);
 
-    final cachedMediaForTag =
-        List<MediaEntity>.from(cachedMediaByTag[tag.id] ?? const []);
+    final cachedMediaForTag = List<MediaEntity>.from(
+      cachedMediaByTag[tag.id] ?? const [],
+    );
     final cachedMediaByDirectoryId = <String, List<MediaEntity>>{};
     for (final media in cachedMediaForTag) {
       cachedMediaByDirectoryId
@@ -277,10 +280,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
           directory,
           [tag.id],
         );
-      } catch (e, stackTrace) {
+      } catch (e) {
         LoggingService.instance.error(
           'Failed to load media for directory ${directory.id} and tag ${tag.id}: $e',
-          stackTrace: stackTrace,
         );
       }
 
@@ -295,10 +297,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
       }
 
       directorySections.add(
-        TagDirectoryContent(
-          directory: directory,
-          media: directoryMedia,
-        ),
+        TagDirectoryContent(directory: directory, media: directoryMedia),
       );
     }
 
@@ -364,11 +363,11 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
 final tagsViewModelProvider =
     StateNotifierProvider.autoDispose<TagsViewModel, TagsState>((ref) {
-  final viewModel = TagsViewModel(
-    ref.watch(getTagsUseCaseProvider),
-    ref.watch(filterByTagsUseCaseProvider),
-    ref.watch(favoritesRepositoryProvider),
-    ref.watch(mediaDataSourceProvider),
-  );
-  return viewModel;
-});
+      final viewModel = TagsViewModel(
+        ref.watch(getTagsUseCaseProvider),
+        ref.watch(filterByTagsUseCaseProvider),
+        ref.watch(favoritesRepositoryProvider),
+        ref.watch(mediaDataSourceProvider),
+      );
+      return viewModel;
+    });
