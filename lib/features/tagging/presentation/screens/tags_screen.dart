@@ -88,7 +88,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         children: [
           _buildSearchField(),
           const SizedBox(height: 12),
-          _buildTagSelectionCard(state, viewModel),
+          _buildTagSelectionChips(state, viewModel),
           const SizedBox(height: 24),
           if (selectedSections.isEmpty)
             _buildSelectionPlaceholder()
@@ -110,7 +110,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  Widget _buildTagSelectionCard(TagsLoaded state, TagsViewModel viewModel) {
+  Widget _buildTagSelectionChips(
+    TagsLoaded state,
+    TagsViewModel viewModel,
+  ) {
     final query = _searchQuery.trim().toLowerCase();
     final filteredSections = state.sections.where((section) {
       if (query.isEmpty) {
@@ -134,34 +137,32 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
     return Card(
       elevation: 1,
-      child: Column(
-        children: ListTile.divideTiles(
-          context: context,
-          tiles: filteredSections.map(
-            (section) => CheckboxListTile(
-              value: state.selectedTagIds.contains(section.id),
-              onChanged: (value) =>
-                  viewModel.setTagSelected(section.id, value ?? false),
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(section.name),
-              subtitle: Text(
-                '${section.itemCount} item${section.itemCount == 1 ? '' : 's'}',
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: filteredSections.map((section) {
+            final isSelected = state.selectedTagIds.contains(section.id);
+            return FilterChip(
+              label: Text(
+                '${section.name} • ${section.itemCount} '
+                'item${section.itemCount == 1 ? '' : 's'}',
               ),
-              secondary: section.isFavorites
+              avatar: section.isFavorites
                   ? const Icon(Icons.star, color: Colors.amber)
                   : section.color != null
-                      ? Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: section.color,
-                            shape: BoxShape.circle,
-                          ),
+                      ? CircleAvatar(
+                          backgroundColor: section.color,
+                          radius: 12,
                         )
                       : null,
-            ),
-          ),
-        ).toList(),
+              selected: isSelected,
+              onSelected: (selected) =>
+                  viewModel.setTagSelected(section.id, selected),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -180,7 +181,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Use the checkboxes above to choose which tags or favorites to display.',
+              'Use the chips above to choose which tags or favorites to display.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
