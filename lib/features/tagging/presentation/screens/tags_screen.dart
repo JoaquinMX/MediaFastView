@@ -7,6 +7,7 @@ import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/widgets/media_grid_item.dart';
+import '../../domain/enums/tag_filter_mode.dart';
 import '../view_models/tags_view_model.dart';
 
 class TagsScreen extends ConsumerStatefulWidget {
@@ -74,7 +75,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final selectedSections = sections
         .where((section) => state.selectedTagIds.contains(section.id))
         .toList();
-    final aggregatedMedia = _collectMediaFromSections(selectedSections);
+    final aggregatedMedia = _collectMediaFromSections(
+      selectedSections,
+      state.filterMode,
+    );
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
@@ -85,11 +89,18 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           _buildSearchField(),
           const SizedBox(height: 12),
           _buildTagSelectionChips(state, viewModel),
+          const SizedBox(height: 12),
+          _buildFilterModeToggle(state, viewModel),
           const SizedBox(height: 24),
           if (selectedSections.isEmpty)
             _buildSelectionPlaceholder()
           else ...[
-            _buildSelectionSummary(aggregatedMedia, viewModel),
+            _buildSelectionSummary(
+              aggregatedMedia,
+              viewModel,
+              state.filterMode,
+              state.selectedTagIds.length,
+            ),
             const SizedBox(height: 12),
             if (aggregatedMedia.isEmpty)
               _buildNoResultsMessage()
@@ -198,15 +209,35 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   Widget _buildSelectionSummary(
     List<MediaEntity> aggregatedMedia,
     TagsViewModel viewModel,
+    TagFilterMode filterMode,
+    int selectedTagCount,
   ) {
     final theme = Theme.of(context);
+    final filterDescription = filterMode.matchesAll
+        ? 'Matching all selected tags'
+        : 'Matching any selected tag';
+
     return Row(
       children: [
         Expanded(
-          child: Text(
-            'Showing ${aggregatedMedia.length} '
-            'item${aggregatedMedia.length == 1 ? '' : 's'}',
-            style: theme.textTheme.titleMedium,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Showing ${aggregatedMedia.length} '
+                'item${aggregatedMedia.length == 1 ? '' : 's'}',
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                selectedTagCount <= 1
+                    ? filterDescription
+                    : '$filterDescription (${selectedTagCount} tags)',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
         TextButton(
@@ -249,14 +280,61 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  List<MediaEntity> _collectMediaFromSections(List<TagSection> sections) {
-    final aggregated = <String, MediaEntity>{};
+  List<MediaEntity> _collectMediaFromSections(
+    List<TagSection> sections,
+    TagFilterMode filterMode,
+  ) {
+    if (sections.isEmpty) {
+      return const <MediaEntity>[];
+    }
+
+    final mediaById = <String, MediaEntity>{};
+    final occurrenceCount = <String, int>{};
+
     for (final section in sections) {
+      final seenInSection = <String>{};
       for (final media in section.allMedia) {
-        aggregated[media.id] = media;
+        mediaById[media.id] = media;
+        if (seenInSection.add(media.id)) {
+          occurrenceCount.update(
+            media.id,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+        }
       }
     }
-    return aggregated.values.toList();
+
+    if (!filterMode.matchesAll) {
+      return mediaById.values.toList();
+    }
+
+    final requiredMatches = sections.length;
+    return occurrenceCount.entries
+        .where((entry) => entry.value == requiredMatches)
+        .map((entry) => mediaById[entry.key]!)
+        .toList();
+  }
+
+  Widget _buildFilterModeToggle(
+    TagsLoaded state,
+    TagsViewModel viewModel,
+  ) {
+    final isMatchAll = state.filterMode.matchesAll;
+    return Card(
+      elevation: 1,
+      child: SwitchListTile.adaptive(
+        value: isMatchAll,
+        onChanged: (value) => viewModel.setFilterMode(
+          value ? TagFilterMode.all : TagFilterMode.any,
+        ),
+        title: const Text('Match all selected tags'),
+        subtitle: const Text(
+          'When enabled, media must include every selected tag.',
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      ),
+    );
   }
 
   Widget _buildMediaGrid(
