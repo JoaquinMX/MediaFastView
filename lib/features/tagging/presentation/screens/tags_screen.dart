@@ -20,12 +20,21 @@ class TagsScreen extends ConsumerStatefulWidget {
 class _TagsScreenState extends ConsumerState<TagsScreen> {
   late final TextEditingController _searchController;
   String _searchQuery = '';
+  ProviderSubscription<FavoritesState>? _favoritesSubscription;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
     _searchController.addListener(_onSearchChanged);
+    _favoritesSubscription = ref.listen<FavoritesState>(
+      favoritesViewModelProvider,
+      (previous, next) {
+        if (next is FavoritesLoaded || next is FavoritesEmpty) {
+          ref.read(tagsViewModelProvider.notifier).refreshFavorites();
+        }
+      },
+    );
     Future.microtask(() async {
       await ref.read(tagsViewModelProvider.notifier).loadTags();
       await ref.read(favoritesViewModelProvider.notifier).loadFavorites();
@@ -36,6 +45,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _favoritesSubscription?.close();
     super.dispose();
   }
 

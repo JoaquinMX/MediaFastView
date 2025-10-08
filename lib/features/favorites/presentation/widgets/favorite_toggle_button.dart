@@ -5,30 +5,53 @@ import '../../../media_library/domain/entities/media_entity.dart';
 import '../view_models/favorites_view_model.dart';
 
 /// A heart-shaped button for toggling favorite status of media items.
-class FavoriteToggleButton extends ConsumerWidget {
+class FavoriteToggleButton extends ConsumerStatefulWidget {
   const FavoriteToggleButton({super.key, required this.media, this.onToggle});
 
   final MediaEntity media;
   final ValueChanged<bool>? onToggle;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(favoritesViewModelProvider);
+  ConsumerState<FavoriteToggleButton> createState() =>
+      _FavoriteToggleButtonState();
+}
+
+class _FavoriteToggleButtonState
+    extends ConsumerState<FavoriteToggleButton> {
+  bool _isProcessing = false;
+
+  Future<void> _handleToggle() async {
+    if (_isProcessing) {
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+
     final viewModel = ref.read(favoritesViewModelProvider.notifier);
-    final isFavorite = viewModel.isFavoriteInState(media.id);
-    final isBusy = state is FavoritesLoading;
+
+    try {
+      await viewModel.toggleFavorite(widget.media);
+      final updatedStatus = viewModel.isFavoriteInState(widget.media.id);
+      widget.onToggle?.call(updatedStatus);
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final _ = ref.watch(favoritesViewModelProvider);
+    final viewModel = ref.read(favoritesViewModelProvider.notifier);
+    final isFavorite = viewModel.isFavoriteInState(widget.media.id);
 
     return IconButton(
       icon: Icon(
         isFavorite ? Icons.favorite : Icons.favorite_border,
         color: isFavorite ? Colors.red : Colors.white,
       ),
-      onPressed: isBusy
-          ? null
-          : () async {
-              await viewModel.toggleFavorite(media);
-              onToggle?.call(!isFavorite);
-            },
+      onPressed: _isProcessing ? null : _handleToggle,
       tooltip: isFavorite ? 'Remove from favorites' : 'Add to favorites',
       style: IconButton.styleFrom(
         backgroundColor: Colors.black.withValues(alpha: 0.5),
