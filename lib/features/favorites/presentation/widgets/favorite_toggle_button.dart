@@ -16,19 +16,21 @@ class FavoriteToggleButton extends ConsumerWidget {
     final state = ref.watch(favoritesViewModelProvider);
     final viewModel = ref.read(favoritesViewModelProvider.notifier);
     final isFavorite = viewModel.isFavoriteInState(media.id);
-    final isBusy = state is FavoritesLoading;
+    final hasLoadedFavorites = viewModel.hasLoadedFavorites;
+    final isBusy = state is FavoritesLoading && hasLoadedFavorites;
 
     return IconButton(
       icon: Icon(
         isFavorite ? Icons.favorite : Icons.favorite_border,
         color: isFavorite ? Colors.red : Colors.white,
       ),
-      onPressed: isBusy
-          ? null
-          : () async {
-              await viewModel.toggleFavorite(media);
-              onToggle?.call(!isFavorite);
-            },
+      onPressed: () async {
+        if (isBusy) {
+          return;
+        }
+        await viewModel.toggleFavorite(media);
+        onToggle?.call(!isFavorite);
+      },
       tooltip: isFavorite ? 'Remove from favorites' : 'Add to favorites',
       style: IconButton.styleFrom(
         backgroundColor: Colors.black.withValues(alpha: 0.5),

@@ -12,6 +12,11 @@ sealed class FavoritesState {
   const FavoritesState();
 }
 
+/// Initial state before any favorites have been loaded.
+class FavoritesInitial extends FavoritesState {
+  const FavoritesInitial();
+}
+
 /// Loading state when favorites are being fetched.
 class FavoritesLoading extends FavoritesState {
   const FavoritesLoading();
@@ -113,10 +118,14 @@ class SlideshowFinished extends SlideshowState {
 /// ViewModel for managing favorites state and operations.
 class FavoritesViewModel extends StateNotifier<FavoritesState> {
   FavoritesViewModel(this._favoritesRepository, this._mediaDataSource)
-    : super(const FavoritesLoading());
+    : super(const FavoritesInitial());
 
   final FavoritesRepository _favoritesRepository;
   final SharedPreferencesMediaDataSource _mediaDataSource;
+  bool _hasLoadedFavorites = false;
+
+  /// Tracks whether an initial load has completed.
+  bool get hasLoadedFavorites => _hasLoadedFavorites;
 
   /// Loads favorites and their corresponding media.
   Future<void> loadFavorites() async {
@@ -157,6 +166,8 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
         return;
       }
       state = FavoritesError(e.toString());
+    } finally {
+      _hasLoadedFavorites = true;
     }
   }
 
@@ -295,8 +306,12 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
 /// Provider for FavoritesViewModel with auto-dispose.
 final favoritesViewModelProvider =
     StateNotifierProvider.autoDispose<FavoritesViewModel, FavoritesState>(
-      (ref) => FavoritesViewModel(
-        ref.watch(favoritesRepositoryProvider),
-        ref.watch(mediaDataSourceProvider),
-      ),
+      (ref) {
+        final viewModel = FavoritesViewModel(
+          ref.watch(favoritesRepositoryProvider),
+          ref.watch(mediaDataSourceProvider),
+        );
+        viewModel.loadFavorites();
+        return viewModel;
+      },
     );
