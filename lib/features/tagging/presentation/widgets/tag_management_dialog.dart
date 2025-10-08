@@ -31,72 +31,96 @@ class TagManagementDialog extends ConsumerStatefulWidget {
 }
 
 class _TagManagementDialogState extends ConsumerState<TagManagementDialog> {
-  List<String> _assignedTagIds = [];
+  late Future<List<String>> _assignedTagIdsFuture;
+  List<String> _assignedTagIds = <String>[];
+  bool _hasLoadedInitialAssignments = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _assignedTagIdsFuture = _loadInitialAssignedTagIds();
+  }
+
+  @override
+  void didUpdateWidget(covariant TagManagementDialog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.media?.id != widget.media?.id) {
+      setState(() {
+        _hasLoadedInitialAssignments = false;
+        _assignedTagIdsFuture = _loadInitialAssignedTagIds();
+      });
+    }
+  }
+
+  Future<List<String>> _loadInitialAssignedTagIds() async {
+    if (widget.media == null) {
+      _assignedTagIds = <String>[];
+      _hasLoadedInitialAssignments = true;
+      return const <String>[];
+    }
+
+    final repository = ref.read(mediaRepositoryProvider);
+    final media = await repository.getMediaById(widget.media!.id);
+    final ids = media?.tagIds ?? <String>[];
+    _assignedTagIds = List<String>.from(ids);
+    _hasLoadedInitialAssignments = true;
+    return _assignedTagIds;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer(
-      builder: (context, ref, child) {
-        final future = widget.media != null
-            ? ref.read(mediaRepositoryProvider).getMediaById(widget.media!.id).then((media) => media?.tagIds ?? <String>[])
-            : Future.value(<String>[]);
+    return FutureBuilder<List<String>>(
+      future: _assignedTagIdsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && !_hasLoadedInitialAssignments) {
+          return const AlertDialog(
+            title: Text('Loading...'),
+            content: CircularProgressIndicator(),
+          );
+        }
 
-        return FutureBuilder<List<String>>(
-          future: future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const AlertDialog(
-                title: Text('Loading...'),
-                content: CircularProgressIndicator(),
-              );
-            }
-
-            if (snapshot.hasError) {
-              return AlertDialog(
-                title: const Text('Error'),
-                content: Text('Failed to load current tags: ${snapshot.error}'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Close'),
-                  ),
-                ],
-              );
-            }
-
-            final currentTagIds = snapshot.data ?? [];
-            if (_assignedTagIds.isEmpty) {
-              _assignedTagIds = List<String>.from(currentTagIds);
-            }
-
-            final tagState = ref.watch(tagViewModelProvider);
-            final tagViewModel = ref.read(tagViewModelProvider.notifier);
-            final assignTagUseCase = ref.read(assignTagUseCaseProvider);
-
-            return AlertDialog(
-              title: Text(widget.media != null ? 'Assign Tags' : 'Manage Tags'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: switch (tagState) {
-                  TagLoaded(:final tags) => _buildContent(context, tags, tagViewModel, assignTagUseCase),
-                  TagLoading() => const Center(child: CircularProgressIndicator()),
-                  TagError(:final message) => Center(
-                    child: Text(
-                      'Error: $message',
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
-                    ),
-                  ),
-                  TagEmpty() => _buildEmptyState(context),
-                },
+        if (snapshot.hasError) {
+          return AlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to load current tags: ${snapshot.error}'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close'),
+            ],
+          );
+        }
+
+        final tagState = ref.watch(tagViewModelProvider);
+        final tagViewModel = ref.read(tagViewModelProvider.notifier);
+        final assignTagUseCase = ref.read(assignTagUseCaseProvider);
+
+        return AlertDialog(
+          title: Text(widget.media != null ? 'Assign Tags' : 'Manage Tags'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: switch (tagState) {
+              TagLoaded(:final tags) =>
+                  _buildContent(context, tags, tagViewModel, assignTagUseCase),
+              TagLoading() => const Center(child: CircularProgressIndicator()),
+              TagError(:final message) => Center(
+                child: Text(
+                  'Error: $message',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
-              ],
-            );
-          },
+              ),
+              TagEmpty() => _buildEmptyState(context),
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
         );
       },
     );
