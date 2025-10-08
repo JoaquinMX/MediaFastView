@@ -55,18 +55,25 @@ class TagsLoading extends TagsState {
 }
 
 class TagsLoaded extends TagsState {
-  const TagsLoaded({required this.sections, required this.selectedTagIds});
+  const TagsLoaded({
+    required this.sections,
+    required this.selectedTagIds,
+    required this.filteredMedia,
+  });
 
   final List<TagSection> sections;
   final List<String> selectedTagIds;
+  final List<MediaEntity> filteredMedia;
 
   TagsLoaded copyWith({
     List<TagSection>? sections,
     List<String>? selectedTagIds,
+    List<MediaEntity>? filteredMedia,
   }) {
     return TagsLoaded(
       sections: sections ?? this.sections,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
+      filteredMedia: filteredMedia ?? this.filteredMedia,
     );
   }
 }
@@ -117,19 +124,23 @@ class TagsViewModel extends StateNotifier<TagsState> {
             .where((section) => !section.isFavorites)
             .toList();
 
-        if (favoritesSection != null) {
-          final updatedSections = [favoritesSection, ...otherSections];
-          state = TagsLoaded(
-            sections: updatedSections,
-            selectedTagIds: _syncSelectionWithSections(updatedSections),
-          );
-        } else if (otherSections.isEmpty) {
+        final updatedSections = [
+          if (favoritesSection != null) favoritesSection,
+          ...otherSections,
+        ];
+
+        if (updatedSections.isEmpty) {
           _selectedTagIds = const [];
           state = const TagsEmpty();
         } else {
+          final syncedSelection = _syncSelectionWithSections(updatedSections);
           state = TagsLoaded(
-            sections: otherSections,
-            selectedTagIds: _syncSelectionWithSections(otherSections),
+            sections: updatedSections,
+            selectedTagIds: syncedSelection,
+            filteredMedia: _buildFilteredMedia(
+              updatedSections,
+              syncedSelection,
+            ),
           );
         }
       } else {
@@ -179,9 +190,11 @@ class TagsViewModel extends StateNotifier<TagsState> {
         _selectedTagIds = const [];
         state = const TagsEmpty();
       } else {
+        final syncedSelection = _syncSelectionWithSections(sections);
         state = TagsLoaded(
           sections: sections,
-          selectedTagIds: _syncSelectionWithSections(sections),
+          selectedTagIds: syncedSelection,
+          filteredMedia: _buildFilteredMedia(sections, syncedSelection),
         );
       }
     } catch (e) {
@@ -221,8 +234,11 @@ class TagsViewModel extends StateNotifier<TagsState> {
     _selectedTagIds = newSelection;
     final currentState = state;
     if (currentState is TagsLoaded && mounted) {
+      final updatedFilteredMedia =
+          _buildFilteredMedia(currentState.sections, _selectedTagIds);
       state = currentState.copyWith(
         selectedTagIds: List<String>.from(_selectedTagIds),
+        filteredMedia: updatedFilteredMedia,
       );
     }
   }
@@ -320,6 +336,32 @@ class TagsViewModel extends StateNotifier<TagsState> {
       media: uniqueStandalone.values.toList(),
       color: Color(tag.color),
     );
+  }
+
+  List<MediaEntity> _buildFilteredMedia(
+    List<TagSection> sections,
+    List<String> selectedTagIds,
+  ) {
+    if (selectedTagIds.isEmpty) {
+      return const [];
+    }
+
+    final selectedSet = selectedTagIds.toSet();
+    final mediaById = <String, MediaEntity>{};
+
+    for (final section in sections) {
+      if (!selectedSet.contains(section.id)) {
+        continue;
+      }
+
+      for (final media in section.allMedia) {
+        mediaById[media.id] = media;
+      }
+    }
+
+    final media = mediaById.values.toList()
+      ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
+    return media;
   }
 
   Future<List<MediaEntity>> _loadMediaByIds(

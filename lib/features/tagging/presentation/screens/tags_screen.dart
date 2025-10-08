@@ -1,16 +1,15 @@
-import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../../core/constants/ui_constants.dart';
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../favorites/presentation/widgets/favorite_toggle_button.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
-import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
-import '../../../media_library/presentation/screens/media_grid_screen.dart';
 import '../../../media_library/presentation/widgets/media_grid_item.dart';
 import '../view_models/tags_view_model.dart';
 
@@ -75,10 +74,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   }
 
   Widget _buildSections(TagsLoaded state, TagsViewModel viewModel) {
-    final sections = state.sections;
-    final selectedSections = sections
+    final selectedSections = state.sections
         .where((section) => state.selectedTagIds.contains(section.id))
-        .toList();
+        .toList(growable: false);
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
@@ -93,7 +91,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           if (selectedSections.isEmpty)
             _buildSelectionPlaceholder()
           else
-            ...selectedSections.map(_buildSection),
+            _buildFilteredResults(selectedSections, state.filteredMedia),
         ],
       ),
     );
@@ -176,12 +174,12 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select tags to view their media',
+              'Select tags to view matching media',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             Text(
-              'Use the chips above to choose which tags or favorites to display.',
+              'Use the chips above to choose which tags or favorites to display across your library.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -193,177 +191,158 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  Widget _buildSection(TagSection section) {
+  Widget _buildFilteredResults(
+    List<TagSection> selectedSections,
+    List<MediaEntity> filteredMedia,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSelectionSummary(selectedSections, filteredMedia),
+        const SizedBox(height: 16),
+        if (filteredMedia.isEmpty)
+          _buildNoResultsCard()
+        else
+          _buildAggregatedMediaGrid(filteredMedia),
+      ],
+    );
+  }
+
+  Widget _buildSelectionSummary(
+    List<TagSection> selectedSections,
+    List<MediaEntity> filteredMedia,
+  ) {
+    final theme = Theme.of(context);
+    final tagCount = selectedSections.length;
+    final mediaCount = filteredMedia.length;
+    final tagLabel = tagCount == 1 ? 'tag' : 'tags';
+    final mediaLabel = mediaCount == 1 ? 'item' : 'items';
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
+      elevation: 1,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader(section),
-            const SizedBox(height: 12),
-            if (section.directories.isNotEmpty)
-              ...section.directories
-                  .map((directory) => _buildDirectoryTile(section, directory)),
-            if (section.media.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: _buildMediaGrid(section, section.media),
-              ),
-            if (section.directories.isEmpty && section.media.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  section.isFavorites
-                      ? 'Mark media files as favorites to see them here.'
-                      : 'No media assigned to this tag yet.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Media matching $tagCount $tagLabel',
+                    style: theme.textTheme.titleMedium,
+                  ),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.slideshow),
+                  tooltip: 'Start slideshow',
+                  onPressed: filteredMedia.isEmpty
+                      ? null
+                      : () => _startSlideshow(filteredMedia),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$mediaCount $mediaLabel found',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
+            ),
+            if (selectedSections.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: selectedSections
+                    .map(_buildSelectedTagChip)
+                    .toList(growable: false),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSectionHeader(TagSection section) {
-    final theme = Theme.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        if (!section.isFavorites && section.color != null)
-          Container(
-            width: 12,
-            height: 12,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: section.color,
-              shape: BoxShape.circle,
-            ),
-          ),
-        Expanded(
-          child: Text(
-            section.name,
-            style: theme.textTheme.titleMedium,
-          ),
-        ),
-        Text(
-          '${section.itemCount} item${section.itemCount == 1 ? '' : 's'}',
-          style: theme.textTheme.bodySmall,
-        ),
-        if (section.allMedia.isNotEmpty)
-          IconButton(
-            icon: const Icon(Icons.slideshow),
-            tooltip: 'Start slideshow',
-            onPressed: () => _startSlideshow(section.allMedia),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildDirectoryTile(
-    TagSection section,
-    TagDirectoryContent directoryContent,
-  ) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: ExpansionTile(
-        leading: _buildDirectoryPreview(directoryContent),
-        title: Text(directoryContent.directory.name),
-        subtitle: Text(
-          '${directoryContent.media.length} item${directoryContent.media.length == 1 ? '' : 's'}',
-        ),
-        children: [
-          if (directoryContent.media.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Text(
-                'No media with this tag in this directory.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: _buildMediaGrid(section, directoryContent.media),
-            ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () => _openDirectory(directoryContent.directory),
-              icon: const Icon(Icons.open_in_new),
-              label: const Text('Open directory'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDirectoryPreview(TagDirectoryContent content) {
-    final theme = Theme.of(context);
-    final previewPath = content.directory.thumbnailPath ??
-        (content.media.isNotEmpty ? content.media.first.path : null);
-
-    if (previewPath != null) {
-      final file = File(previewPath);
-      if (file.existsSync()) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.file(
-            file,
-            width: 48,
-            height: 48,
-            fit: BoxFit.cover,
-          ),
-        );
-      }
+  Widget _buildSelectedTagChip(TagSection section) {
+    Widget? avatar;
+    if (section.isFavorites) {
+      avatar = const Icon(Icons.star, color: Colors.amber);
+    } else if (section.color != null) {
+      avatar = CircleAvatar(
+        backgroundColor: section.color,
+        radius: 12,
+      );
     }
 
-    return Container(
-      width: 48,
-      height: 48,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(
-        Icons.folder,
-        color: theme.colorScheme.onSurfaceVariant,
+    return Chip(
+      avatar: avatar,
+      label: Text(section.name),
+    );
+  }
+
+  Widget _buildNoResultsCard() {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'No media match the selected tags',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try selecting different tags or assigning tags to more media items.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildMediaGrid(TagSection section, List<MediaEntity> media) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1,
-      ),
-      itemCount: media.length,
-      itemBuilder: (context, index) {
-        final mediaItem = media[index];
-        return _buildMediaTile(section, mediaItem);
+  Widget _buildAggregatedMediaGrid(List<MediaEntity> media) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const desiredTileWidth = 180.0;
+        final columns = math.max(
+          1,
+          (constraints.maxWidth / desiredTileWidth).floor(),
+        );
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: UiGrid.crossAxisSpacing,
+            mainAxisSpacing: UiGrid.mainAxisSpacing,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: media.length,
+          itemBuilder: (context, index) {
+            final mediaItem = media[index];
+            return _buildMediaTile(mediaItem, media);
+          },
+        );
       },
     );
   }
 
-  Widget _buildMediaTile(TagSection section, MediaEntity media) {
+  Widget _buildMediaTile(MediaEntity media, List<MediaEntity> collection) {
     return Stack(
       fit: StackFit.expand,
       children: [
         MediaGridItem(
           media: media,
-          onTap: () => _openFullScreen(section, media),
+          onTap: () => _openFullScreen(collection, media),
         ),
         Positioned(
           top: 8,
@@ -419,26 +398,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  void _openFullScreen(TagSection section, MediaEntity media) {
+  void _openFullScreen(List<MediaEntity> mediaList, MediaEntity media) {
     final directoryPath = p.dirname(media.path);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FullScreenViewerScreen(
           directoryPath: directoryPath,
           initialMediaId: media.id,
-          mediaList: section.allMedia,
-        ),
-      ),
-    );
-  }
-
-  void _openDirectory(DirectoryEntity directory) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => MediaGridScreen(
-          directoryPath: directory.path,
-          directoryName: directory.name,
-          bookmarkData: directory.bookmarkData,
+          mediaList: mediaList,
         ),
       ),
     );
