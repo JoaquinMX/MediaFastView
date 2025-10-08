@@ -74,7 +74,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final selectedSections = sections
         .where((section) => state.selectedTagIds.contains(section.id))
         .toList();
-    final aggregatedMedia = _collectMediaFromSections(selectedSections);
+    final aggregatedMedia = _collectMediaFromSections(
+      selectedSections,
+      matchAll: state.matchAllTags,
+    );
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
@@ -85,11 +88,13 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           _buildSearchField(),
           const SizedBox(height: 12),
           _buildTagSelectionChips(state, viewModel),
+          const SizedBox(height: 12),
+          _buildMatchModeToggle(state, viewModel),
           const SizedBox(height: 24),
           if (selectedSections.isEmpty)
             _buildSelectionPlaceholder()
           else ...[
-            _buildSelectionSummary(aggregatedMedia, viewModel),
+            _buildSelectionSummary(state, aggregatedMedia, viewModel),
             const SizedBox(height: 12),
             if (aggregatedMedia.isEmpty)
               _buildNoResultsMessage()
@@ -195,17 +200,66 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
+  Widget _buildMatchModeToggle(
+    TagsLoaded state,
+    TagsViewModel viewModel,
+  ) {
+    final theme = Theme.of(context);
+    final description = state.matchAllTags
+        ? 'Media must include every selected tag.'
+        : 'Media can include any of the selected tags.';
+
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    state.matchAllTags
+                        ? 'Match all selected tags'
+                        : 'Match any selected tag',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch.adaptive(
+              value: state.matchAllTags,
+              onChanged: viewModel.setMatchAllTags,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSelectionSummary(
+    TagsLoaded state,
     List<MediaEntity> aggregatedMedia,
     TagsViewModel viewModel,
   ) {
     final theme = Theme.of(context);
+    final modeDescription = state.matchAllTags ? 'all' : 'any';
+    final selectionLabel = state.selectedTagIds.length == 1 ? 'tag' : 'tags';
     return Row(
       children: [
         Expanded(
           child: Text(
             'Showing ${aggregatedMedia.length} '
-            'item${aggregatedMedia.length == 1 ? '' : 's'}',
+            'item${aggregatedMedia.length == 1 ? '' : 's'} matching '
+            '$modeDescription selected $selectionLabel',
             style: theme.textTheme.titleMedium,
           ),
         ),
@@ -249,14 +303,38 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  List<MediaEntity> _collectMediaFromSections(List<TagSection> sections) {
-    final aggregated = <String, MediaEntity>{};
+  List<MediaEntity> _collectMediaFromSections(
+    List<TagSection> sections, {
+    required bool matchAll,
+  }) {
+    if (sections.isEmpty) {
+      return const [];
+    }
+
+    final mediaById = <String, MediaEntity>{};
     for (final section in sections) {
       for (final media in section.allMedia) {
-        aggregated[media.id] = media;
+        mediaById[media.id] = media;
       }
     }
-    return aggregated.values.toList();
+
+    if (!matchAll) {
+      return mediaById.values.toList();
+    }
+
+    final occurrenceCounts = <String, int>{};
+    for (final section in sections) {
+      final idsInSection = section.allMedia.map((media) => media.id).toSet();
+      for (final mediaId in idsInSection) {
+        occurrenceCounts.update(mediaId, (value) => value + 1, ifAbsent: () => 1);
+      }
+    }
+
+    final requiredMatches = sections.length;
+    return occurrenceCounts.entries
+        .where((entry) => entry.value == requiredMatches)
+        .map((entry) => mediaById[entry.key]!)
+        .toList();
   }
 
   Widget _buildMediaGrid(

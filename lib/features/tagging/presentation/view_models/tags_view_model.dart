@@ -55,18 +55,25 @@ class TagsLoading extends TagsState {
 }
 
 class TagsLoaded extends TagsState {
-  const TagsLoaded({required this.sections, required this.selectedTagIds});
+  const TagsLoaded({
+    required this.sections,
+    required this.selectedTagIds,
+    required this.matchAllTags,
+  });
 
   final List<TagSection> sections;
   final List<String> selectedTagIds;
+  final bool matchAllTags;
 
   TagsLoaded copyWith({
     List<TagSection>? sections,
     List<String>? selectedTagIds,
+    bool? matchAllTags,
   }) {
     return TagsLoaded(
       sections: sections ?? this.sections,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
+      matchAllTags: matchAllTags ?? this.matchAllTags,
     );
   }
 }
@@ -94,6 +101,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
   final FavoritesRepository _favoritesRepository;
   final SharedPreferencesMediaDataSource _mediaDataSource;
   List<String> _selectedTagIds = const [];
+  bool _matchAllTags = false;
 
   Future<void> loadTags() async {
     state = const TagsLoading();
@@ -122,6 +130,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
           state = TagsLoaded(
             sections: updatedSections,
             selectedTagIds: _syncSelectionWithSections(updatedSections),
+            matchAllTags: _matchAllTags,
           );
         } else if (otherSections.isEmpty) {
           _selectedTagIds = const [];
@@ -130,6 +139,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
           state = TagsLoaded(
             sections: otherSections,
             selectedTagIds: _syncSelectionWithSections(otherSections),
+            matchAllTags: _matchAllTags,
           );
         }
       } else {
@@ -182,6 +192,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
         state = TagsLoaded(
           sections: sections,
           selectedTagIds: _syncSelectionWithSections(sections),
+          matchAllTags: _matchAllTags,
         );
       }
     } catch (e) {
@@ -223,7 +234,19 @@ class TagsViewModel extends StateNotifier<TagsState> {
     if (currentState is TagsLoaded && mounted) {
       state = currentState.copyWith(
         selectedTagIds: List<String>.from(_selectedTagIds),
+        matchAllTags: _matchAllTags,
       );
+    }
+  }
+
+  void setMatchAllTags(bool matchAll) {
+    if (_matchAllTags == matchAll) {
+      return;
+    }
+    _matchAllTags = matchAll;
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(matchAllTags: matchAll);
     }
   }
 
