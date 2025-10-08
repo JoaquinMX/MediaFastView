@@ -8,6 +8,7 @@ import '../../../media_library/data/models/media_model.dart';
 import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
+import '../../../tagging/domain/enums/tag_filter_mode.dart';
 import '../../../tagging/domain/use_cases/filter_by_tags_use_case.dart';
 import '../../../tagging/domain/use_cases/get_tags_use_case.dart';
 import '../../../../shared/providers/repository_providers.dart';
@@ -55,18 +56,25 @@ class TagsLoading extends TagsState {
 }
 
 class TagsLoaded extends TagsState {
-  const TagsLoaded({required this.sections, required this.selectedTagIds});
+  const TagsLoaded({
+    required this.sections,
+    required this.selectedTagIds,
+    required this.filterMode,
+  });
 
   final List<TagSection> sections;
   final List<String> selectedTagIds;
+  final TagFilterMode filterMode;
 
   TagsLoaded copyWith({
     List<TagSection>? sections,
     List<String>? selectedTagIds,
+    TagFilterMode? filterMode,
   }) {
     return TagsLoaded(
       sections: sections ?? this.sections,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
+      filterMode: filterMode ?? this.filterMode,
     );
   }
 }
@@ -94,6 +102,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
   final FavoritesRepository _favoritesRepository;
   final SharedPreferencesMediaDataSource _mediaDataSource;
   List<String> _selectedTagIds = const [];
+  TagFilterMode _filterMode = TagFilterMode.any;
 
   Future<void> loadTags() async {
     state = const TagsLoading();
@@ -122,6 +131,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
           state = TagsLoaded(
             sections: updatedSections,
             selectedTagIds: _syncSelectionWithSections(updatedSections),
+            filterMode: _filterMode,
           );
         } else if (otherSections.isEmpty) {
           _selectedTagIds = const [];
@@ -130,6 +140,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
           state = TagsLoaded(
             sections: otherSections,
             selectedTagIds: _syncSelectionWithSections(otherSections),
+            filterMode: _filterMode,
           );
         }
       } else {
@@ -182,6 +193,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
         state = TagsLoaded(
           sections: sections,
           selectedTagIds: _syncSelectionWithSections(sections),
+          filterMode: _filterMode,
         );
       }
     } catch (e) {
@@ -224,6 +236,18 @@ class TagsViewModel extends StateNotifier<TagsState> {
       state = currentState.copyWith(
         selectedTagIds: List<String>.from(_selectedTagIds),
       );
+    }
+  }
+
+  void setFilterMode(TagFilterMode mode) {
+    if (_filterMode == mode) {
+      return;
+    }
+
+    _filterMode = mode;
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(filterMode: _filterMode);
     }
   }
 
