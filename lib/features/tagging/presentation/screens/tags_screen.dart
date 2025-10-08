@@ -288,14 +288,20 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         MediaGridItem(
           media: media,
           onTap: () => _openFullScreen(collection, media),
+          onFavoriteToggle: (_) =>
+              ref.read(tagsViewModelProvider.notifier).refreshFavorites(),
         ),
         Positioned(
           top: 8,
           right: 8,
-          child: FavoriteToggleButton(
-            media: media,
-            onToggle: (_) =>
-                ref.read(tagsViewModelProvider.notifier).refreshFavorites(),
+          child: Material(
+            color: Colors.transparent,
+            child: FavoriteToggleButton(
+              media: media,
+              onToggle: (_) => ref
+                  .read(tagsViewModelProvider.notifier)
+                  .refreshFavorites(),
+            ),
           ),
         ),
       ],
