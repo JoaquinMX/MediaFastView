@@ -4,7 +4,6 @@ import 'package:path/path.dart' as p;
 
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
-import '../../../favorites/presentation/widgets/favorite_toggle_button.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/widgets/media_grid_item.dart';
@@ -282,29 +281,11 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   }
 
   Widget _buildMediaTile(MediaEntity media, List<MediaEntity> collection) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        MediaGridItem(
-          media: media,
-          onTap: () => _openFullScreen(collection, media),
-          onFavoriteToggle: (_) =>
-              ref.read(tagsViewModelProvider.notifier).refreshFavorites(),
-        ),
-        Positioned(
-          top: 8,
-          right: 8,
-          child: Material(
-            color: Colors.transparent,
-            child: FavoriteToggleButton(
-              media: media,
-              onToggle: (_) => ref
-                  .read(tagsViewModelProvider.notifier)
-                  .refreshFavorites(),
-            ),
-          ),
-        ),
-      ],
+    return MediaGridItem(
+      media: media,
+      onTap: () => _openFullScreen(collection, media),
+      onFavoriteToggle: (_) =>
+          ref.read(tagsViewModelProvider.notifier).refreshFavorites(),
     );
   }
 
