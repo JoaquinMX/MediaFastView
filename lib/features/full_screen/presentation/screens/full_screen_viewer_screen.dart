@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../tagging/presentation/view_models/tags_view_model.dart';
 import '../../domain/entities/viewer_state_entity.dart';
 import '../view_models/full_screen_view_model.dart';
 import '../widgets/full_screen_favorite_toggle.dart';
@@ -127,7 +128,7 @@ class _FullScreenViewerScreenState
                       const Spacer(),
                       FullScreenFavoriteToggle(
                         isFavorite: state.isFavorite,
-                        onToggle: _viewModel.toggleFavorite,
+                        onToggle: () => _toggleFavoriteAndRefreshTags(),
                       ),
                     ],
                   ),
@@ -286,11 +287,16 @@ class _FullScreenViewerScreenState
         ),
         PopupMenuItem(
           child: const Text('Favorite'),
-          onTap: () => _viewModel.toggleFavorite(),
+          onTap: () => _toggleFavoriteAndRefreshTags(),
         ),
         // Add more menu items as needed
       ],
     );
+  }
+
+  Future<void> _toggleFavoriteAndRefreshTags() async {
+    await _viewModel.toggleFavorite();
+    await ref.read(tagsViewModelProvider.notifier).refreshFavorites();
   }
 
   String _formatFileSize(int bytes) {
@@ -491,7 +497,7 @@ class _FullScreenViewerScreenState
         }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.keyF:
-        _viewModel.toggleFavorite();
+        _toggleFavoriteAndRefreshTags();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.keyI:
         _showMediaInfo(state.currentMedia);

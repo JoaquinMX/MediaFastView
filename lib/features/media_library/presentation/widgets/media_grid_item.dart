@@ -22,6 +22,7 @@ class MediaGridItem extends StatefulWidget {
     this.onLongPress,
     this.onSecondaryTap,
     this.onOperationComplete,
+    this.onFavoriteToggle,
   });
 
   final MediaEntity media;
@@ -30,6 +31,7 @@ class MediaGridItem extends StatefulWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onSecondaryTap;
   final VoidCallback? onOperationComplete;
+  final ValueChanged<bool>? onFavoriteToggle;
 
   @override
   State<MediaGridItem> createState() => _MediaGridItemState();
@@ -122,7 +124,10 @@ class _MediaGridItemState extends State<MediaGridItem> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FavoriteToggleButton(media: widget.media),
+            FavoriteToggleButton(
+              media: widget.media,
+              onToggle: widget.onFavoriteToggle,
+            ),
             const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.tag, color: Colors.white),
