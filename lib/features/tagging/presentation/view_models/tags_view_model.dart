@@ -106,6 +106,10 @@ class TagsViewModel extends StateNotifier<TagsState> {
     await _reloadSections();
   }
 
+  Future<void> refreshTags() async {
+    await _reloadSections();
+  }
+
   Future<void> refreshFavorites() async {
     try {
       final favoritesSection = await _buildFavoritesSection();

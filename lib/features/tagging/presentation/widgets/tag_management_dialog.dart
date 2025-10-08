@@ -5,6 +5,7 @@ import '../../../../features/media_library/domain/entities/media_entity.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/entities/tag_entity.dart';
 import '../../domain/use_cases/assign_tag_use_case.dart';
+import '../view_models/tags_view_model.dart';
 import '../states/tag_state.dart';
 import '../view_models/tag_management_view_model.dart';
 import 'tag_chip.dart';
@@ -253,6 +254,7 @@ class _TagManagementDialogState extends ConsumerState<TagManagementDialog> {
       } else {
         await assignTagUseCase.toggleTagOnMedia(widget.media!.id, tag);
       }
+      await ref.read(tagsViewModelProvider.notifier).refreshTags();
     } catch (e) {
       // Revert on error
       setState(() {
