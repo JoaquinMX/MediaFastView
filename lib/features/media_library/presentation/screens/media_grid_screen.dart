@@ -6,6 +6,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
 
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
+import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
@@ -33,6 +34,15 @@ class MediaGridScreen extends ConsumerStatefulWidget {
 class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   MediaViewModelParams? _params;
   MediaViewModel? _viewModel;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ensure favorites are loaded so hover actions like the favorite toggle work.
+    Future.microtask(
+      () => ref.read(favoritesViewModelProvider.notifier).loadFavorites(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
