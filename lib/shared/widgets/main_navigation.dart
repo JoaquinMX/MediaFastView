@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/media_library/presentation/screens/directory_grid_screen.dart';
-import '../../features/tagging/presentation/screens/tags_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
+import '../../features/tagging/presentation/screens/tags_screen.dart';
+import '../../features/tagging/presentation/view_models/tags_view_model.dart';
 
 /// Main navigation widget with bottom navigation bar.
 class MainNavigation extends ConsumerStatefulWidget {
@@ -49,8 +50,14 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   }
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    if (_selectedIndex != index) {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
+
+    if (index == 1) {
+      ref.read(tagsViewModelProvider.notifier).refreshTags();
+    }
   }
 }
