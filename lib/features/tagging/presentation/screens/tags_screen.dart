@@ -134,34 +134,70 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
     return Card(
       elevation: 1,
-      child: Column(
-        children: ListTile.divideTiles(
-          context: context,
-          tiles: filteredSections.map(
-            (section) => CheckboxListTile(
-              value: state.selectedTagIds.contains(section.id),
-              onChanged: (value) =>
-                  viewModel.setTagSelected(section.id, value ?? false),
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(section.name),
-              subtitle: Text(
-                '${section.itemCount} item${section.itemCount == 1 ? '' : 's'}',
-              ),
-              secondary: section.isFavorites
-                  ? const Icon(Icons.star, color: Colors.amber)
-                  : section.color != null
-                      ? Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: section.color,
-                            shape: BoxShape.circle,
-                          ),
-                        )
-                      : null,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Select tags to display below',
+              style: Theme.of(context).textTheme.titleSmall,
             ),
-          ),
-        ).toList(),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: filteredSections
+                  .map(
+                    (section) => _buildTagFilterChip(
+                      section,
+                      state,
+                      viewModel,
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagFilterChip(
+    TagSection section,
+    TagsLoaded state,
+    TagsViewModel viewModel,
+  ) {
+    final isSelected = state.selectedTagIds.contains(section.id);
+    final itemLabel =
+        '${section.itemCount} item${section.itemCount == 1 ? '' : 's'}';
+    return FilterChip(
+      label: Text('${section.name} · $itemLabel'),
+      selected: isSelected,
+      onSelected: (selected) => viewModel.setTagSelected(section.id, selected),
+      avatar: _buildTagChipAvatar(section),
+      showCheckmark: true,
+    );
+  }
+
+  Widget? _buildTagChipAvatar(TagSection section) {
+    if (section.isFavorites) {
+      return const Icon(Icons.star, color: Colors.amber, size: 18);
+    }
+
+    final color = section.color;
+    if (color == null) {
+      return null;
+    }
+
+    return SizedBox(
+      width: 18,
+      height: 18,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+        ),
       ),
     );
   }
@@ -180,7 +216,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Use the checkboxes above to choose which tags or favorites to display.',
+              'Use the filters above to choose which tags or favorites to display.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
