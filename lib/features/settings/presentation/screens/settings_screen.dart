@@ -5,6 +5,7 @@ import '../../../../features/media_library/presentation/view_models/directory_gr
 import '../../../../features/favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../../shared/providers/theme_provider.dart';
 import '../../../../shared/providers/thumbnail_caching_provider.dart';
+import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/widgets/app_bar.dart';
 
 /// Screen for displaying application settings.
@@ -17,6 +18,9 @@ class SettingsScreen extends ConsumerWidget {
     final themeNotifier = ref.read(themeProvider.notifier);
     final isThumbnailCachingEnabled = ref.watch(thumbnailCachingProvider);
     final thumbnailCachingNotifier = ref.read(thumbnailCachingProvider.notifier);
+    final playbackSettings = ref.watch(videoPlaybackSettingsProvider);
+    final playbackSettingsNotifier =
+        ref.read(videoPlaybackSettingsProvider.notifier);
 
     return Scaffold(
       appBar: const CustomAppBar(
@@ -28,8 +32,21 @@ class SettingsScreen extends ConsumerWidget {
           _buildSectionHeader('Appearance'),
           _buildThemeSetting(themeMode, themeNotifier),
           const Divider(),
+          _buildSectionHeader('Playback'),
+          _buildAutoplaySetting(
+            playbackSettings.autoplayVideos,
+            playbackSettingsNotifier,
+          ),
+          _buildLoopSetting(
+            playbackSettings.loopVideos,
+            playbackSettingsNotifier,
+          ),
+          const Divider(),
           _buildSectionHeader('Data Management'),
-          _buildThumbnailCachingSetting(isThumbnailCachingEnabled, thumbnailCachingNotifier),
+          _buildThumbnailCachingSetting(
+            isThumbnailCachingEnabled,
+            thumbnailCachingNotifier,
+          ),
           _buildClearCacheTile(context, ref),
           _buildClearFavoritesTile(context, ref),
           const Divider(),
@@ -83,6 +100,38 @@ class SettingsScreen extends ConsumerWidget {
         value: isEnabled,
         onChanged: (bool value) {
           notifier.setThumbnailCaching(value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildAutoplaySetting(
+    bool isEnabled,
+    VideoPlaybackSettingsNotifier notifier,
+  ) {
+    return ListTile(
+      title: const Text('Autoplay Videos'),
+      subtitle: const Text('Automatically start playback when a video loads'),
+      trailing: Switch(
+        value: isEnabled,
+        onChanged: (bool value) {
+          notifier.setAutoplayVideos(value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildLoopSetting(
+    bool isEnabled,
+    VideoPlaybackSettingsNotifier notifier,
+  ) {
+    return ListTile(
+      title: const Text('Loop Videos'),
+      subtitle: const Text('Repeat videos automatically when they finish'),
+      trailing: Switch(
+        value: isEnabled,
+        onChanged: (bool value) {
+          notifier.setLoopVideos(value);
         },
       ),
     );

@@ -7,6 +7,7 @@ import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/use_cases/load_media_for_viewing_use_case.dart';
 import '../../domain/entities/viewer_state_entity.dart';
@@ -18,13 +19,17 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     this._loadMediaUseCase,
     this._favoritesViewModel,
     this._favoritesRepository,
-  ) : super(const FullScreenInitial());
+    VideoPlaybackSettings playbackSettings,
+  )   : _playbackSettings = playbackSettings,
+        super(const FullScreenInitial());
 
   final LoadMediaForViewingUseCase _loadMediaUseCase;
   final FavoritesViewModel _favoritesViewModel;
   final FavoritesRepository _favoritesRepository;
 
   VideoPlayerController? _videoController;
+  VideoPlaybackSettings _playbackSettings;
+  bool _loopOverridden = false;
 
   /// Initialize the viewer with media from a directory or provided media list
   Future<void> initialize(String directoryPath, {String? initialMediaId, String? bookmarkData, List<MediaEntity>? mediaList}) async {
@@ -70,18 +75,23 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         return;
       }
 
+      final currentMedia = finalMediaList[currentIndex];
+      final isVideo = currentMedia.type == MediaType.video;
+
       // Check if current media is favorite
       final isFavorite = await _favoritesRepository.isFavorite(
-        finalMediaList[currentIndex].id,
+        currentMedia.id,
       );
+
+      _loopOverridden = false;
 
       Future(() {
         state = FullScreenLoaded(
           mediaList: finalMediaList,
           currentIndex: currentIndex,
-          isPlaying: false,
+          isPlaying: isVideo && _playbackSettings.autoplayVideos,
           isMuted: false,
-          isLooping: false,
+          isLooping: isVideo && _playbackSettings.loopVideos,
           currentPosition: Duration.zero,
           totalDuration: Duration.zero,
           isFavorite: isFavorite,
@@ -89,8 +99,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       });
 
       // Initialize video controller if current media is video
-      if (finalMediaList[currentIndex].type == MediaType.video) {
-        await _initializeVideoController(finalMediaList[currentIndex]);
+      if (isVideo) {
+        await _initializeVideoController(currentMedia);
       }
     } catch (e) {
       LoggingService.instance.error('Error during initialization: $e');
@@ -151,8 +161,13 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         isFavorite: isFavorite,
         currentPosition: Duration.zero,
         totalDuration: Duration.zero,
-        isPlaying: false,
+        isPlaying:
+            nextMedia.type == MediaType.video && _playbackSettings.autoplayVideos,
+        isLooping:
+            nextMedia.type == MediaType.video && _playbackSettings.loopVideos,
       );
+
+      _loopOverridden = false;
 
       // Initialize new media if video
       if (nextMedia.type == MediaType.video) {
@@ -178,8 +193,13 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         isFavorite: isFavorite,
         currentPosition: Duration.zero,
         totalDuration: Duration.zero,
-        isPlaying: false,
+        isPlaying: previousMedia.type == MediaType.video &&
+            _playbackSettings.autoplayVideos,
+        isLooping: previousMedia.type == MediaType.video &&
+            _playbackSettings.loopVideos,
       );
+
+      _loopOverridden = false;
 
       // Initialize new media if video
       if (previousMedia.type == MediaType.video) {
@@ -225,6 +245,22 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       final newLooping = !currentState.isLooping;
       _videoController?.setLooping(newLooping);
       state = currentState.copyWith(isLooping: newLooping);
+      _loopOverridden = true;
+    }
+  }
+
+  /// Update the persisted playback preferences.
+  void updatePlaybackPreferences(VideoPlaybackSettings settings) {
+    _playbackSettings = settings;
+
+    final currentState = state;
+    if (_loopOverridden) return;
+
+    if (currentState is FullScreenLoaded &&
+        currentState.currentMedia.type == MediaType.video &&
+        currentState.isLooping != settings.loopVideos) {
+      _videoController?.setLooping(settings.loopVideos);
+      state = currentState.copyWith(isLooping: settings.loopVideos);
     }
   }
 
@@ -300,6 +336,14 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       _videoController!.setLooping(currentState.isLooping);
       _videoController!.setVolume(currentState.isMuted ? 0.0 : 1.0);
     }
+
+    if (_playbackSettings.autoplayVideos) {
+      await _videoController!.play();
+      final autoplayState = state;
+      if (autoplayState is FullScreenLoaded) {
+        state = autoplayState.copyWith(isPlaying: true);
+      }
+    }
   }
 
   /// Listener for video controller updates
@@ -330,8 +374,13 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       isFavorite: isFavorite,
       currentPosition: Duration.zero,
       totalDuration: Duration.zero,
-      isPlaying: false,
+      isPlaying:
+          targetMedia.type == MediaType.video && _playbackSettings.autoplayVideos,
+      isLooping:
+          targetMedia.type == MediaType.video && _playbackSettings.loopVideos,
     );
+
+    _loopOverridden = false;
 
     // Initialize new media if video
     if (targetMedia.type == MediaType.video) {
@@ -357,9 +406,21 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 /// Provider for FullScreenViewModel
 final fullScreenViewModelProvider =
     StateNotifierProvider.autoDispose<FullScreenViewModel, FullScreenState>(
-       (ref) => FullScreenViewModel(
-         ref.watch(loadMediaForViewingUseCaseProvider),
-         ref.read(favoritesViewModelProvider.notifier),
-         ref.watch(favoritesRepositoryProvider),
-       ),
-     );
+  (ref) {
+    final viewModel = FullScreenViewModel(
+      ref.watch(loadMediaForViewingUseCaseProvider),
+      ref.read(favoritesViewModelProvider.notifier),
+      ref.watch(favoritesRepositoryProvider),
+      ref.read(videoPlaybackSettingsProvider),
+    );
+
+    ref.listen<VideoPlaybackSettings>(
+      videoPlaybackSettingsProvider,
+      (previous, next) {
+        viewModel.updatePlaybackPreferences(next);
+      },
+    );
+
+    return viewModel;
+  },
+);
