@@ -1,8 +1,8 @@
 import '../../domain/entities/directory_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
 import '../data_sources/local_directory_data_source.dart';
-import '../data_sources/local_media_data_source.dart';
-import '../data_sources/shared_preferences_data_source.dart';
+import '../data_sources/isar_media_data_source.dart';
+import '../data_sources/isar_directory_data_source.dart';
 import '../models/directory_model.dart';
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
@@ -10,7 +10,7 @@ import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 
-/// Implementation of DirectoryRepository using SharedPreferences and local file system.
+/// Implementation of DirectoryRepository using Isar and local file system.
 class DirectoryRepositoryImpl implements DirectoryRepository {
   const DirectoryRepositoryImpl(
     this._directoryDataSource,
@@ -20,11 +20,11 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     this._mediaDataSource,
   );
 
-  final SharedPreferencesDirectoryDataSource _directoryDataSource;
+  final IsarDirectoryDataSource _directoryDataSource;
   final LocalDirectoryDataSource _localDirectoryDataSource;
   final BookmarkService _bookmarkService;
   final PermissionService _permissionService;
-  final SharedPreferencesMediaDataSource _mediaDataSource;
+  final IsarMediaDataSource _mediaDataSource;
 
   @override
   Future<List<DirectoryEntity>> getDirectories() async {

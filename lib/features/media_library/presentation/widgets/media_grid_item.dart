@@ -157,6 +157,10 @@ class _MediaGridItemState extends State<MediaGridItem> {
         return _buildVideoContent();
       case MediaType.text:
         return _buildTextContent();
+      case MediaType.audio:
+        return _buildAudioContent();
+      case MediaType.document:
+        return _buildDocumentContent();
       case MediaType.directory:
         return _buildDirectoryContent(ref);
     }
@@ -179,6 +183,32 @@ class _MediaGridItemState extends State<MediaGridItem> {
         }
         return child;
       },
+    );
+  }
+
+  Widget _buildAudioContent() {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: const Center(
+        child: Icon(
+          Icons.audiotrack,
+          size: UiSizing.iconExtraLarge,
+          color: UiColors.whiteOverlay,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentContent() {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: const Center(
+        child: Icon(
+          Icons.picture_as_pdf,
+          size: UiSizing.iconExtraLarge,
+          color: UiColors.whiteOverlay,
+        ),
+      ),
     );
   }
 

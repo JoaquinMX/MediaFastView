@@ -1,13 +1,13 @@
 import '../../domain/entities/tag_entity.dart';
 import '../../domain/repositories/tag_repository.dart';
 import '../../../media_library/data/models/tag_model.dart';
-import '../data_sources/shared_preferences_data_source.dart';
+import '../data_sources/isar_tag_data_source.dart';
 
 /// Implementation of TagRepository using SharedPreferences.
 class TagRepositoryImpl implements TagRepository {
   const TagRepositoryImpl(this._tagDataSource);
 
-  final SharedPreferencesTagDataSource _tagDataSource;
+  final IsarTagDataSource _tagDataSource;
 
   @override
   Future<List<TagEntity>> getTags() async {

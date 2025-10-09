@@ -1,5 +1,5 @@
 /// Enum representing different types of media.
-enum MediaType { image, video, text, directory }
+enum MediaType { image, video, text, audio, document, directory }
 
 /// Domain entity representing a media item.
 class MediaEntity {
@@ -13,6 +13,11 @@ class MediaEntity {
     required this.tagIds,
     required this.directoryId,
     this.bookmarkData,
+    this.thumbnailPath,
+    this.width,
+    this.height,
+    this.duration,
+    this.metadata,
   });
 
   final String id;
@@ -24,6 +29,11 @@ class MediaEntity {
   final List<String> tagIds;
   final String directoryId;
   final String? bookmarkData;
+  final String? thumbnailPath;
+  final int? width;
+  final int? height;
+  final Duration? duration;
+  final Map<String, dynamic>? metadata;
 
   /// Creates a copy with updated fields.
   MediaEntity copyWith({
@@ -36,6 +46,11 @@ class MediaEntity {
     List<String>? tagIds,
     String? directoryId,
     String? bookmarkData,
+    String? thumbnailPath,
+    int? width,
+    int? height,
+    Duration? duration,
+    Map<String, dynamic>? metadata,
   }) {
     return MediaEntity(
       id: id ?? this.id,
@@ -47,6 +62,11 @@ class MediaEntity {
       tagIds: tagIds ?? this.tagIds,
       directoryId: directoryId ?? this.directoryId,
       bookmarkData: bookmarkData ?? this.bookmarkData,
+      thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      duration: duration ?? this.duration,
+      metadata: metadata ?? this.metadata,
     );
   }
 
@@ -62,5 +82,5 @@ class MediaEntity {
 
   @override
   String toString() =>
-      'MediaEntity(id: $id, path: $path, name: $name, type: $type, size: $size, lastModified: $lastModified, tagIds: $tagIds, directoryId: $directoryId, bookmarkData: $bookmarkData)';
+      'MediaEntity(id: $id, path: $path, name: $name, type: $type, size: $size, lastModified: $lastModified, tagIds: $tagIds, directoryId: $directoryId, bookmarkData: $bookmarkData, thumbnailPath: $thumbnailPath, width: $width, height: $height, duration: $duration, metadata: $metadata)';
 }

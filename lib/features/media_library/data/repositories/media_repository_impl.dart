@@ -2,14 +2,14 @@ import '../../../../core/services/logging_service.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/media_repository.dart';
-import '../data_sources/local_media_data_source.dart';
+import '../data_sources/isar_media_data_source.dart';
 import '../models/media_model.dart';
 
 /// Implementation of MediaRepository using SharedPreferences.
 class MediaRepositoryImpl implements MediaRepository {
   const MediaRepositoryImpl(this._mediaDataSource);
 
-  final SharedPreferencesMediaDataSource _mediaDataSource;
+  final IsarMediaDataSource _mediaDataSource;
 
   @override
   Future<List<MediaEntity>> getMediaForDirectory(String directoryId) async {
@@ -93,6 +93,14 @@ class MediaRepositoryImpl implements MediaRepository {
       lastModified: model.lastModified,
       tagIds: model.tagIds,
       directoryId: model.directoryId,
+      bookmarkData: model.bookmarkData,
+      thumbnailPath: model.thumbnailPath,
+      width: model.width,
+      height: model.height,
+      duration: model.durationSeconds == null
+          ? null
+          : Duration(milliseconds: (model.durationSeconds! * 1000).round()),
+      metadata: model.metadata,
     );
   }
 

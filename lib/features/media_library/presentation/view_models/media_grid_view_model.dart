@@ -5,10 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/thumbnail_caching_provider.dart';
 import '../../domain/repositories/media_repository.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../data/repositories/filesystem_media_repository_impl.dart';
-import '../../data/data_sources/local_media_data_source.dart';
+import '../../data/data_sources/isar_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
 
@@ -87,18 +88,18 @@ class MediaViewModel extends StateNotifier<MediaState> {
   MediaViewModel(
     this._params, {
     required MediaRepository mediaRepository,
-    required SharedPreferencesMediaDataSource sharedPreferencesDataSource,
+    required IsarMediaDataSource mediaDataSource,
   }) : super(const MediaLoading()) {
     _directoryPath = _params.directoryPath;
     _directoryName = _params.directoryName;
     _bookmarkData = _params.bookmarkData;
     _mediaRepository = mediaRepository;
-    _sharedPreferencesDataSource = sharedPreferencesDataSource;
+    _mediaDataSource = mediaDataSource;
     loadMedia();
   }
 
   late final MediaRepository _mediaRepository;
-  late final SharedPreferencesMediaDataSource _sharedPreferencesDataSource;
+  late final IsarMediaDataSource _mediaDataSource;
   final MediaViewModelParams _params;
   late final String _directoryPath;
   late final String _directoryName;
@@ -128,7 +129,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
       // Get existing persisted media to merge tagIds
       final mergeStartTime = DateTime.now();
-      final existingMedia = await _sharedPreferencesDataSource.getMedia();
+      final existingMedia = await _mediaDataSource.getMedia();
       final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
       // Convert entities back to models for persistence, merging tagIds from persisted data
@@ -150,8 +151,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
       // Replace persisted entries for this directory with the freshly scanned data
       final persistStartTime = DateTime.now();
-      await _sharedPreferencesDataSource.removeMediaForDirectory(directoryId);
-      await _sharedPreferencesDataSource.upsertMedia(mediaModels);
+      await _mediaDataSource.removeMediaForDirectory(directoryId);
+      await _mediaDataSource.upsertMedia(mediaModels);
       final persistTime = DateTime.now().difference(persistStartTime);
 
       final totalTime = DateTime.now().difference(loadStartTime);
@@ -225,7 +226,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       );
 
       // Get existing persisted media to merge tagIds
-      final existingMedia = await _sharedPreferencesDataSource.getMedia();
+      final existingMedia = await _mediaDataSource.getMedia();
       final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
       // Convert entities back to models for persistence, merging tagIds from persisted data
@@ -246,7 +247,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
       // Merge filtered results to ensure tag updates are persisted without
       // discarding media from other directories or filters
-      await _sharedPreferencesDataSource.upsertMedia(mediaModels);
+      await _mediaDataSource.upsertMedia(mediaModels);
 
       state = MediaLoaded(
         media: media,
@@ -416,8 +417,10 @@ final mediaViewModelProvider = StateNotifierProvider.autoDispose
           ref.watch(directoryRepositoryProvider),
           ref.watch(mediaDataSourceProvider),
           permissionService: ref.watch(permissionServiceProvider),
+          filesystemDataSource: ref.watch(filesystemMediaDataSourceProvider),
+          metadataEnabled: ref.watch(thumbnailCachingProvider),
         ),
-        sharedPreferencesDataSource: ref.watch(mediaDataSourceProvider),
+        mediaDataSource: ref.watch(mediaDataSourceProvider),
       ),
     );
 

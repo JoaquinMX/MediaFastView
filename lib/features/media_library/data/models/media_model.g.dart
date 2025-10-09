@@ -21,6 +21,11 @@ _$MediaModelImpl _$$MediaModelImplFromJson(Map<String, dynamic> json) =>
           const <String>[],
       directoryId: json['directoryId'] as String,
       bookmarkData: json['bookmarkData'] as String?,
+      thumbnailPath: json['thumbnailPath'] as String?,
+      width: (json['width'] as num?)?.toInt(),
+      height: (json['height'] as num?)?.toInt(),
+      durationSeconds: (json['durationSeconds'] as num?)?.toDouble(),
+      metadata: json['metadata'] as Map<String, dynamic>?,
     );
 
 Map<String, dynamic> _$$MediaModelImplToJson(_$MediaModelImpl instance) =>
@@ -34,11 +39,18 @@ Map<String, dynamic> _$$MediaModelImplToJson(_$MediaModelImpl instance) =>
       'tagIds': instance.tagIds,
       'directoryId': instance.directoryId,
       'bookmarkData': instance.bookmarkData,
+      'thumbnailPath': instance.thumbnailPath,
+      'width': instance.width,
+      'height': instance.height,
+      'durationSeconds': instance.durationSeconds,
+      'metadata': instance.metadata,
     };
 
 const _$MediaTypeEnumMap = {
   MediaType.image: 'image',
   MediaType.video: 'video',
   MediaType.text: 'text',
+  MediaType.audio: 'audio',
+  MediaType.document: 'document',
   MediaType.directory: 'directory',
 };

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/logging_service.dart';
 import '../../../favorites/domain/repositories/favorites_repository.dart';
-import '../../../media_library/data/data_sources/local_media_data_source.dart';
+import '../../../media_library/data/data_sources/isar_media_data_source.dart';
 import '../../../media_library/data/models/media_model.dart';
 import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
@@ -100,7 +100,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
   final GetTagsUseCase _getTagsUseCase;
   final FilterByTagsUseCase _filterByTagsUseCase;
   final FavoritesRepository _favoritesRepository;
-  final SharedPreferencesMediaDataSource _mediaDataSource;
+  final IsarMediaDataSource _mediaDataSource;
   List<String> _selectedTagIds = const [];
   TagFilterMode _filterMode = TagFilterMode.any;
 

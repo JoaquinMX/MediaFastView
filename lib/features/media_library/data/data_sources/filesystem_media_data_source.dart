@@ -8,9 +8,10 @@ import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/logging_service.dart';
+import '../../../../core/services/thumbnail_metadata_service.dart';
 import '../models/media_model.dart';
 import '../../domain/entities/media_entity.dart';
-import 'local_media_data_source.dart';
+import '../format/media_format_registry.dart';
 
 /// Result of permission validation for directory access
 class PermissionValidationResult {
@@ -29,38 +30,18 @@ class PermissionValidationResult {
 
 /// Data source for scanning media files from the filesystem.
 class FilesystemMediaDataSource {
-  const FilesystemMediaDataSource(this._bookmarkService, [this._permissionService]);
+  const FilesystemMediaDataSource(
+    this._bookmarkService, [
+    this._permissionService,
+    this._metadataService,
+  ]);
 
   final BookmarkService _bookmarkService;
   final PermissionService? _permissionService;
+  final ThumbnailMetadataService? _metadataService;
 
   /// Gets the permission service, creating one if not provided
   PermissionService get _permissionSvc => _permissionService ?? PermissionService();
-
-  /// Supported image file extensions
-  static const Set<String> _imageExtensions = {
-    'jpg',
-    'jpeg',
-    'png',
-    'gif',
-    'jfif',
-    'bmp',
-    'webp',
-  };
-
-  /// Supported video file extensions
-  static const Set<String> _videoExtensions = {
-    'mp4',
-    'mov',
-    'avi',
-    'mkv',
-    'wmv',
-    'flv',
-    'webm',
-  };
-
-  /// Supported text file extensions
-  static const Set<String> _textExtensions = {'txt', 'md', 'log'};
 
   /// System files to exclude (macOS specific)
   static const Set<String> _excludedFiles = {
@@ -140,11 +121,12 @@ class FilesystemMediaDataSource {
   }
 
   /// Scans a directory for media files and subdirectories.
-   Future<List<MediaModel>> scanMediaForDirectory(
-     String directoryPath,
-     String directoryId, {
-     String? bookmarkData,
-   }) async {
+  Future<List<MediaModel>> scanMediaForDirectory(
+    String directoryPath,
+    String directoryId, {
+    String? bookmarkData,
+    bool enableMetadata = true,
+  }) async {
      final scanStartTime = DateTime.now();
      _permissionSvc.logPermissionEvent(
        'scan_media_start',
@@ -237,7 +219,12 @@ class FilesystemMediaDataSource {
        // Then scan for media files
        LoggingService.instance.debug('Starting recursive scan for media files');
        final fileScanStart = DateTime.now();
-       await _scanDirectoryRecursive(directory, directoryId, mediaItems);
+      await _scanDirectoryRecursive(
+        directory,
+        directoryId,
+        mediaItems,
+        enableMetadata: enableMetadata,
+      );
        final fileScanDuration = DateTime.now().difference(fileScanStart);
        final fileCount = mediaItems.where((m) => m.type != MediaType.directory).length;
        LoggingService.instance.info('Scan completed, found $fileCount media files, file scan took ${fileScanDuration.inMilliseconds}ms');
@@ -309,11 +296,12 @@ class FilesystemMediaDataSource {
   }
 
   /// Recursively scans a directory for media files.
-   Future<void> _scanDirectoryRecursive(
-     Directory directory,
-     String directoryId,
-     List<MediaModel> mediaFiles,
-   ) async {
+  Future<void> _scanDirectoryRecursive(
+    Directory directory,
+    String directoryId,
+    List<MediaModel> mediaFiles, {
+    required bool enableMetadata,
+  }) async {
      LoggingService.instance.debug('Scanning directory recursively: ${directory.path}');
      final scanStart = DateTime.now();
 
@@ -346,7 +334,13 @@ class FilesystemMediaDataSource {
        LoggingService.instance.debug('Processing ${batches.length} batches of files');
 
        for (final batch in batches) {
-         final batchFutures = batch.map((file) => _processFile(file, directoryId));
+         final batchFutures = batch.map(
+           (file) => _processFile(
+             file,
+             directoryId,
+             enableMetadata: enableMetadata,
+           ),
+         );
          final batchResults = await Future.wait(batchFutures);
 
          for (final media in batchResults) {
@@ -373,67 +367,72 @@ class FilesystemMediaDataSource {
    }
 
   /// Processes a single file to determine if it's media and create a MediaModel.
-   Future<MediaModel?> _processFile(File file, String directoryId) async {
-     final fileName = path.basename(file.path);
-     final extension = path
-         .extension(file.path)
-         .toLowerCase()
-         .replaceFirst('.', '');
+  Future<MediaModel?> _processFile(
+    File file,
+    String directoryId, {
+    required bool enableMetadata,
+  }) async {
+    final fileName = path.basename(file.path);
+    final extension = path
+        .extension(file.path)
+        .toLowerCase()
+        .replaceFirst('.', '');
 
-     // Skip excluded files
-     if (_isExcludedFile(fileName)) {
-       return null;
-     }
-
-     // Determine media type
-     final mediaType = _getMediaType(extension);
-     if (mediaType == null) {
-       return null;
-     }
-
-     try {
-       // Get file stats - this is the potential bottleneck
-       final statStart = DateTime.now();
-       final stat = await file.stat();
-       final statDuration = DateTime.now().difference(statStart);
-       final size = stat.size;
-       final lastModified = stat.modified;
-
-       // Log slow file.stat() calls (over 10ms)
-       if (statDuration.inMilliseconds > 10) {
-         LoggingService.instance.warning('Slow file.stat() for ${file.path}: ${statDuration.inMilliseconds}ms');
-       }
-
-       // Generate ID from file system metadata for consistency across different access paths
-       final id = _generateIdFromMetadata(stat, file.path);
-
-       return MediaModel(
-         id: id,
-         path: file.path,
-         name: fileName,
-         type: mediaType,
-         size: size,
-         lastModified: lastModified,
-         directoryId: directoryId,
-         tagIds: const [],
-       );
-     } catch (e) {
-       // Skip files we can't process
-       LoggingService.instance.debug('Failed to process file ${file.path}: $e');
-       return null;
-     }
-   }
-
-  /// Determines the media type from file extension.
-  MediaType? _getMediaType(String extension) {
-    if (_imageExtensions.contains(extension)) {
-      return MediaType.image;
-    } else if (_videoExtensions.contains(extension)) {
-      return MediaType.video;
-    } else if (_textExtensions.contains(extension)) {
-      return MediaType.text;
+    // Skip excluded files
+    if (_isExcludedFile(fileName)) {
+      return null;
     }
-    return null;
+
+    if (!MediaFormatRegistry.isSupportedExtension(extension)) {
+      return null;
+    }
+
+    final mediaType = MediaFormatRegistry.mediaTypeForExtension(extension);
+    if (mediaType == MediaType.directory) {
+      return null;
+    }
+
+    try {
+      // Get file stats - this is the potential bottleneck
+      final statStart = DateTime.now();
+      final stat = await file.stat();
+      final statDuration = DateTime.now().difference(statStart);
+      final size = stat.size;
+      final lastModified = stat.modified;
+
+      // Log slow file.stat() calls (over 10ms)
+      if (statDuration.inMilliseconds > 10) {
+        LoggingService.instance.warning('Slow file.stat() for ${file.path}: ${statDuration.inMilliseconds}ms');
+      }
+
+      // Generate ID from file system metadata for consistency across different access paths
+      final id = _generateIdFromMetadata(stat, file.path);
+
+      ThumbnailMetadataResult? metadataResult;
+      if (enableMetadata && _metadataService != null) {
+        metadataResult = await _metadataService!.process(file.path, mediaType);
+      }
+
+      return MediaModel(
+        id: id,
+        path: file.path,
+        name: fileName,
+        type: mediaType,
+        size: size,
+        lastModified: lastModified,
+        directoryId: directoryId,
+        tagIds: const [],
+        thumbnailPath: metadataResult?.thumbnailPath,
+        width: metadataResult?.width,
+        height: metadataResult?.height,
+        durationSeconds: metadataResult?.duration?.inSeconds.toDouble(),
+        metadata: metadataResult?.metadata,
+      );
+    } catch (e) {
+      // Skip files we can't process
+      LoggingService.instance.debug('Failed to process file ${file.path}: $e');
+      return null;
+    }
   }
 
   /// Checks if a file should be excluded.
@@ -485,50 +484,16 @@ class FilesystemMediaDataSource {
     String directoryPath,
     String directoryId, {
     String? bookmarkData,
+    bool enableMetadata = true,
   }) async {
     // Note: scanMediaForDirectory already handles bookmark access lifecycle
-    final allMedia = await scanMediaForDirectory(directoryPath, directoryId, bookmarkData: bookmarkData);
+    final allMedia = await scanMediaForDirectory(
+      directoryPath,
+      directoryId,
+      bookmarkData: bookmarkData,
+      enableMetadata: enableMetadata,
+    );
     return allMedia.where((media) => media.id == mediaId).firstOrNull;
-  }
-
-  /// Filters media by tag IDs (requires rescanning and filtering).
-  Future<List<MediaModel>> filterMediaByTags(
-    String directoryPath,
-    String directoryId,
-    List<String> tagIds, {
-    String? bookmarkData,
-    SharedPreferencesMediaDataSource? sharedPreferencesDataSource,
-  }) async {
-    // Note: scanMediaForDirectory already handles bookmark access lifecycle
-    final allMedia = await scanMediaForDirectory(directoryPath, directoryId, bookmarkData: bookmarkData);
-
-    // If we have a shared preferences data source, merge tagIds from persisted data
-    List<MediaModel> mediaWithTags = allMedia;
-    if (sharedPreferencesDataSource != null) {
-      final existingMedia = await sharedPreferencesDataSource.getMedia();
-      final existingMediaMap = {for (final m in existingMedia) m.id: m};
-
-      // Convert entities back to models for persistence, merging tagIds from persisted data
-      mediaWithTags = allMedia.map((entity) {
-        final existing = existingMediaMap[entity.id];
-        return MediaModel(
-          id: entity.id,
-          path: entity.path,
-          name: entity.name,
-          type: entity.type,
-          size: entity.size,
-          lastModified: entity.lastModified,
-          tagIds: existing?.tagIds ?? entity.tagIds, // Merge tagIds from persisted data
-          directoryId: entity.directoryId,
-          bookmarkData: entity.bookmarkData,
-        );
-      }).toList();
-    }
-
-    if (tagIds.isEmpty) return mediaWithTags;
-    return mediaWithTags
-        .where((media) => media.tagIds.any((tagId) => tagIds.contains(tagId)))
-        .toList();
   }
 
 }

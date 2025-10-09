@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/error/error_handler.dart';
@@ -142,6 +144,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     this._permissionService,
   ) : super(const DirectoryLoading()) {
     loadDirectories();
+    _startHealthChecks();
   }
 
   final GetDirectoriesUseCase _getDirectoriesUseCase;
@@ -159,10 +162,14 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   List<String> _currentSelectedTagIds = const <String>[];
   int _currentColumns = 3;
 
+  Timer? _healthCheckTimer;
+
   /// Loads all directories.
-  Future<void> loadDirectories() async {
+  Future<void> loadDirectories({bool showLoading = true}) async {
     LoggingService.instance.debug('Starting loadDirectories operation');
-    state = const DirectoryLoading();
+    if (showLoading) {
+      state = const DirectoryLoading();
+    }
     try {
       LoggingService.instance.debug('Fetching directories from use case');
       final directories = await _getDirectoriesUseCase();
@@ -257,6 +264,20 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
       }
     }
+  }
+
+  void _startHealthChecks() {
+    _healthCheckTimer?.cancel();
+    _healthCheckTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => loadDirectories(showLoading: false),
+    );
+  }
+
+  @override
+  void dispose() {
+    _healthCheckTimer?.cancel();
+    super.dispose();
   }
 
   /// Searches directories by query.

@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/repositories/favorites_repository.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
-import '../../../media_library/data/data_sources/local_media_data_source.dart';
+import '../../../media_library/data/data_sources/isar_media_data_source.dart';
 import '../../../media_library/data/models/media_model.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../core/services/logging_service.dart';
@@ -121,7 +121,7 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
     : super(const FavoritesInitial());
 
   final FavoritesRepository _favoritesRepository;
-  final SharedPreferencesMediaDataSource _mediaDataSource;
+  final IsarMediaDataSource _mediaDataSource;
   bool _hasLoadedFavorites = false;
 
   /// Tracks whether an initial load has completed.
@@ -247,6 +247,12 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       tagIds: media.tagIds,
       directoryId: media.directoryId,
       bookmarkData: media.bookmarkData,
+      thumbnailPath: media.thumbnailPath,
+      width: media.width,
+      height: media.height,
+      durationSeconds:
+          media.duration == null ? null : media.duration!.inMilliseconds / 1000,
+      metadata: media.metadata,
     );
     await _mediaDataSource.upsertMedia([model]);
   }
@@ -284,6 +290,16 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
           tagIds: storedMedia.tagIds,
           directoryId: storedMedia.directoryId,
           bookmarkData: storedMedia.bookmarkData,
+          thumbnailPath: storedMedia.thumbnailPath,
+          width: storedMedia.width,
+          height: storedMedia.height,
+          duration: storedMedia.durationSeconds == null
+              ? null
+              : Duration(
+                  milliseconds:
+                      (storedMedia.durationSeconds! * 1000).round(),
+                ),
+          metadata: storedMedia.metadata,
         );
         validMedia.add(mediaEntity);
         LoggingService.instance.debug(

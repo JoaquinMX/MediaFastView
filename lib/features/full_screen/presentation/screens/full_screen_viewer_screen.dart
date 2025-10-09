@@ -239,6 +239,18 @@ class _FullScreenViewerScreenState
               style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
+          MediaType.audio => Center(
+            child: Text(
+              'Audio playback not implemented',
+              style: TextStyle(color: colorScheme.onSurface),
+            ),
+          ),
+          MediaType.document => Center(
+            child: Text(
+              'Document preview not implemented',
+              style: TextStyle(color: colorScheme.onSurface),
+            ),
+          ),
           MediaType.directory => Center(
             child: Text(
               'Directory viewing not supported',

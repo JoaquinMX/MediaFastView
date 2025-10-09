@@ -7,6 +7,7 @@ import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/directory_entity.dart';
+import '../format/media_format_registry.dart';
 
 /// Data source for local directory operations on the file system.
 class LocalDirectoryDataSource {
@@ -15,16 +16,6 @@ class LocalDirectoryDataSource {
   });
 
   final BookmarkService bookmarkService;
-
-  /// Supported media file extensions for directory scanning
-  static const Set<String> _mediaExtensions = {
-    // Images
-    'jpg', 'jpeg', 'png', 'gif', 'jfif', 'bmp', 'webp',
-    // Videos
-    'mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm',
-    // Text
-    'txt', 'md', 'log',
-  };
 
   /// System files/directories to exclude
   static const Set<String> _excludedNames = {
@@ -159,6 +150,21 @@ class LocalDirectoryDataSource {
         if (entity is Directory) {
           final dirName = path.basename(entity.path);
 
+          if (MediaFormatRegistry.isBundleDirectory(entity.path)) {
+            final stat = await entity.stat();
+            final bundleDirectory = DirectoryEntity(
+              id: _generateId(entity.path),
+              path: entity.path,
+              name: dirName,
+              thumbnailPath: null,
+              tagIds: const [],
+              lastModified: stat.modified,
+            );
+            directories.add(bundleDirectory);
+            await _scanDirectoryRecursive(entity, directories);
+            continue;
+          }
+
           // Skip excluded directories
           if (_excludedNames.contains(dirName) || dirName.startsWith('.')) {
             continue;
@@ -206,7 +212,7 @@ class LocalDirectoryDataSource {
               .toLowerCase()
               .replaceFirst('.', '');
 
-          if (_mediaExtensions.contains(extension)) {
+          if (MediaFormatRegistry.isSupportedExtension(extension)) {
             return true;
           }
         }

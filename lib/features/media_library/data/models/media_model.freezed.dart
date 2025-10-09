@@ -30,6 +30,11 @@ mixin _$MediaModel {
   List<String> get tagIds => throw _privateConstructorUsedError;
   String get directoryId => throw _privateConstructorUsedError;
   String? get bookmarkData => throw _privateConstructorUsedError;
+  String? get thumbnailPath => throw _privateConstructorUsedError;
+  int? get width => throw _privateConstructorUsedError;
+  int? get height => throw _privateConstructorUsedError;
+  double? get durationSeconds => throw _privateConstructorUsedError;
+  Map<String, dynamic>? get metadata => throw _privateConstructorUsedError;
 
   /// Serializes this MediaModel to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -58,6 +63,11 @@ abstract class $MediaModelCopyWith<$Res> {
     List<String> tagIds,
     String directoryId,
     String? bookmarkData,
+    String? thumbnailPath,
+    int? width,
+    int? height,
+    double? durationSeconds,
+    Map<String, dynamic>? metadata,
   });
 }
 
@@ -85,6 +95,11 @@ class _$MediaModelCopyWithImpl<$Res, $Val extends MediaModel>
     Object? tagIds = null,
     Object? directoryId = null,
     Object? bookmarkData = freezed,
+    Object? thumbnailPath = freezed,
+    Object? width = freezed,
+    Object? height = freezed,
+    Object? durationSeconds = freezed,
+    Object? metadata = freezed,
   }) {
     return _then(
       _value.copyWith(
@@ -124,6 +139,26 @@ class _$MediaModelCopyWithImpl<$Res, $Val extends MediaModel>
                 ? _value.bookmarkData
                 : bookmarkData // ignore: cast_nullable_to_non_nullable
                       as String?,
+            thumbnailPath: freezed == thumbnailPath
+                ? _value.thumbnailPath
+                : thumbnailPath // ignore: cast_nullable_to_non_nullable
+                    as String?,
+            width: freezed == width
+                ? _value.width
+                : width // ignore: cast_nullable_to_non_nullable
+                    as int?,
+            height: freezed == height
+                ? _value.height
+                : height // ignore: cast_nullable_to_non_nullable
+                    as int?,
+            durationSeconds: freezed == durationSeconds
+                ? _value.durationSeconds
+                : durationSeconds // ignore: cast_nullable_to_non_nullable
+                    as double?,
+            metadata: freezed == metadata
+                ? _value.metadata
+                : metadata // ignore: cast_nullable_to_non_nullable
+                    as Map<String, dynamic>?,
           )
           as $Val,
     );
@@ -149,6 +184,11 @@ abstract class _$$MediaModelImplCopyWith<$Res>
     List<String> tagIds,
     String directoryId,
     String? bookmarkData,
+    String? thumbnailPath,
+    int? width,
+    int? height,
+    double? durationSeconds,
+    Map<String, dynamic>? metadata,
   });
 }
 
@@ -175,6 +215,11 @@ class __$$MediaModelImplCopyWithImpl<$Res>
     Object? tagIds = null,
     Object? directoryId = null,
     Object? bookmarkData = freezed,
+    Object? thumbnailPath = freezed,
+    Object? width = freezed,
+    Object? height = freezed,
+    Object? durationSeconds = freezed,
+    Object? metadata = freezed,
   }) {
     return _then(
       _$MediaModelImpl(
@@ -214,6 +259,26 @@ class __$$MediaModelImplCopyWithImpl<$Res>
             ? _value.bookmarkData
             : bookmarkData // ignore: cast_nullable_to_non_nullable
                   as String?,
+        thumbnailPath: freezed == thumbnailPath
+            ? _value.thumbnailPath
+            : thumbnailPath // ignore: cast_nullable_to_non_nullable
+                as String?,
+        width: freezed == width
+            ? _value.width
+            : width // ignore: cast_nullable_to_non_nullable
+                as int?,
+        height: freezed == height
+            ? _value.height
+            : height // ignore: cast_nullable_to_non_nullable
+                as int?,
+        durationSeconds: freezed == durationSeconds
+            ? _value.durationSeconds
+            : durationSeconds // ignore: cast_nullable_to_non_nullable
+                as double?,
+        metadata: freezed == metadata
+            ? _value.metadata
+            : metadata // ignore: cast_nullable_to_non_nullable
+                as Map<String, dynamic>?,
       ),
     );
   }
@@ -232,6 +297,11 @@ class _$MediaModelImpl implements _MediaModel {
     final List<String> tagIds = const <String>[],
     required this.directoryId,
     this.bookmarkData,
+    this.thumbnailPath,
+    this.width,
+    this.height,
+    this.durationSeconds,
+    this.metadata,
   }) : _tagIds = tagIds;
 
   factory _$MediaModelImpl.fromJson(Map<String, dynamic> json) =>
@@ -262,10 +332,20 @@ class _$MediaModelImpl implements _MediaModel {
   final String directoryId;
   @override
   final String? bookmarkData;
+  @override
+  final String? thumbnailPath;
+  @override
+  final int? width;
+  @override
+  final int? height;
+  @override
+  final double? durationSeconds;
+  @override
+  final Map<String, dynamic>? metadata;
 
   @override
   String toString() {
-    return 'MediaModel(id: $id, path: $path, name: $name, type: $type, size: $size, lastModified: $lastModified, tagIds: $tagIds, directoryId: $directoryId, bookmarkData: $bookmarkData)';
+    return 'MediaModel(id: $id, path: $path, name: $name, type: $type, size: $size, lastModified: $lastModified, tagIds: $tagIds, directoryId: $directoryId, bookmarkData: $bookmarkData, thumbnailPath: $thumbnailPath, width: $width, height: $height, durationSeconds: $durationSeconds, metadata: $metadata)';
   }
 
   @override
@@ -284,7 +364,14 @@ class _$MediaModelImpl implements _MediaModel {
             (identical(other.directoryId, directoryId) ||
                 other.directoryId == directoryId) &&
             (identical(other.bookmarkData, bookmarkData) ||
-                other.bookmarkData == bookmarkData));
+                other.bookmarkData == bookmarkData) &&
+            (identical(other.thumbnailPath, thumbnailPath) ||
+                other.thumbnailPath == thumbnailPath) &&
+            (identical(other.width, width) || other.width == width) &&
+            (identical(other.height, height) || other.height == height) &&
+            (identical(other.durationSeconds, durationSeconds) ||
+                other.durationSeconds == durationSeconds) &&
+            const DeepCollectionEquality().equals(other.metadata, metadata));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -300,6 +387,11 @@ class _$MediaModelImpl implements _MediaModel {
     const DeepCollectionEquality().hash(_tagIds),
     directoryId,
     bookmarkData,
+    thumbnailPath,
+    width,
+    height,
+    durationSeconds,
+    const DeepCollectionEquality().hash(metadata),
   );
 
   /// Create a copy of MediaModel
@@ -327,6 +419,11 @@ abstract class _MediaModel implements MediaModel {
     final List<String> tagIds,
     required final String directoryId,
     final String? bookmarkData,
+    final String? thumbnailPath,
+    final int? width,
+    final int? height,
+    final double? durationSeconds,
+    final Map<String, dynamic>? metadata,
   }) = _$MediaModelImpl;
 
   factory _MediaModel.fromJson(Map<String, dynamic> json) =
@@ -350,6 +447,16 @@ abstract class _MediaModel implements MediaModel {
   String get directoryId;
   @override
   String? get bookmarkData;
+  @override
+  String? get thumbnailPath;
+  @override
+  int? get width;
+  @override
+  int? get height;
+  @override
+  double? get durationSeconds;
+  @override
+  Map<String, dynamic>? get metadata;
 
   /// Create a copy of MediaModel
   /// with the given fields replaced by the non-null parameter values.

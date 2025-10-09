@@ -3,6 +3,8 @@ import 'package:path/path.dart' as path;
 
 import '../error/app_error.dart';
 import '../utils/retry_utils.dart';
+import '../../features/media_library/data/format/media_format_registry.dart';
+import '../../features/media_library/domain/entities/media_entity.dart';
 
 /// Service for handling file system operations
 class FileService {
@@ -129,35 +131,19 @@ class FileService {
   /// Determines media type from file extension
   String getMediaTypeFromExtension(String filePath) {
     final extension = getFileExtension(filePath);
-
-    switch (extension) {
-      case '.jpg':
-      case '.jpeg':
-      case '.png':
-      case '.gif':
-      case '.bmp':
-      case '.webp':
-      case '.tiff':
-      case '.tif':
+    final mediaType = MediaFormatRegistry.mediaTypeForExtension(extension);
+    switch (mediaType) {
+      case MediaType.image:
         return 'image';
-      case '.mp4':
-      case '.avi':
-      case '.mov':
-      case '.mkv':
-      case '.wmv':
-      case '.flv':
-      case '.webm':
+      case MediaType.video:
         return 'video';
-      case '.txt':
-      case '.md':
-      case '.json':
-      case '.xml':
-      case '.html':
-      case '.css':
-      case '.js':
-      case '.dart':
+      case MediaType.text:
         return 'text';
-      default:
+      case MediaType.audio:
+        return 'audio';
+      case MediaType.document:
+        return 'document';
+      case MediaType.directory:
         return 'unknown';
     }
   }

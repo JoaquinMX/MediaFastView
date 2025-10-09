@@ -1,18 +1,17 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:isar/isar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../features/favorites/data/data_sources/shared_preferences_data_source.dart';
+import '../../core/services/thumbnail_metadata_service.dart';
+import '../../features/favorites/data/data_sources/isar_favorites_data_source.dart';
 import '../../features/favorites/data/repositories/favorites_repository_impl.dart';
 import '../../features/favorites/domain/repositories/favorites_repository.dart';
 import '../../core/services/bookmark_service.dart';
 import '../../core/services/file_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../features/media_library/data/data_sources/local_directory_data_source.dart';
-import '../../features/media_library/data/data_sources/local_media_data_source.dart';
-import '../../features/media_library/data/data_sources/shared_preferences_data_source.dart';
+import '../../features/media_library/data/data_sources/isar_media_data_source.dart';
+import '../../features/media_library/data/data_sources/isar_directory_data_source.dart';
 import '../../features/media_library/data/repositories/directory_repository_impl.dart';
 import '../../features/media_library/data/repositories/file_operations_repository_impl.dart';
 import '../../features/media_library/data/repositories/filesystem_media_repository_impl.dart';
@@ -37,27 +36,28 @@ import '../../features/favorites/domain/use_cases/start_slideshow_use_case.dart'
 import '../../features/full_screen/data/repositories/media_viewer_repository_impl.dart';
 import '../../features/full_screen/domain/repositories/media_viewer_repository.dart';
 import '../../features/full_screen/domain/use_cases/load_media_for_viewing_use_case.dart';
-import '../../features/tagging/data/data_sources/shared_preferences_data_source.dart';
+import '../../features/tagging/data/data_sources/isar_tag_data_source.dart';
 import '../../features/tagging/data/repositories/tag_repository_impl.dart';
 import '../../features/tagging/domain/repositories/tag_repository.dart';
+import '../../shared/providers/thumbnail_caching_provider.dart';
 
 // SharedPreferences provider
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('SharedPreferences must be initialized in main');
 });
 
+final isarProvider = Provider<Isar>((ref) {
+  throw UnimplementedError('Isar must be initialized in main');
+});
+
 // Directory data source provider
-final directoryDataSourceProvider =
-    Provider<SharedPreferencesDirectoryDataSource>(
-      (ref) => SharedPreferencesDirectoryDataSource(
-        ref.watch(sharedPreferencesProvider),
-      ),
-    );
+final directoryDataSourceProvider = Provider<IsarDirectoryDataSource>(
+  (ref) => IsarDirectoryDataSource(ref.watch(isarProvider)),
+);
 
 // Media data source provider
-final mediaDataSourceProvider = Provider<SharedPreferencesMediaDataSource>(
-  (ref) =>
-      SharedPreferencesMediaDataSource(ref.watch(sharedPreferencesProvider)),
+final mediaDataSourceProvider = Provider<IsarMediaDataSource>(
+  (ref) => IsarMediaDataSource(ref.watch(isarProvider)),
 );
 
 // Local directory data source provider
@@ -68,17 +68,25 @@ final localDirectoryDataSourceProvider = Provider<LocalDirectoryDataSource>(
 );
 
 // Tag data source provider
-final tagDataSourceProvider = Provider<SharedPreferencesTagDataSource>(
-  (ref) => SharedPreferencesTagDataSource(ref.watch(sharedPreferencesProvider)),
+final tagDataSourceProvider = Provider<IsarTagDataSource>(
+  (ref) => IsarTagDataSource(ref.watch(isarProvider)),
 );
 
 // Favorites data source provider
-final favoritesDataSourceProvider =
-    Provider<SharedPreferencesFavoritesDataSource>(
-      (ref) => SharedPreferencesFavoritesDataSource(
-        ref.watch(sharedPreferencesProvider),
-      ),
-    );
+final favoritesDataSourceProvider = Provider<IsarFavoritesDataSource>(
+  (ref) => IsarFavoritesDataSource(ref.watch(isarProvider)),
+);
+
+final thumbnailMetadataServiceProvider =
+    Provider<ThumbnailMetadataService>((ref) => ThumbnailMetadataService());
+
+final filesystemMediaDataSourceProvider = Provider<FilesystemMediaDataSource>(
+  (ref) => FilesystemMediaDataSource(
+    ref.watch(bookmarkServiceProvider),
+    ref.watch(permissionServiceProvider),
+    ref.watch(thumbnailMetadataServiceProvider),
+  ),
+);
 
 // Service providers
 final bookmarkServiceProvider = Provider<BookmarkService>(
@@ -116,6 +124,8 @@ final mediaRepositoryProvider =
           ref.watch(directoryRepositoryProvider),
           ref.watch(mediaDataSourceProvider),
           permissionService: ref.watch(permissionServiceProvider),
+          filesystemDataSource: ref.watch(filesystemMediaDataSourceProvider),
+          metadataEnabled: ref.watch(thumbnailCachingProvider),
         ),
       ),
     );
@@ -258,7 +268,11 @@ class MediaViewerRepositoryNotifier
 
 final loadMediaForViewingUseCaseProvider = Provider<LoadMediaForViewingUseCase>(
   (ref) {
-    return LoadMediaForViewingUseCase(ref.watch(mediaDataSourceProvider));
+    return LoadMediaForViewingUseCase(
+      ref.watch(mediaDataSourceProvider),
+      ref.watch(filesystemMediaDataSourceProvider),
+      ref.watch(permissionServiceProvider),
+    );
   },
 );
 
