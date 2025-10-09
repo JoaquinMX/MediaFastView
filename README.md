@@ -12,10 +12,22 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 ## Key Capabilities
 
 - Add folders, validate access permissions, and generate security-scoped bookmarks for macOS (`lib/features/media_library`).
-- Scan directories for images, videos, and text documents with lazy metadata caching (`lib/features/media_library/data/data_sources`).
+- Scan directories for images, videos, text documents, and the newly supported HEIC/RAW/ProRes/PDF/audio formats via a centralized registry (`lib/features/media_library/data/data_sources`).
+- Persist directories, media, tags, and favorites in an embedded Isar database with a boot-time migrator that pulls forward existing SharedPreferences data (`lib/core/database`).
+- Generate background thumbnails and rich metadata (dimensions, duration, EXIF) through an isolate-driven pipeline so media grids render instantly and fall back gracefully when processing is disabled (`lib/core/services/thumbnail_metadata_service.dart`).
+- Run automatic health checks that repair revoked bookmarks, heal directory IDs, and bubble status back to view models so the UI remains responsive without manual refreshes (`lib/features/media_library/presentation/view_models/directory_grid_view_model.dart`).
 - Manage a dual tagging system that applies to both directories and individual media (`lib/features/tagging`).
 - Toggle favorites, start slideshows, and browse starred items in a dedicated screen (`lib/features/favorites`).
 - Open any media item in an immersive full-screen viewer with playback controls and keyboard navigation (`lib/features/full_screen`).
+
+## Recent Enhancements
+
+The following roadmap items are now implemented:
+
+1. **Database-backed library index.** All persisted entities live in Isar collections with Riverpod-integrated data sources. A startup migrator copies legacy SharedPreferences payloads into the new schema the first time the app launches after the upgrade.
+2. **Background thumbnails & metadata.** Media scans enqueue work on a background isolate that writes cached thumbnails and stores width/height/duration/EXIF values, keeping the UI responsive while enabling richer sorting and filtering.
+3. **Broader media format coverage.** The new `MediaFormatRegistry` recognizes additional photo, video, audio, and document formats and coordinates thumbnail policies per type so unconventional files appear alongside standard images and videos.
+4. **Automatic library health checks.** Periodic background sweeps reconcile filesystem changes, refresh macOS security-scoped bookmarks, and notify Riverpod view models when user action is required.
 
 ## Architecture
 
@@ -37,16 +49,38 @@ Each feature contains `data`, `domain`, and `presentation` layers. Riverpod `Sta
 
 ## Getting Started
 
-1. Install Flutter (3.22 or newer recommended) and set up macOS/iOS tooling.
-2. Fetch dependencies:
-   ```bash
-   flutter pub get
-   ```
-3. Run the app:
-   ```bash
-   flutter run -d macos   # or -d ios / -d chrome if configured
-   ```
-4. To update generated code or platform channels, rebuild the project (`flutter clean && flutter pub get`).
+### Prerequisites
+
+- Flutter 3.22 or newer with macOS and/or iOS toolchains configured
+- Xcode (for macOS/iOS builds) and CocoaPods
+- Dart SDK that matches the Flutter distribution
+
+### Install dependencies
+
+```bash
+flutter pub get
+```
+
+If you modify the Isar collections or freezed/json-serializable models, regenerate code with:
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+```
+
+### Running the app
+
+Launch on macOS (recommended for the desktop-first experience):
+
+```bash
+flutter run -d macos
+```
+
+Other supported targets include iOS simulators/devices (`flutter run -d ios`) and Chrome (`flutter run -d chrome`) for quick UI smoke tests.
+
+### First-run migration & caches
+
+- On first launch after upgrading from the SharedPreferences build, the app automatically migrates saved directories, media, tags, and favorites into the Isar database. Progress is logged to the console.
+- Thumbnails and metadata are generated in the background. You can toggle caching in the app preferences; cached assets live under the application support directory and are refreshed automatically by health checks.
 
 ## Testing
 
@@ -54,7 +88,7 @@ Each feature contains `data`, `domain`, and `presentation` layers. Riverpod `Sta
 flutter test
 ```
 
-Widget and integration test scaffolds live under `test/`. Add coverage for new view models or use cases as features evolve.
+Widget and integration test scaffolds live under `test/`. Add coverage for new view models or use cases as features evolve. Database migrations and health-check workflows include unit-test-friendly adapters to simplify mocking in Riverpod containers.
 
 ## Roadmap & Known Gaps
 
