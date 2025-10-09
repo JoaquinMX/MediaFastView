@@ -367,6 +367,63 @@ class PermissionService {
     }
   }
 
+  /// Wraps a file system operation with optional security-scoped bookmark access.
+  Future<T> runWithBookmarkAccess<T>({
+    required String path,
+    String? bookmarkData,
+    required Future<T> Function(String effectivePath) action,
+    String operation = 'filesystem_operation',
+  }) async {
+    await ensureStoragePermission();
+
+    if (bookmarkData == null) {
+      logPermissionEvent(
+        '${operation}_without_bookmark',
+        path: path,
+        details: 'bookmark=absent',
+      );
+      return action(path);
+    }
+
+    logPermissionEvent(
+      '${operation}_bookmark_start',
+      path: path,
+    );
+
+    String? scopedPath;
+    try {
+      scopedPath = await _bookmarkService.startAccessingBookmark(bookmarkData);
+      logPermissionEvent(
+        '${operation}_bookmark_granted',
+        path: scopedPath,
+      );
+      return await action(scopedPath);
+    } catch (error) {
+      logPermissionEvent(
+        '${operation}_bookmark_error',
+        path: path,
+        error: error.toString(),
+      );
+      rethrow;
+    } finally {
+      if (scopedPath != null) {
+        try {
+          await _bookmarkService.stopAccessingBookmark(bookmarkData);
+          logPermissionEvent(
+            '${operation}_bookmark_released',
+            path: scopedPath,
+          );
+        } catch (error) {
+          logPermissionEvent(
+            '${operation}_bookmark_release_error',
+            path: scopedPath,
+            error: error.toString(),
+          );
+        }
+      }
+    }
+  }
+
   /// Monitors permission status for a directory and triggers recovery if needed
   Future<PermissionMonitorResult> monitorDirectoryPermissions(
     String directoryPath, {

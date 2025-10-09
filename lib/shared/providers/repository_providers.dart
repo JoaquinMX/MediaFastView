@@ -20,11 +20,15 @@ import '../../features/media_library/domain/repositories/directory_repository.da
 import '../../features/media_library/domain/repositories/file_operations_repository.dart';
 import '../../features/media_library/domain/repositories/media_repository.dart';
 import '../../features/media_library/domain/use_cases/add_directory_use_case.dart';
+import '../../features/media_library/domain/use_cases/bulk_rename_use_case.dart';
 import '../../features/media_library/domain/use_cases/clear_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/delete_directory_use_case.dart';
 import '../../features/media_library/domain/use_cases/delete_file_use_case.dart';
 import '../../features/media_library/domain/use_cases/get_directories_use_case.dart';
+import '../../features/media_library/domain/use_cases/move_to_folder_use_case.dart';
+import '../../features/media_library/domain/use_cases/move_to_trash_use_case.dart';
 import '../../features/media_library/domain/use_cases/remove_directory_use_case.dart';
+import '../../features/media_library/domain/use_cases/restore_from_trash_use_case.dart';
 import '../../features/media_library/domain/use_cases/search_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/validate_path_use_case.dart';
 import '../../features/tagging/domain/use_cases/get_tags_use_case.dart';
@@ -202,6 +206,23 @@ final deleteDirectoryUseCaseProvider = Provider<DeleteDirectoryUseCase>((ref) {
 
 final validatePathUseCaseProvider = Provider<ValidatePathUseCase>((ref) {
   return ValidatePathUseCase(ref.watch(fileOperationsRepositoryProvider));
+});
+
+final bulkRenameUseCaseProvider = Provider<BulkRenameUseCase>((ref) {
+  return BulkRenameUseCase(ref.watch(fileOperationsRepositoryProvider));
+});
+
+final moveToFolderUseCaseProvider = Provider<MoveToFolderUseCase>((ref) {
+  return MoveToFolderUseCase(ref.watch(fileOperationsRepositoryProvider));
+});
+
+final moveToTrashUseCaseProvider = Provider<MoveToTrashUseCase>((ref) {
+  return MoveToTrashUseCase(ref.watch(fileOperationsRepositoryProvider));
+});
+
+final restoreFromTrashUseCaseProvider =
+    Provider<RestoreFromTrashUseCase>((ref) {
+  return RestoreFromTrashUseCase(ref.watch(fileOperationsRepositoryProvider));
 });
 // Tag use case providers
 final getTagsUseCaseProvider = Provider<GetTagsUseCase>((ref) {

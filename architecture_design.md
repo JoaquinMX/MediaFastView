@@ -14,7 +14,7 @@ Based on the requirements analysis, the application implements the following cor
 4. **Favorites System**: Marking favorites with dedicated screen and slideshow functionality
 5. **Full-Screen Viewing**: Immersive viewing with zoom, pan, and video controls
 6. **UI Interactions**: Responsive grids, animations, drag-and-drop, gestures, and keyboard shortcuts
-7. **File Operations**: Safe file deletion and permission handling
+7. **File Operations**: Secure deletion, bulk rename, folder moves, and reversible trash with security-scoped bookmark handling and audit logging
 8. **Data Persistence**: SharedPreferences-based storage for all app data
 9. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
 

@@ -7,5 +7,6 @@ class DeleteFileUseCase {
   final FileOperationsRepository _repository;
 
   /// Executes the use case to delete a file
-  Future<void> call(String filePath) => _repository.deleteFile(filePath);
+  Future<void> call(String filePath, {String? bookmarkData}) =>
+      _repository.deleteFile(filePath, bookmarkData: bookmarkData);
 }

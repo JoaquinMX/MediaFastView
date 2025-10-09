@@ -39,6 +39,16 @@ class FileDeleteError extends FileSystemError {
   const FileDeleteError(super.message);
 }
 
+/// Error for file rename operations.
+class FileRenameError extends FileSystemError {
+  const FileRenameError(super.message);
+}
+
+/// Error for file move operations.
+class FileMoveError extends FileSystemError {
+  const FileMoveError(super.message);
+}
+
 /// Error for directory operations.
 class DirectoryError extends FileSystemError {
   const DirectoryError(super.message);
@@ -57,6 +67,16 @@ class DirectoryAccessDeniedError extends DirectoryError {
 /// Error for directory scan operations.
 class DirectoryScanError extends DirectoryError {
   const DirectoryScanError(super.message);
+}
+
+/// Error for trash operations.
+class TrashOperationError extends FileSystemError {
+  const TrashOperationError(super.message);
+}
+
+/// Error when attempting to restore an item that is no longer in trash.
+class TrashItemNotFoundError extends TrashOperationError {
+  const TrashItemNotFoundError(super.message);
 }
 
 /// Error for path validation operations.

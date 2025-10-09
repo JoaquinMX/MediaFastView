@@ -7,6 +7,9 @@ class DeleteDirectoryUseCase {
   final FileOperationsRepository _repository;
 
   /// Executes the use case to delete a directory recursively
-  Future<void> call(String directoryPath) =>
-      _repository.deleteDirectory(directoryPath);
+  Future<void> call(String directoryPath, {String? bookmarkData}) =>
+      _repository.deleteDirectory(
+        directoryPath,
+        bookmarkData: bookmarkData,
+      );
 }
