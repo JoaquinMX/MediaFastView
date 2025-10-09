@@ -10,6 +10,7 @@ import '../../../../../lib/features/media_library/domain/use_cases/search_direct
 import '../../../../../lib/features/media_library/presentation/view_models/directory_grid_view_model.dart';
 import '../../../../../lib/features/media_library/data/data_sources/local_directory_data_source.dart';
 import '../../../../../lib/core/services/permission_service.dart';
+import '../../../../../lib/shared/utils/directory_id_utils.dart';
 
 DirectoryEntity? _firstWhereOrNull(
   Iterable<DirectoryEntity> directories,
@@ -88,6 +89,24 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
     if (index != -1) {
       _directories[index] = _directories[index].copyWith(tagIds: tagIds);
     }
+  }
+
+  @override
+  Future<DirectoryEntity?> updateDirectoryPathAndId(
+    String directoryId,
+    String newPath,
+  ) async {
+    final index = _directories.indexWhere((dir) => dir.id == directoryId);
+    if (index == -1) {
+      return null;
+    }
+    final updated = _directories[index].copyWith(
+      id: generateDirectoryId(newPath),
+      path: newPath,
+      name: newPath.split('/').last,
+    );
+    _directories[index] = updated;
+    return updated;
   }
 }
 

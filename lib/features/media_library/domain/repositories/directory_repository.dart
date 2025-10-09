@@ -28,6 +28,13 @@ abstract class DirectoryRepository {
   /// Updates the bookmark data for a directory.
   Future<void> updateDirectoryBookmark(String directoryId, String? bookmarkData);
 
+  /// Updates the stored path and reconciles the directory identifier when the
+  /// underlying location changes.
+  Future<DirectoryEntity?> updateDirectoryPathAndId(
+    String directoryId,
+    String newPath,
+  );
+
   /// Clears all stored directory data.
   Future<void> clearAllDirectories();
 }

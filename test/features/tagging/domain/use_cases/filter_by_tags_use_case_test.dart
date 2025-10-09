@@ -53,6 +53,14 @@ class _DummyDirectoryRepository implements DirectoryRepository {
   Future<void> updateDirectoryTags(String directoryId, List<String> tagIds) {
     throw UnimplementedError();
   }
+
+  @override
+  Future<DirectoryEntity?> updateDirectoryPathAndId(
+    String directoryId,
+    String newPath,
+  ) {
+    throw UnimplementedError();
+  }
 }
 
 void main() {

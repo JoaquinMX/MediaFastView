@@ -1,3 +1,5 @@
+import 'package:path/path.dart' as p;
+
 import '../../domain/entities/directory_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
 import '../data_sources/local_directory_data_source.dart';
@@ -238,6 +240,37 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       final model = _entityToModel(updatedDirectory);
       await _directoryDataSource.updateDirectory(model);
     }
+  }
+
+  @override
+  Future<DirectoryEntity?> updateDirectoryPathAndId(
+    String directoryId,
+    String newPath,
+  ) async {
+    final directories = await _directoryDataSource.getDirectories();
+    final index = directories.indexWhere((model) => model.id == directoryId);
+    if (index == -1) {
+      return null;
+    }
+
+    final currentModel = directories[index];
+    final newId = generateDirectoryId(newPath);
+    final updatedModel = currentModel.copyWith(
+      id: newId,
+      path: newPath,
+      name: p.basename(newPath),
+      lastModified: DateTime.now(),
+    );
+
+    if (currentModel.id != newId) {
+      await _mediaDataSource.migrateDirectoryId(currentModel.id, newId);
+      await _directoryDataSource.removeDirectory(currentModel.id);
+      await _directoryDataSource.addDirectory(updatedModel);
+    } else {
+      await _directoryDataSource.updateDirectory(updatedModel);
+    }
+
+    return _modelToEntity(updatedModel);
   }
 
   /// Ensures that stored directory IDs use the shared hashing strategy.

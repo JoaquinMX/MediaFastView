@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/permission_service.dart';
+import '../../../../core/services/library_health_check_service.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../data/data_sources/local_directory_data_source.dart';
 import '../../domain/entities/directory_entity.dart';
@@ -15,12 +18,14 @@ import '../../domain/use_cases/search_directories_use_case.dart';
 
 /// Sealed class representing the state of the directory grid.
 sealed class DirectoryState {
-  const DirectoryState();
+  const DirectoryState({this.healthSummary});
+
+  final HealthCheckSummary? healthSummary;
 }
 
 /// Loading state when directories are being fetched.
 class DirectoryLoading extends DirectoryState {
-  const DirectoryLoading();
+  const DirectoryLoading({super.healthSummary});
 }
 
 /// Loaded state with directories data.
@@ -30,6 +35,7 @@ class DirectoryLoaded extends DirectoryState {
     required this.searchQuery,
     required this.selectedTagIds,
     required this.columns,
+    super.healthSummary,
   });
 
   final List<DirectoryEntity> directories;
@@ -42,26 +48,28 @@ class DirectoryLoaded extends DirectoryState {
     String? searchQuery,
     List<String>? selectedTagIds,
     int? columns,
+    HealthCheckSummary? healthSummary,
   }) {
     return DirectoryLoaded(
       directories: directories ?? this.directories,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
+      healthSummary: healthSummary ?? this.healthSummary,
     );
   }
 }
 
 /// Error state when an operation fails.
 class DirectoryError extends DirectoryState {
-  const DirectoryError(this.message);
+  const DirectoryError(this.message, {super.healthSummary});
 
   final String message;
 }
 
 /// Empty state when no directories are available.
 class DirectoryEmpty extends DirectoryState {
-  const DirectoryEmpty();
+  const DirectoryEmpty({super.healthSummary});
 }
 
 /// Permission revoked state when directories are inaccessible.
@@ -72,6 +80,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
     required this.searchQuery,
     required this.selectedTagIds,
     required this.columns,
+    super.healthSummary,
   });
 
   final List<DirectoryEntity> inaccessibleDirectories;
@@ -86,13 +95,16 @@ class DirectoryPermissionRevoked extends DirectoryState {
     String? searchQuery,
     List<String>? selectedTagIds,
     int? columns,
+    HealthCheckSummary? healthSummary,
   }) {
     return DirectoryPermissionRevoked(
-      inaccessibleDirectories: inaccessibleDirectories ?? this.inaccessibleDirectories,
+      inaccessibleDirectories:
+          inaccessibleDirectories ?? this.inaccessibleDirectories,
       accessibleDirectories: accessibleDirectories ?? this.accessibleDirectories,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
+      healthSummary: healthSummary ?? this.healthSummary,
     );
   }
 }
@@ -105,6 +117,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     required this.searchQuery,
     required this.selectedTagIds,
     required this.columns,
+    super.healthSummary,
   });
 
   final List<DirectoryEntity> invalidDirectories;
@@ -119,6 +132,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     String? searchQuery,
     List<String>? selectedTagIds,
     int? columns,
+    HealthCheckSummary? healthSummary,
   }) {
     return DirectoryBookmarkInvalid(
       invalidDirectories: invalidDirectories ?? this.invalidDirectories,
@@ -126,6 +140,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
+      healthSummary: healthSummary ?? this.healthSummary,
     );
   }
 }
@@ -139,8 +154,11 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     this._removeDirectoryUseCase,
     this._clearDirectoriesUseCase,
     this._localDirectoryDataSource,
-    this._permissionService,
-  ) : super(const DirectoryLoading()) {
+    this._permissionService, {
+    LibraryHealthCheckScheduler? healthCheckScheduler,
+  })  : _healthCheckScheduler = healthCheckScheduler,
+        super(const DirectoryLoading()) {
+    _initializeHealthChecks();
     loadDirectories();
   }
 
@@ -151,6 +169,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   final ClearDirectoriesUseCase _clearDirectoriesUseCase;
   final LocalDirectoryDataSource _localDirectoryDataSource;
   final PermissionService _permissionService;
+  final LibraryHealthCheckScheduler? _healthCheckScheduler;
+  StreamSubscription<LibraryHealthCheckReport>? _healthCheckSubscription;
+  HealthCheckSummary? _latestHealthSummary;
 
   List<DirectoryEntity> _cachedAccessibleDirectories = const [];
   List<DirectoryEntity> _cachedInaccessibleDirectories = const [];
@@ -159,10 +180,98 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   List<String> _currentSelectedTagIds = const <String>[];
   int _currentColumns = 3;
 
+  void _initializeHealthChecks() {
+    if (_healthCheckScheduler == null) {
+      return;
+    }
+
+    _healthCheckSubscription =
+        _healthCheckScheduler!.reports.listen(_handleHealthCheckReport);
+  }
+
+  void _handleHealthCheckReport(LibraryHealthCheckReport report) {
+    _latestHealthSummary = report.summary;
+    if (report.inProgress) {
+      _updateStateSummary();
+      return;
+    }
+
+    LoggingService.instance.healthCheck('view_model_received_report', context: {
+      'inaccessible': report.permissionRevokedDirectories.length,
+      'bookmarkIssues': report.bookmarkInvalidDirectories.length,
+      'repaired': report.repairedDirectories.length,
+    });
+
+    _updateDirectoryCaches(
+      accessible: report.accessibleDirectories,
+      inaccessible: report.permissionRevokedDirectories,
+      invalid: report.bookmarkInvalidDirectories,
+    );
+    _emitFilteredState();
+  }
+
+  void _updateStateSummary() {
+    final summary = _latestHealthSummary;
+    if (summary == null) {
+      return;
+    }
+
+    state = switch (state) {
+      DirectoryLoaded(
+        directories: final directories,
+        searchQuery: final searchQuery,
+        selectedTagIds: final selectedTagIds,
+        columns: final columns,
+      ) =>
+          DirectoryLoaded(
+            directories: directories,
+            searchQuery: searchQuery,
+            selectedTagIds: selectedTagIds,
+            columns: columns,
+            healthSummary: summary,
+          ),
+      DirectoryPermissionRevoked(
+        inaccessibleDirectories: final inaccessibleDirectories,
+        accessibleDirectories: final accessibleDirectories,
+        searchQuery: final searchQuery,
+        selectedTagIds: final selectedTagIds,
+        columns: final columns,
+      ) =>
+          DirectoryPermissionRevoked(
+            inaccessibleDirectories: inaccessibleDirectories,
+            accessibleDirectories: accessibleDirectories,
+            searchQuery: searchQuery,
+            selectedTagIds: selectedTagIds,
+            columns: columns,
+            healthSummary: summary,
+          ),
+      DirectoryBookmarkInvalid(
+        invalidDirectories: final invalidDirectories,
+        accessibleDirectories: final accessibleDirectories,
+        searchQuery: final searchQuery,
+        selectedTagIds: final selectedTagIds,
+        columns: final columns,
+      ) =>
+          DirectoryBookmarkInvalid(
+            invalidDirectories: invalidDirectories,
+            accessibleDirectories: accessibleDirectories,
+            searchQuery: searchQuery,
+            selectedTagIds: selectedTagIds,
+            columns: columns,
+            healthSummary: summary,
+          ),
+      DirectoryEmpty() => DirectoryEmpty(healthSummary: summary),
+      DirectoryError(:final message) =>
+          DirectoryError(message, healthSummary: summary),
+      DirectoryLoading() => DirectoryLoading(healthSummary: summary),
+      _ => DirectoryLoading(healthSummary: summary),
+    };
+  }
+
   /// Loads all directories.
   Future<void> loadDirectories() async {
     LoggingService.instance.debug('Starting loadDirectories operation');
-    state = const DirectoryLoading();
+    state = DirectoryLoading(healthSummary: _latestHealthSummary);
     try {
       LoggingService.instance.debug('Fetching directories from use case');
       final directories = await _getDirectoriesUseCase();
@@ -198,7 +307,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           invalid: const [],
         );
         _resetFilters();
-        state = const DirectoryEmpty();
+        state = DirectoryEmpty(healthSummary: _latestHealthSummary);
       } else {
         if (accessibleDirectories.isNotEmpty && inaccessibleDirectories.isEmpty) {
           LoggingService.instance.info('Setting state to DirectoryLoaded with ${accessibleDirectories.length} directories');
@@ -254,7 +363,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           inaccessible: const [],
           invalid: const [],
         );
-        state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
+        state = DirectoryError(
+          ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)),
+          healthSummary: _latestHealthSummary,
+        );
       }
     }
   }
@@ -330,7 +442,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     if (_cachedAccessibleDirectories.isEmpty &&
         _cachedInaccessibleDirectories.isEmpty &&
         _cachedInvalidDirectories.isEmpty) {
-      state = const DirectoryEmpty();
+      state = DirectoryEmpty(healthSummary: _latestHealthSummary);
       return;
     }
 
@@ -341,6 +453,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         searchQuery: _currentSearchQuery,
         selectedTagIds: _currentSelectedTagIds,
         columns: _currentColumns,
+        healthSummary: _latestHealthSummary,
       );
       return;
     }
@@ -352,6 +465,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         searchQuery: _currentSearchQuery,
         selectedTagIds: _currentSelectedTagIds,
         columns: _currentColumns,
+        healthSummary: _latestHealthSummary,
       );
       return;
     }
@@ -361,6 +475,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       searchQuery: _currentSearchQuery,
       selectedTagIds: _currentSelectedTagIds,
       columns: _currentColumns,
+      healthSummary: _latestHealthSummary,
     );
   }
 
@@ -389,7 +504,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       await _addDirectoryUseCase(path, silent: silent);
       await loadDirectories(); // Reload to show the new directory
     } catch (e) {
-      state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
+      state = DirectoryError(
+        ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)),
+        healthSummary: _latestHealthSummary,
+      );
     }
   }
 
@@ -399,7 +517,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       await _removeDirectoryUseCase(id);
       await loadDirectories(); // Reload to reflect the removal
     } catch (e) {
-      state = DirectoryError(e.toString());
+      state = DirectoryError(
+        e.toString(),
+        healthSummary: _latestHealthSummary,
+      );
     }
   }
 
@@ -410,7 +531,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       await _addDirectoryUseCase(directoryPath);
       await loadDirectories(); // Reload to show the re-added directory
     } catch (e) {
-      state = DirectoryError('Failed to re-grant permissions: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}');
+      state = DirectoryError(
+        'Failed to re-grant permissions: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}',
+        healthSummary: _latestHealthSummary,
+      );
     }
   }
 
@@ -426,7 +550,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         await loadDirectories(); // Reload to reflect the changes
       }
     } catch (e) {
-      state = DirectoryError('Failed to recover directory access: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}');
+      state = DirectoryError(
+        'Failed to recover directory access: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}',
+        healthSummary: _latestHealthSummary,
+      );
     }
   }
 
@@ -441,7 +568,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       LoggingService.instance.info('Directory cache clear operation completed successfully');
     } catch (e) {
       LoggingService.instance.error('Failed to clear directory cache: $e');
-      state = DirectoryError('Failed to clear directory cache: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}');
+      state = DirectoryError(
+        'Failed to clear directory cache: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}',
+        healthSummary: _latestHealthSummary,
+      );
     }
   }
 
@@ -489,6 +619,12 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       rethrow;
     }
   }
+
+  @override
+  void dispose() {
+    _healthCheckSubscription?.cancel();
+    super.dispose();
+  }
 }
 
 /// Provider for DirectoryViewModel with auto-dispose.
@@ -502,5 +638,7 @@ final directoryViewModelProvider =
         ref.watch(clearDirectoriesUseCaseProvider),
         ref.watch(localDirectoryDataSourceProvider),
         ref.watch(permissionServiceProvider),
+        healthCheckScheduler:
+            ref.watch(libraryHealthCheckSchedulerProvider),
       ),
     );

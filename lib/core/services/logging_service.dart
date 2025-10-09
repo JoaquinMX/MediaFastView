@@ -25,6 +25,11 @@ abstract class Logger {
   void info(String message, [Map<String, dynamic>? context]);
   void warning(String message, [Map<String, dynamic>? context]);
   void error(String message, [Map<String, dynamic>? context]);
+  void healthCheck(
+    String stage, {
+    LogLevel level = LogLevel.info,
+    Map<String, dynamic>? context,
+  });
 }
 
 class LoggingService implements Logger {
@@ -72,6 +77,19 @@ class LoggingService implements Logger {
   @override
   void error(String message, [Map<String, dynamic>? context]) {
     log(LogLevel.error, message, context);
+  }
+
+  @override
+  void healthCheck(
+    String stage, {
+    LogLevel level = LogLevel.info,
+    Map<String, dynamic>? context,
+  }) {
+    final healthContext = <String, dynamic>{
+      'stage': stage,
+      if (context != null) ...context,
+    };
+    log(level, 'library_health_check', healthContext);
   }
 
   void addOutput(LogOutput output) {

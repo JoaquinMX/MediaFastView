@@ -10,6 +10,7 @@ import '../../features/favorites/domain/repositories/favorites_repository.dart';
 import '../../core/services/bookmark_service.dart';
 import '../../core/services/file_service.dart';
 import '../../core/services/permission_service.dart';
+import '../../core/services/library_health_check_service.dart';
 import '../../features/media_library/data/data_sources/local_directory_data_source.dart';
 import '../../features/media_library/data/data_sources/local_media_data_source.dart';
 import '../../features/media_library/data/data_sources/shared_preferences_data_source.dart';
@@ -90,6 +91,18 @@ final fileServiceProvider = Provider<FileService>((ref) => FileService());
 final permissionServiceProvider = Provider<PermissionService>(
   (ref) => PermissionService(ref.watch(bookmarkServiceProvider)),
 );
+
+final libraryHealthCheckSchedulerProvider =
+    Provider<LibraryHealthCheckScheduler>((ref) {
+      final scheduler = LibraryHealthCheckScheduler(
+        directoryRepository: ref.watch(directoryRepositoryProvider),
+        localDirectoryDataSource: ref.watch(localDirectoryDataSourceProvider),
+        permissionService: ref.watch(permissionServiceProvider),
+      );
+      scheduler.start();
+      ref.onDispose(scheduler.dispose);
+      return scheduler;
+    });
 
 // Repository providers with auto-dispose
 final directoryRepositoryProvider =

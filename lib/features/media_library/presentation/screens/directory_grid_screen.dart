@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../core/services/library_health_check_service.dart';
 
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
@@ -62,6 +63,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
               children: [
                 const DirectorySearchBar(),
                 _buildTagFilter(viewModel),
+                _buildHealthSummary(state),
                 Expanded(
                   child: switch (state) {
                     DirectoryLoading() => const Center(
@@ -203,6 +205,151 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildHealthSummary(DirectoryState state) {
+    final summary = state.healthSummary;
+    if (summary == null) {
+      return const SizedBox.shrink();
+    }
+
+    final theme = Theme.of(context);
+    final chips = <Widget>[];
+
+    if (summary.inProgress) {
+      chips.add(
+        _buildStatusChip(
+          icon: Icons.autorenew,
+          label: 'Health check running…',
+          backgroundColor: theme.colorScheme.primaryContainer,
+          foregroundColor: theme.colorScheme.onPrimaryContainer,
+        ),
+      );
+    } else {
+      final completedLabel = summary.completedAt != null
+          ? 'Last scan ${_formatRelativeTime(summary.completedAt!)}'
+          : 'Last scan moments ago';
+      chips.add(
+        _buildStatusChip(
+          icon: Icons.health_and_safety,
+          label: completedLabel,
+          backgroundColor: theme.colorScheme.surfaceVariant,
+          foregroundColor: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    if (!summary.inProgress &&
+        summary.permissionIssueCount == 0 &&
+        summary.bookmarkIssueCount == 0 &&
+        summary.idMismatchCount == 0 &&
+        summary.repairedCount == 0) {
+      chips.add(
+        _buildStatusChip(
+          icon: Icons.check_circle,
+          label: 'Library healthy',
+          backgroundColor: theme.colorScheme.secondaryContainer,
+          foregroundColor: theme.colorScheme.onSecondaryContainer,
+        ),
+      );
+    }
+
+    if (summary.repairedCount > 0) {
+      chips.add(
+        _buildStatusChip(
+          icon: Icons.build_circle,
+          label:
+              '${summary.repairedCount} auto-repaired ${summary.repairedCount == 1 ? 'directory' : 'directories'}',
+          backgroundColor: theme.colorScheme.primaryContainer,
+          foregroundColor: theme.colorScheme.onPrimaryContainer,
+        ),
+      );
+    }
+
+    if (summary.permissionIssueCount > 0) {
+      chips.add(
+        _buildStatusChip(
+          icon: Icons.lock,
+          label:
+              '${summary.permissionIssueCount} permission ${summary.permissionIssueCount == 1 ? 'issue' : 'issues'}',
+          backgroundColor: theme.colorScheme.errorContainer,
+          foregroundColor: theme.colorScheme.onErrorContainer,
+        ),
+      );
+    }
+
+    if (summary.bookmarkIssueCount > 0) {
+      chips.add(
+        _buildStatusChip(
+          icon: Icons.bookmark_remove,
+          label:
+              '${summary.bookmarkIssueCount} bookmark ${summary.bookmarkIssueCount == 1 ? 'repair' : 'repairs'} needed',
+          backgroundColor: theme.colorScheme.tertiaryContainer,
+          foregroundColor: theme.colorScheme.onTertiaryContainer,
+        ),
+      );
+    }
+
+    if (summary.idMismatchCount > 0) {
+      chips.add(
+        _buildStatusChip(
+          icon: Icons.fingerprint,
+          label:
+              '${summary.idMismatchCount} ID ${summary.idMismatchCount == 1 ? 'mismatch' : 'mismatches'} detected',
+          backgroundColor: theme.colorScheme.secondaryContainer,
+          foregroundColor: theme.colorScheme.onSecondaryContainer,
+        ),
+      );
+    }
+
+    if (chips.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: chips,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusChip({
+    required IconData icon,
+    required String label,
+    required Color backgroundColor,
+    required Color foregroundColor,
+  }) {
+    return Chip(
+      avatar: Icon(icon, size: 18, color: foregroundColor),
+      label: Text(
+        label,
+        style: TextStyle(color: foregroundColor),
+      ),
+      backgroundColor: backgroundColor,
+      side: BorderSide.none,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+    );
+  }
+
+  String _formatRelativeTime(DateTime completedAt) {
+    final now = DateTime.now();
+    final difference = now.difference(completedAt);
+    if (difference.inSeconds < 60) {
+      return 'moments ago';
+    }
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    }
+    if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    }
+    return '${difference.inDays}d ago';
   }
 
   Widget _buildGrid(
