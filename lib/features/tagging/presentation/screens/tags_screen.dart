@@ -7,6 +7,8 @@ import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/widgets/media_grid_item.dart';
+import '../../../media_library/presentation/widgets/column_selector_popup.dart';
+import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../domain/enums/tag_filter_mode.dart';
 import '../view_models/tags_view_model.dart';
 
@@ -43,6 +45,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(tagsViewModelProvider);
     final viewModel = ref.read(tagsViewModelProvider.notifier);
+    final gridColumns = ref.watch(gridColumnsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -53,11 +56,16 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             tooltip: 'Reload tags',
             onPressed: viewModel.loadTags,
           ),
+          IconButton(
+            icon: const Icon(Icons.view_module),
+            tooltip: 'Change grid columns',
+            onPressed: () => _showColumnSelector(gridColumns),
+          ),
         ],
       ),
       body: switch (state) {
         TagsLoading() => const Center(child: CircularProgressIndicator()),
-        TagsLoaded loaded => _buildContent(loaded, viewModel),
+        TagsLoaded loaded => _buildContent(loaded, viewModel, gridColumns),
         TagsEmpty() => _buildEmpty(viewModel),
         TagsError(:final message) => _buildError(message, viewModel),
       },
@@ -70,7 +78,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     });
   }
 
-  Widget _buildContent(TagsLoaded state, TagsViewModel viewModel) {
+  Widget _buildContent(TagsLoaded state, TagsViewModel viewModel, int columns) {
     final sections = state.sections;
     final selectedSections = sections
         .where((section) => state.selectedTagIds.contains(section.id))
@@ -105,7 +113,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             if (aggregatedMedia.isEmpty)
               _buildNoResultsMessage()
             else
-              _buildMediaGrid(aggregatedMedia, aggregatedMedia),
+              _buildMediaGrid(aggregatedMedia, aggregatedMedia, columns),
           ],
         ],
       ),
@@ -340,12 +348,13 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   Widget _buildMediaGrid(
     List<MediaEntity> collection,
     List<MediaEntity> media,
+    int columns,
   ) {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
         childAspectRatio: 1,
@@ -355,6 +364,19 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         final mediaItem = media[index];
         return _buildMediaTile(mediaItem, collection);
       },
+    );
+  }
+
+  void _showColumnSelector(int currentColumns) {
+    showDialog(
+      context: context,
+      builder: (context) => ColumnSelectorPopup(
+        currentColumns: currentColumns,
+        onColumnsSelected: (columns) {
+          ref.read(gridColumnsProvider.notifier).setColumns(columns);
+          Navigator.of(context).pop();
+        },
+      ),
     );
   }
 

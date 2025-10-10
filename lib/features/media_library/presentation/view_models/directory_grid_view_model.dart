@@ -4,6 +4,7 @@ import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/permission_service.dart';
+import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../data/data_sources/local_directory_data_source.dart';
 import '../../domain/entities/directory_entity.dart';
@@ -140,7 +141,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     this._clearDirectoriesUseCase,
     this._localDirectoryDataSource,
     this._permissionService,
-  ) : super(const DirectoryLoading()) {
+    {required int initialColumns},
+  )   : _currentColumns = initialColumns,
+        _defaultColumns = initialColumns,
+        super(const DirectoryLoading()) {
     loadDirectories();
   }
 
@@ -157,7 +161,8 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   List<DirectoryEntity> _cachedInvalidDirectories = const [];
   String _currentSearchQuery = '';
   List<String> _currentSelectedTagIds = const <String>[];
-  int _currentColumns = 3;
+  int _currentColumns;
+  final int _defaultColumns;
 
   /// Loads all directories.
   Future<void> loadDirectories() async {
@@ -310,7 +315,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   void _resetFilters() {
     _currentSearchQuery = '';
     _currentSelectedTagIds = const <String>[];
-    _currentColumns = 3;
+    _currentColumns = _defaultColumns;
   }
 
   void _emitFilteredState() {
@@ -376,7 +381,8 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
   /// Sets the number of columns for the grid.
   void setColumns(int columns) {
-    _currentColumns = columns;
+    final clampedColumns = columns.clamp(1, 12);
+    _currentColumns = clampedColumns;
     if (state case DirectoryLoaded() || DirectoryPermissionRevoked() || DirectoryBookmarkInvalid()) {
       _emitFilteredState();
     }
@@ -493,14 +499,23 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
 /// Provider for DirectoryViewModel with auto-dispose.
 final directoryViewModelProvider =
-    StateNotifierProvider.autoDispose<DirectoryViewModel, DirectoryState>(
-      (ref) => DirectoryViewModel(
-        ref.watch(getDirectoriesUseCaseProvider),
-        ref.watch(searchDirectoriesUseCaseProvider),
-        ref.watch(addDirectoryUseCaseProvider),
-        ref.watch(removeDirectoryUseCaseProvider),
-        ref.watch(clearDirectoriesUseCaseProvider),
-        ref.watch(localDirectoryDataSourceProvider),
-        ref.watch(permissionServiceProvider),
-      ),
-    );
+    StateNotifierProvider.autoDispose<DirectoryViewModel, DirectoryState>((ref) {
+  final viewModel = DirectoryViewModel(
+    ref.watch(getDirectoriesUseCaseProvider),
+    ref.watch(searchDirectoriesUseCaseProvider),
+    ref.watch(addDirectoryUseCaseProvider),
+    ref.watch(removeDirectoryUseCaseProvider),
+    ref.watch(clearDirectoriesUseCaseProvider),
+    ref.watch(localDirectoryDataSourceProvider),
+    ref.watch(permissionServiceProvider),
+    initialColumns: ref.read(gridColumnsProvider),
+  );
+
+  ref.listen<int>(gridColumnsProvider, (previous, next) {
+    if (previous != null && previous != next) {
+      viewModel.setColumns(next);
+    }
+  });
+
+  return viewModel;
+});

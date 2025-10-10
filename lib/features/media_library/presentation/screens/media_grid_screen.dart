@@ -2,7 +2,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
 
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
@@ -12,6 +11,7 @@ import '../../domain/entities/media_entity.dart';
 import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
+import '../../../../shared/providers/grid_columns_provider.dart';
 
 /// Screen for displaying media in a customizable grid layout.
 class MediaGridScreen extends ConsumerStatefulWidget {
@@ -58,6 +58,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
     final state = ref.watch(mediaViewModelProvider(_params!));
     _viewModel = ref.read(mediaViewModelProvider(_params!).notifier);
+    final gridColumns = ref.watch(gridColumnsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -70,7 +71,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
              ),
              IconButton(
                icon: const Icon(Icons.view_module),
-               onPressed: () => _showColumnSelector(context, _viewModel!, state),
+               onPressed: () => _showColumnSelector(context, gridColumns),
              ),
            ],
       ),
@@ -82,9 +83,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
               MediaLoading() => const Center(
                 child: CircularProgressIndicator(),
               ),
-              MediaLoaded(:final media, :final columns) => _buildGrid(
+              MediaLoaded(:final media) => _buildGrid(
                 media,
-                columns,
+                gridColumns,
                 _viewModel!,
               ),
               MediaPermissionRevoked(:final directoryPath, :final directoryName) =>
@@ -279,23 +280,17 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
   }
 
-  void _showColumnSelector(
-    BuildContext context,
-    MediaViewModel viewModel,
-    MediaState state,
-  ) {
-    if (state is MediaLoaded) {
-      showDialog(
-        context: context,
-        builder: (context) => ColumnSelectorPopup(
-          currentColumns: state.columns,
-          onColumnsSelected: (columns) {
-            viewModel.setColumns(columns);
-            Navigator.of(context).pop();
-          },
-        ),
-      );
-    }
+  void _showColumnSelector(BuildContext context, int currentColumns) {
+    showDialog(
+      context: context,
+      builder: (context) => ColumnSelectorPopup(
+        currentColumns: currentColumns,
+        onColumnsSelected: (columns) {
+          ref.read(gridColumnsProvider.notifier).setColumns(columns);
+          Navigator.of(context).pop();
+        },
+      ),
+    );
   }
 
   void _onMediaTap(BuildContext context, MediaEntity media) {
