@@ -45,8 +45,8 @@ class AppConfig {
 
   /// Initialize the configuration system with SharedPreferences.
   /// Must be called before accessing any configuration values.
-  static Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+  static Future<void> init({SharedPreferences? sharedPreferences}) async {
+    _prefs = sharedPreferences ?? await SharedPreferences.getInstance();
   }
 
   /// Get the number of grid columns.

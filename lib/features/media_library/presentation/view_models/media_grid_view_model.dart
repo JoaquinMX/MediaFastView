@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../domain/repositories/media_repository.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../data/repositories/filesystem_media_repository_impl.dart';
@@ -85,6 +86,7 @@ class MediaPermissionRevoked extends MediaState {
 /// ViewModel for managing media grid state and operations.
 class MediaViewModel extends StateNotifier<MediaState> {
   MediaViewModel(
+    this._ref,
     this._params, {
     required MediaRepository mediaRepository,
     required SharedPreferencesMediaDataSource sharedPreferencesDataSource,
@@ -94,15 +96,43 @@ class MediaViewModel extends StateNotifier<MediaState> {
     _bookmarkData = _params.bookmarkData;
     _mediaRepository = mediaRepository;
     _sharedPreferencesDataSource = sharedPreferencesDataSource;
+    _currentColumns = _ref.read(gridColumnsProvider);
+    _gridColumnsSubscription =
+        _ref.listen<int>(gridColumnsProvider, (previous, next) {
+      if (_currentColumns != next) {
+        _currentColumns = next;
+        state = switch (state) {
+          MediaLoaded(
+            :final media,
+            :final searchQuery,
+            :final selectedTagIds,
+            :final currentDirectoryPath,
+            :final currentDirectoryName,
+          ) =>
+              MediaLoaded(
+                media: media,
+                searchQuery: searchQuery,
+                selectedTagIds: selectedTagIds,
+                columns: _currentColumns,
+                currentDirectoryPath: currentDirectoryPath,
+                currentDirectoryName: currentDirectoryName,
+              ),
+          _ => state,
+        };
+      }
+    });
     loadMedia();
   }
 
+  final Ref _ref;
   late final MediaRepository _mediaRepository;
   late final SharedPreferencesMediaDataSource _sharedPreferencesDataSource;
   final MediaViewModelParams _params;
   late final String _directoryPath;
   late final String _directoryName;
   late final String? _bookmarkData;
+  late final ProviderSubscription<int> _gridColumnsSubscription;
+  late int _currentColumns;
 
   /// Gets the directory ID generated from the directory path.
   String get directoryId {
@@ -166,7 +196,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
            media: media,
            searchQuery: '',
            selectedTagIds: const [],
-           columns: 3, // Default to 3 columns
+           columns: _currentColumns,
            currentDirectoryPath: _directoryPath,
            currentDirectoryName: _directoryName,
          );
@@ -213,9 +243,6 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   /// Filters media by tag IDs.
   void filterByTags(List<String> tagIds) async {
-    final previousState = state;
-    final previousColumns =
-        previousState is MediaLoaded ? previousState.columns : 3;
     state = const MediaLoading();
     try {
       final media = await _mediaRepository.filterMediaByTagsForDirectory(
@@ -252,7 +279,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         media: media,
         searchQuery: '', // Reset search when filtering
         selectedTagIds: tagIds,
-        columns: previousColumns,
+        columns: _currentColumns,
         currentDirectoryPath: _directoryPath,
         currentDirectoryName: _directoryName,
       );
@@ -272,25 +299,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   /// Sets the number of columns for the grid.
   void setColumns(int columns) {
-    final clampedColumns = columns.clamp(1, 12);
-    state = switch (state) {
-      MediaLoaded(
-        :final media,
-        :final searchQuery,
-        :final selectedTagIds,
-        :final currentDirectoryPath,
-        :final currentDirectoryName,
-      ) =>
-        MediaLoaded(
-          media: media,
-          searchQuery: searchQuery,
-          selectedTagIds: selectedTagIds,
-          columns: clampedColumns,
-          currentDirectoryPath: currentDirectoryPath,
-          currentDirectoryName: currentDirectoryName,
-        ),
-      _ => state,
-    };
+    _ref.read(gridColumnsProvider.notifier).setColumns(columns);
   }
 
   /// Navigates to a subdirectory.
@@ -404,12 +413,19 @@ class MediaViewModel extends StateNotifier<MediaState> {
            errorMessage.contains('Permission denied') ||
            errorMessage.contains('FileSystemError');
   }
+
+  @override
+  void dispose() {
+    _gridColumnsSubscription.close();
+    super.dispose();
+  }
 }
 
 /// Provider for MediaViewModel with auto-dispose.
 final mediaViewModelProvider = StateNotifierProvider.autoDispose
     .family<MediaViewModel, MediaState, MediaViewModelParams>(
       (ref, params) => MediaViewModel(
+        ref,
         params,
         mediaRepository: FilesystemMediaRepositoryImpl(
           ref.watch(bookmarkServiceProvider),
