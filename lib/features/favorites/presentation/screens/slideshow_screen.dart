@@ -151,6 +151,8 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
                 onPrevious: viewModel.previousItem,
                 onToggleLoop: viewModel.toggleLoop,
                 onToggleMute: viewModel.toggleMute,
+                onToggleShuffle: viewModel.toggleShuffle,
+                onDurationChanged: _handleDurationChange,
               ),
 
               const SizedBox(height: 16),
@@ -221,6 +223,14 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     }
   }
 
+  void _handleDurationChange(double seconds) {
+    final viewModel = ref.read(
+      slideshowViewModelProvider(widget.mediaList).notifier,
+    );
+    final duration = Duration(milliseconds: (seconds * 1000).round());
+    viewModel.updateDisplayDuration(duration);
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
@@ -252,6 +262,10 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
 
       case LogicalKeyboardKey.keyM:
         viewModel.toggleMute();
+        return KeyEventResult.handled;
+
+      case LogicalKeyboardKey.keyS:
+        viewModel.toggleShuffle();
         return KeyEventResult.handled;
 
       default:

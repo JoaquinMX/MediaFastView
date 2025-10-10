@@ -12,6 +12,8 @@ class SlideshowControls extends StatelessWidget {
     required this.onPrevious,
     required this.onToggleLoop,
     required this.onToggleMute,
+    required this.onToggleShuffle,
+    required this.onDurationChanged,
   });
 
   final SlideshowState state;
@@ -20,49 +22,73 @@ class SlideshowControls extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onToggleLoop;
   final VoidCallback onToggleMute;
+  final VoidCallback onToggleShuffle;
+  final ValueChanged<double> onDurationChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    final durationSeconds = switch (state) {
+      SlideshowPlaying(:final displayDuration) =>
+          displayDuration.inMilliseconds / 1000,
+      SlideshowPaused(:final displayDuration) =>
+          displayDuration.inMilliseconds / 1000,
+      _ => 5.0,
+    };
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Previous button
-        IconButton(
-          icon: const Icon(Icons.skip_previous, color: Colors.white),
-          onPressed: onPrevious,
-          tooltip: 'Previous',
-          iconSize: 32,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Previous button
+            IconButton(
+              icon: const Icon(Icons.skip_previous, color: Colors.white),
+              onPressed: onPrevious,
+              tooltip: 'Previous',
+              iconSize: 32,
+            ),
+
+            const SizedBox(width: 16),
+
+            // Play/Pause button
+            _buildPlayPauseButton(),
+
+            const SizedBox(width: 16),
+
+            // Next button
+            IconButton(
+              icon: const Icon(Icons.skip_next, color: Colors.white),
+              onPressed: onNext,
+              tooltip: 'Next',
+              iconSize: 32,
+            ),
+
+            const SizedBox(width: 24),
+
+            // Shuffle toggle
+            _buildShuffleButton(),
+
+            const SizedBox(width: 16),
+
+            // Loop toggle
+            _buildLoopButton(),
+
+            const SizedBox(width: 16),
+
+            // Mute toggle
+            _buildMuteButton(),
+
+            const SizedBox(width: 24),
+
+            // Progress bar (for video controls)
+            if (_isVideoState()) _buildProgressBar(),
+          ],
         ),
 
-        const SizedBox(width: 16),
+        const SizedBox(height: 12),
 
-        // Play/Pause button
-        _buildPlayPauseButton(),
-
-        const SizedBox(width: 16),
-
-        // Next button
-        IconButton(
-          icon: const Icon(Icons.skip_next, color: Colors.white),
-          onPressed: onNext,
-          tooltip: 'Next',
-          iconSize: 32,
-        ),
-
-        const SizedBox(width: 32),
-
-        // Loop toggle
-        _buildLoopButton(),
-
-        const SizedBox(width: 16),
-
-        // Mute toggle
-        _buildMuteButton(),
-
-        const SizedBox(width: 32),
-
-        // Progress bar (for video controls)
-        if (_isVideoState()) _buildProgressBar(),
+        _buildDurationControl(durationSeconds),
       ],
     );
   }
@@ -113,6 +139,56 @@ class SlideshowControls extends StatelessWidget {
       ),
       onPressed: onToggleMute,
       tooltip: isMuted ? 'Unmute' : 'Mute',
+    );
+  }
+
+  Widget _buildShuffleButton() {
+    final isShuffleEnabled = switch (state) {
+      SlideshowPlaying(:final isShuffleEnabled) => isShuffleEnabled,
+      SlideshowPaused(:final isShuffleEnabled) => isShuffleEnabled,
+      _ => false,
+    };
+
+    return IconButton(
+      icon: Icon(
+        Icons.shuffle,
+        color: isShuffleEnabled ? Colors.blue : Colors.white,
+      ),
+      onPressed: onToggleShuffle,
+      tooltip: isShuffleEnabled ? 'Disable shuffle' : 'Enable shuffle',
+    );
+  }
+
+  Widget _buildDurationControl(double durationSeconds) {
+    const double minSeconds = 2;
+    const double maxSeconds = 15;
+    final bool canAdjust = state is SlideshowPlaying || state is SlideshowPaused;
+    final double clampedValue =
+        durationSeconds.clamp(minSeconds, maxSeconds).toDouble();
+    final String label = clampedValue.toStringAsFixed(0);
+
+    return Row(
+      children: [
+        const Icon(Icons.timer, color: Colors.white, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Slider(
+            value: clampedValue,
+            min: minSeconds,
+            max: maxSeconds,
+            divisions: (maxSeconds - minSeconds).round(),
+            label: '$label s',
+            onChanged: canAdjust ? onDurationChanged : null,
+            activeColor: Colors.white,
+            inactiveColor: Colors.white.withValues(alpha: 0.3),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          '$label s',
+          style: const TextStyle(color: Colors.white),
+        ),
+      ],
     );
   }
 
