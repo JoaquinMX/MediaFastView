@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/ui_constants.dart';
 
-import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
@@ -34,7 +33,6 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
-    final gridColumns = ref.watch(gridColumnsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -69,26 +67,28 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                     DirectoryLoading() => const Center(
                       child: CircularProgressIndicator(),
                     ),
-                    DirectoryLoaded(:final directories) =>
-                      _buildGrid(directories, gridColumns, viewModel),
+                    DirectoryLoaded(:final directories, :final columns) =>
+                      _buildGrid(directories, columns, viewModel),
                     DirectoryPermissionRevoked(
                       :final inaccessibleDirectories,
                       :final accessibleDirectories,
+                      :final columns,
                     ) =>
                       _buildPermissionRevokedGrid(
                         accessibleDirectories,
                         inaccessibleDirectories,
-                        gridColumns,
+                        columns,
                         viewModel,
                       ),
                     DirectoryBookmarkInvalid(
                       :final invalidDirectories,
                       :final accessibleDirectories,
+                      :final columns,
                     ) =>
                       _buildBookmarkInvalidGrid(
                         accessibleDirectories,
                         invalidDirectories,
-                        gridColumns,
+                        columns,
                         viewModel,
                       ),
                     DirectoryError(:final message) => _buildError(
@@ -448,17 +448,19 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   }
 
   void _showColumnSelector(BuildContext context, WidgetRef ref) {
-    final currentColumns = ref.read(gridColumnsProvider);
-    showDialog(
-      context: context,
-      builder: (context) => ColumnSelectorPopup(
-        currentColumns: currentColumns,
-        onColumnsSelected: (columns) {
-          ref.read(gridColumnsProvider.notifier).setColumns(columns);
-          Navigator.of(context).pop();
-        },
-      ),
-    );
+    final state = ref.read(directoryViewModelProvider);
+    if (state is DirectoryLoaded) {
+      showDialog(
+        context: context,
+        builder: (context) => ColumnSelectorPopup(
+          currentColumns: state.columns,
+          onColumnsSelected: (columns) {
+            ref.read(directoryViewModelProvider.notifier).setColumns(columns);
+            Navigator.of(context).pop();
+          },
+        ),
+      );
+    }
   }
 
   void _navigateToMediaGrid(BuildContext context, DirectoryEntity directory) {
