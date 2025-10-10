@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:media_fast_view/core/config/app_config.dart';
 
 import '../view_models/slideshow_view_model.dart';
 
@@ -24,13 +27,6 @@ class SlideshowControls extends StatelessWidget {
   final VoidCallback onToggleMute;
   final VoidCallback onToggleShuffle;
   final ValueChanged<Duration> onDurationSelected;
-
-  static const List<Duration> _durationOptions = <Duration>[
-    Duration(seconds: 3),
-    Duration(seconds: 5),
-    Duration(seconds: 10),
-    Duration(seconds: 15),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +55,10 @@ class SlideshowControls extends StatelessWidget {
         const SizedBox(width: 16),
         _buildMuteButton(),
         const SizedBox(width: 32),
-        _buildDurationMenu(),
+        Flexible(
+          flex: 3,
+          child: _buildDurationSlider(context),
+        ),
         const SizedBox(width: 32),
         if (_isVideoState()) _buildProgressBar(),
       ],
@@ -132,52 +131,95 @@ class SlideshowControls extends StatelessWidget {
     );
   }
 
-  Widget _buildDurationMenu() {
+  Widget _buildDurationSlider(BuildContext context) {
+    const fallbackDuration = Duration(seconds: 5);
+
     final currentDuration = switch (state) {
       SlideshowPlaying(:final imageDisplayDuration) => imageDisplayDuration,
       SlideshowPaused(:final imageDisplayDuration) => imageDisplayDuration,
-      _ => _durationOptions.elementAt(1),
+      _ => fallbackDuration,
     };
 
-    return PopupMenuButton<Duration>(
-      tooltip: 'Slide duration',
-      onSelected: onDurationSelected,
-      itemBuilder: (context) {
-        return _durationOptions
-            .map(
-              (duration) => PopupMenuItem<Duration>(
-                value: duration,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('${duration.inSeconds} seconds'),
-                    if (duration == currentDuration)
-                      const Icon(Icons.check, size: 16),
-                  ],
-                ),
-              ),
-            )
-            .toList();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
+    final rawMinSeconds = AppConfig.slideshowMinDuration.inSeconds;
+    final rawMaxSeconds = AppConfig.slideshowMaxDuration.inSeconds;
+
+    final normalizedMin = rawMinSeconds <= 0 ? 1 : rawMinSeconds;
+    final normalizedMax = rawMaxSeconds <= 0 ? 1 : rawMaxSeconds;
+
+    final effectiveMin = math.min(normalizedMin, normalizedMax).toDouble();
+    final effectiveMax = math.max(normalizedMin, normalizedMax).toDouble();
+    final hasRange = effectiveMax > effectiveMin;
+
+    final clampedValue = currentDuration.inSeconds
+        .clamp(effectiveMin, effectiveMax)
+        .toDouble();
+
+    final divisions = hasRange ? (effectiveMax - effectiveMin).round() : null;
+
+    final label = '${clampedValue.round()}s';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.timer, color: Colors.white, size: 20),
             const SizedBox(width: 8),
             Text(
-              '${currentDuration.inSeconds}s',
+              hasRange ? 'Slide duration: $label' : 'Slide duration locked: $label',
               style: const TextStyle(color: Colors.white),
             ),
-            const Icon(Icons.arrow_drop_down, color: Colors.white),
           ],
         ),
-      ),
+        const SizedBox(height: 8),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 4,
+            activeTrackColor: Colors.white,
+            inactiveTrackColor: Colors.white.withValues(alpha: 0.3),
+            thumbColor: Colors.white,
+            overlayColor: Colors.white.withValues(alpha: 0.1),
+            valueIndicatorColor: Colors.white,
+            valueIndicatorTextStyle: const TextStyle(color: Colors.black),
+          ),
+          child: Slider(
+            value: clampedValue,
+            min: effectiveMin,
+            max: effectiveMax,
+            divisions: divisions,
+            label: label,
+            onChanged: hasRange
+                ? (value) {
+                    final newSeconds = value.round();
+                    final clampedSeconds = newSeconds
+                        .clamp(effectiveMin.round(), effectiveMax.round());
+                    final durationSeconds = clampedSeconds.toInt();
+                    if (durationSeconds != currentDuration.inSeconds) {
+                      onDurationSelected(
+                        Duration(seconds: durationSeconds),
+                      );
+                    }
+                  }
+                : null,
+          ),
+        ),
+        if (hasRange)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${effectiveMin.round()}s',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              Text(
+                '${effectiveMax.round()}s',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+      ],
     );
   }
 
