@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
-import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/repositories/media_repository.dart';
 import '../../domain/entities/media_entity.dart';
@@ -89,9 +88,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     this._params, {
     required MediaRepository mediaRepository,
     required SharedPreferencesMediaDataSource sharedPreferencesDataSource,
-    required int initialColumns,
-  })  : _currentColumns = initialColumns,
-        super(const MediaLoading()) {
+  }) : super(const MediaLoading()) {
     _directoryPath = _params.directoryPath;
     _directoryName = _params.directoryName;
     _bookmarkData = _params.bookmarkData;
@@ -102,7 +99,6 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   late final MediaRepository _mediaRepository;
   late final SharedPreferencesMediaDataSource _sharedPreferencesDataSource;
-  int _currentColumns;
   final MediaViewModelParams _params;
   late final String _directoryPath;
   late final String _directoryName;
@@ -167,13 +163,13 @@ class MediaViewModel extends StateNotifier<MediaState> {
         } else {
           LoggingService.instance.info('Media loaded successfully, setting loaded state');
           state = MediaLoaded(
-            media: media,
-            searchQuery: '',
-            selectedTagIds: const [],
-            columns: _currentColumns,
-            currentDirectoryPath: _directoryPath,
-            currentDirectoryName: _directoryName,
-          );
+           media: media,
+           searchQuery: '',
+           selectedTagIds: const [],
+           columns: 3, // Default to 3 columns
+           currentDirectoryPath: _directoryPath,
+           currentDirectoryName: _directoryName,
+         );
        }
     } catch (e) {
         final totalTime = DateTime.now().difference(loadStartTime);
@@ -219,7 +215,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   void filterByTags(List<String> tagIds) async {
     final previousState = state;
     final previousColumns =
-        previousState is MediaLoaded ? previousState.columns : _currentColumns;
+        previousState is MediaLoaded ? previousState.columns : 3;
     state = const MediaLoading();
     try {
       final media = await _mediaRepository.filterMediaByTagsForDirectory(
@@ -277,7 +273,6 @@ class MediaViewModel extends StateNotifier<MediaState> {
   /// Sets the number of columns for the grid.
   void setColumns(int columns) {
     final clampedColumns = columns.clamp(1, 12);
-    _currentColumns = clampedColumns;
     state = switch (state) {
       MediaLoaded(
         :final media,
@@ -413,27 +408,18 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
 /// Provider for MediaViewModel with auto-dispose.
 final mediaViewModelProvider = StateNotifierProvider.autoDispose
-    .family<MediaViewModel, MediaState, MediaViewModelParams>((ref, params) {
-  final viewModel = MediaViewModel(
-    params,
-    mediaRepository: FilesystemMediaRepositoryImpl(
-      ref.watch(bookmarkServiceProvider),
-      ref.watch(directoryRepositoryProvider),
-      ref.watch(mediaDataSourceProvider),
-      permissionService: ref.watch(permissionServiceProvider),
-    ),
-    sharedPreferencesDataSource: ref.watch(mediaDataSourceProvider),
-    initialColumns: ref.read(gridColumnsProvider),
-  );
-
-  ref.listen<int>(gridColumnsProvider, (previous, next) {
-    if (previous != null && previous != next) {
-      viewModel.setColumns(next);
-    }
-  });
-
-  return viewModel;
-});
+    .family<MediaViewModel, MediaState, MediaViewModelParams>(
+      (ref, params) => MediaViewModel(
+        params,
+        mediaRepository: FilesystemMediaRepositoryImpl(
+          ref.watch(bookmarkServiceProvider),
+          ref.watch(directoryRepositoryProvider),
+          ref.watch(mediaDataSourceProvider),
+          permissionService: ref.watch(permissionServiceProvider),
+        ),
+        sharedPreferencesDataSource: ref.watch(mediaDataSourceProvider),
+      ),
+    );
 
 /// Parameters for the media view model provider.
 class MediaViewModelParams {
