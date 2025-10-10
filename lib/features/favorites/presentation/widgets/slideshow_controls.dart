@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../view_models/slideshow_view_model.dart';
 
 /// Controls widget for the slideshow with play/pause, navigation, and settings.
@@ -25,12 +26,7 @@ class SlideshowControls extends StatelessWidget {
   final VoidCallback onToggleShuffle;
   final ValueChanged<Duration> onDurationSelected;
 
-  static const List<Duration> _durationOptions = <Duration>[
-    Duration(seconds: 3),
-    Duration(seconds: 5),
-    Duration(seconds: 10),
-    Duration(seconds: 15),
-  ];
+  static const Duration _defaultDuration = Duration(seconds: 5);
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +55,7 @@ class SlideshowControls extends StatelessWidget {
         const SizedBox(width: 16),
         _buildMuteButton(),
         const SizedBox(width: 32),
-        _buildDurationMenu(),
+        _buildDurationSlider(context),
         const SizedBox(width: 32),
         if (_isVideoState()) _buildProgressBar(),
       ],
@@ -132,51 +128,71 @@ class SlideshowControls extends StatelessWidget {
     );
   }
 
-  Widget _buildDurationMenu() {
-    final currentDuration = switch (state) {
+  Duration _currentImageDuration() {
+    return switch (state) {
       SlideshowPlaying(:final imageDisplayDuration) => imageDisplayDuration,
       SlideshowPaused(:final imageDisplayDuration) => imageDisplayDuration,
-      _ => _durationOptions.elementAt(1),
+      _ => _defaultDuration,
     };
+  }
 
-    return PopupMenuButton<Duration>(
-      tooltip: 'Slide duration',
-      onSelected: onDurationSelected,
-      itemBuilder: (context) {
-        return _durationOptions
-            .map(
-              (duration) => PopupMenuItem<Duration>(
-                value: duration,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('${duration.inSeconds} seconds'),
-                    if (duration == currentDuration)
-                      const Icon(Icons.check, size: 16),
-                  ],
+  Widget _buildDurationSlider(BuildContext context) {
+    final minDuration = AppConfig.slideshowMinDuration;
+    final maxDuration = AppConfig.slideshowMaxDuration;
+
+    var minSeconds = minDuration.inSeconds;
+    var maxSeconds = maxDuration.inSeconds;
+
+    if (maxSeconds <= minSeconds) {
+      maxSeconds = minSeconds + 1;
+    }
+
+    final currentDuration = _currentImageDuration();
+    final currentSeconds = currentDuration.inSeconds;
+    final clampedSeconds = currentSeconds < minSeconds
+        ? minSeconds
+        : (currentSeconds > maxSeconds ? maxSeconds : currentSeconds);
+
+    return SizedBox(
+      width: 240,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Slide duration: ${clampedSeconds}s',
+            style: const TextStyle(color: Colors.white),
+          ),
+          Row(
+            children: [
+              const Icon(Icons.timer, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: Colors.blueAccent,
+                    inactiveTrackColor: Colors.white24,
+                    thumbColor: Colors.white,
+                    overlayColor: Colors.white.withValues(alpha: 0.12),
+                  ),
+                  child: Slider(
+                    min: minSeconds.toDouble(),
+                    max: maxSeconds.toDouble(),
+                    divisions: maxSeconds - minSeconds,
+                    value: clampedSeconds.toDouble(),
+                    label: '${clampedSeconds}s',
+                    onChanged: (value) {
+                      final rounded = value.round();
+                      final seconds = rounded < minSeconds
+                          ? minSeconds
+                          : (rounded > maxSeconds ? maxSeconds : rounded);
+                      onDurationSelected(Duration(seconds: seconds));
+                    },
+                  ),
                 ),
               ),
-            )
-            .toList();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.timer, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              '${currentDuration.inSeconds}s',
-              style: const TextStyle(color: Colors.white),
-            ),
-            const Icon(Icons.arrow_drop_down, color: Colors.white),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
