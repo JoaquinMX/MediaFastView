@@ -59,6 +59,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
     final state = ref.watch(mediaViewModelProvider(_params!));
     _viewModel = ref.read(mediaViewModelProvider(_params!).notifier);
+    final sortOption = state is MediaLoaded
+        ? state.sortOption
+        : _viewModel!.currentSortOption;
 
     return Scaffold(
       appBar: AppBar(
@@ -68,6 +71,23 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                icon: const Icon(Icons.tag),
                tooltip: 'Manage Tags',
                onPressed: () => TagManagementDialog.show(context),
+             ),
+             PopupMenuButton<MediaSortOption>(
+               tooltip: 'Sort',
+               initialValue: sortOption,
+               icon: const Icon(Icons.sort),
+               onSelected: _viewModel!.sortMedia,
+               itemBuilder: (context) {
+                 return MediaSortOption.values
+                     .map(
+                       (option) => CheckedPopupMenuItem<MediaSortOption>(
+                         value: option,
+                         checked: option == sortOption,
+                         child: Text(_mediaSortLabel(option)),
+                       ),
+                     )
+                     .toList();
+               },
              ),
              IconButton(
                icon: const Icon(Icons.view_module),
@@ -97,6 +117,19 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         ],
       ),
     );
+  }
+
+  String _mediaSortLabel(MediaSortOption option) {
+    switch (option) {
+      case MediaSortOption.nameAscending:
+        return 'Name (A-Z)';
+      case MediaSortOption.nameDescending:
+        return 'Name (Z-A)';
+      case MediaSortOption.lastModifiedNewest:
+        return 'Last Modified (Newest)';
+      case MediaSortOption.lastModifiedOldest:
+        return 'Last Modified (Oldest)';
+    }
   }
 
   Widget _buildTagFilter(MediaViewModel viewModel, MediaState state) {

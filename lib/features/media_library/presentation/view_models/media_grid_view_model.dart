@@ -13,6 +13,14 @@ import '../../data/data_sources/local_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
 
+/// Sorting options for media items.
+enum MediaSortOption {
+  nameAscending,
+  nameDescending,
+  lastModifiedNewest,
+  lastModifiedOldest,
+}
+
 /// Sealed class representing the state of the media grid.
 sealed class MediaState {
   const MediaState();
@@ -32,6 +40,7 @@ class MediaLoaded extends MediaState {
     required this.columns,
     required this.currentDirectoryPath,
     required this.currentDirectoryName,
+    required this.sortOption,
   });
 
   final List<MediaEntity> media;
@@ -40,6 +49,7 @@ class MediaLoaded extends MediaState {
   final int columns;
   final String currentDirectoryPath;
   final String currentDirectoryName;
+  final MediaSortOption sortOption;
 
   MediaLoaded copyWith({
     List<MediaEntity>? media,
@@ -48,6 +58,7 @@ class MediaLoaded extends MediaState {
     int? columns,
     String? currentDirectoryPath,
     String? currentDirectoryName,
+    MediaSortOption? sortOption,
   }) {
     return MediaLoaded(
       media: media ?? this.media,
@@ -56,6 +67,7 @@ class MediaLoaded extends MediaState {
       columns: columns ?? this.columns,
       currentDirectoryPath: currentDirectoryPath ?? this.currentDirectoryPath,
       currentDirectoryName: currentDirectoryName ?? this.currentDirectoryName,
+      sortOption: sortOption ?? this.sortOption,
     );
   }
 }
@@ -96,6 +108,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     _bookmarkData = _params.bookmarkData;
     _mediaRepository = mediaRepository;
     _sharedPreferencesDataSource = sharedPreferencesDataSource;
+    _currentColumns = _ref.read(gridColumnsProvider);
     _gridColumnsSubscription = _ref.listen<int>(
       gridColumnsProvider,
       (_, next) => _applyColumnUpdate(next),
@@ -111,6 +124,14 @@ class MediaViewModel extends StateNotifier<MediaState> {
   late final String _directoryName;
   late final String? _bookmarkData;
   late final ProviderSubscription<int> _gridColumnsSubscription;
+  List<MediaEntity> _cachedMedia = const <MediaEntity>[];
+  String _currentSearchQuery = '';
+  List<String> _currentSelectedTagIds = const <String>[];
+  late int _currentColumns;
+  MediaSortOption _currentSortOption = MediaSortOption.nameAscending;
+  bool _showEmptyWhenNoResults = true;
+
+  MediaSortOption get currentSortOption => _currentSortOption;
 
   /// Gets the directory ID generated from the directory path.
   String get directoryId {
@@ -171,62 +192,52 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final totalTime = DateTime.now().difference(loadStartTime);
       LoggingService.instance.info('Media loading completed in ${totalTime.inMilliseconds}ms (scan: ${scanTime.inMilliseconds}ms, merge: ${mergeTime.inMilliseconds}ms, persist: ${persistTime.inMilliseconds}ms)');
 
-      if (media.isEmpty) {
+      _cachedMedia = List<MediaEntity>.from(media);
+      _currentSelectedTagIds = const <String>[];
+      _currentSearchQuery = '';
+      _currentColumns = _ref.read(gridColumnsProvider);
+      _showEmptyWhenNoResults = true;
+
+      if (_cachedMedia.isEmpty) {
         LoggingService.instance.info('No media found, setting empty state');
         state = const MediaEmpty();
       } else {
         LoggingService.instance.info('Media loaded successfully, setting loaded state');
-        state = MediaLoaded(
-          media: media,
-          searchQuery: '',
-          selectedTagIds: const [],
-          columns: _ref.read(gridColumnsProvider),
-          currentDirectoryPath: _directoryPath,
-          currentDirectoryName: _directoryName,
-        );
+        _emitLoadedState();
       }
     } catch (e) {
-        final totalTime = DateTime.now().difference(loadStartTime);
-        LoggingService.instance.error('Error loading media after ${totalTime.inMilliseconds}ms: $e');
-        // Check if this is a permission-related error
-        final errorMessage = e.toString();
-        if (_isPermissionError(errorMessage)) {
-          LoggingService.instance.warning('Permission error detected, setting permission revoked state');
-          state = MediaPermissionRevoked(
-           directoryPath: _directoryPath,
-           directoryName: _directoryName,
-         );
-       } else {
-         LoggingService.instance.error('Non-permission error, setting error state');
-         state = MediaError(errorMessage);
-       }
+      final totalTime = DateTime.now().difference(loadStartTime);
+      LoggingService.instance.error('Error loading media after ${totalTime.inMilliseconds}ms: $e');
+      // Check if this is a permission-related error
+      final errorMessage = e.toString();
+      if (_isPermissionError(errorMessage)) {
+        LoggingService.instance.warning('Permission error detected, setting permission revoked state');
+        state = MediaPermissionRevoked(
+          directoryPath: _directoryPath,
+          directoryName: _directoryName,
+        );
+      } else {
+        LoggingService.instance.error('Non-permission error, setting error state');
+        state = MediaError(errorMessage);
+      }
     }
   }
 
   /// Searches media by query.
   void searchMedia(String query) {
-    state = switch (state) {
-      MediaLoaded(
-        :final media,
-        :final selectedTagIds,
-        :final columns,
-        :final currentDirectoryPath,
-        :final currentDirectoryName,
-      ) =>
-        MediaLoaded(
-          media: _searchMedia(media, query),
-          searchQuery: query,
-          selectedTagIds: selectedTagIds,
-          columns: columns,
-          currentDirectoryPath: currentDirectoryPath,
-          currentDirectoryName: currentDirectoryName,
-        ),
-      _ => state,
-    };
+    if (state is MediaPermissionRevoked) {
+      return;
+    }
+    _currentSearchQuery = query;
+    _showEmptyWhenNoResults = _currentSelectedTagIds.isEmpty && query.isEmpty;
+    _emitLoadedState();
   }
 
   /// Filters media by tag IDs.
   void filterByTags(List<String> tagIds) async {
+    if (state is MediaPermissionRevoked) {
+      return;
+    }
     final previousColumns = _ref.read(gridColumnsProvider);
     state = const MediaLoading();
     try {
@@ -260,14 +271,12 @@ class MediaViewModel extends StateNotifier<MediaState> {
       // discarding media from other directories or filters
       await _sharedPreferencesDataSource.upsertMedia(mediaModels);
 
-      state = MediaLoaded(
-        media: media,
-        searchQuery: '', // Reset search when filtering
-        selectedTagIds: tagIds,
-        columns: previousColumns,
-        currentDirectoryPath: _directoryPath,
-        currentDirectoryName: _directoryName,
-      );
+      _cachedMedia = List<MediaEntity>.from(media);
+      _currentSelectedTagIds = List<String>.unmodifiable(tagIds);
+      _currentSearchQuery = '';
+      _currentColumns = previousColumns;
+      _showEmptyWhenNoResults = tagIds.isEmpty;
+      _emitLoadedState();
     } catch (e) {
       // Check if this is a permission-related error
       final errorMessage = e.toString();
@@ -287,6 +296,22 @@ class MediaViewModel extends StateNotifier<MediaState> {
     final clampedColumns = columns.clamp(2, 12);
     final newColumns = clampedColumns is int ? clampedColumns : clampedColumns.toInt();
     _ref.read(gridColumnsProvider.notifier).setColumns(newColumns);
+  }
+
+  /// Sets the sorting option for the current media list.
+  void sortMedia(MediaSortOption sortOption) {
+    if (_currentSortOption == sortOption) {
+      return;
+    }
+    _currentSortOption = sortOption;
+    if (state is MediaPermissionRevoked) {
+      return;
+    }
+    if (_cachedMedia.isEmpty && _showEmptyWhenNoResults) {
+      state = const MediaEmpty();
+      return;
+    }
+    _emitLoadedState();
   }
 
   /// Navigates to a subdirectory.
@@ -392,6 +417,51 @@ class MediaViewModel extends StateNotifier<MediaState> {
         .toList();
   }
 
+  void _emitLoadedState() {
+    final searchedMedia = _searchMedia(_cachedMedia, _currentSearchQuery);
+    final sortedMedia = _sortMedia(searchedMedia, _currentSortOption);
+
+    if (_showEmptyWhenNoResults &&
+        sortedMedia.isEmpty &&
+        _currentSearchQuery.isEmpty &&
+        _currentSelectedTagIds.isEmpty) {
+      state = const MediaEmpty();
+      return;
+    }
+
+    state = MediaLoaded(
+      media: sortedMedia,
+      searchQuery: _currentSearchQuery,
+      selectedTagIds: _currentSelectedTagIds,
+      columns: _currentColumns,
+      currentDirectoryPath: _directoryPath,
+      currentDirectoryName: _directoryName,
+      sortOption: _currentSortOption,
+    );
+  }
+
+  List<MediaEntity> _sortMedia(
+    List<MediaEntity> media,
+    MediaSortOption sortOption,
+  ) {
+    final sorted = List<MediaEntity>.from(media);
+    switch (sortOption) {
+      case MediaSortOption.nameAscending:
+        sorted.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+      case MediaSortOption.nameDescending:
+        sorted.sort(
+          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
+        );
+      case MediaSortOption.lastModifiedNewest:
+        sorted.sort((a, b) => b.lastModified.compareTo(a.lastModified));
+      case MediaSortOption.lastModifiedOldest:
+        sorted.sort((a, b) => a.lastModified.compareTo(b.lastModified));
+    }
+    return sorted;
+  }
+
 
   /// Helper method to check if an error is permission-related.
   bool _isPermissionError(String errorMessage) {
@@ -402,19 +472,13 @@ class MediaViewModel extends StateNotifier<MediaState> {
   }
 
   void _applyColumnUpdate(int columns) {
-    if (state case MediaLoaded(:final media,
-        :final searchQuery,
-        :final selectedTagIds,
-        :final currentDirectoryPath,
-        :final currentDirectoryName)) {
-      state = MediaLoaded(
-        media: media,
-        searchQuery: searchQuery,
-        selectedTagIds: selectedTagIds,
-        columns: columns,
-        currentDirectoryPath: currentDirectoryPath,
-        currentDirectoryName: currentDirectoryName,
-      );
+    _currentColumns = columns;
+    if (state is MediaLoaded) {
+      _emitLoadedState();
+    } else if (state is MediaEmpty &&
+        _cachedMedia.isEmpty &&
+        _showEmptyWhenNoResults) {
+      state = const MediaEmpty();
     }
   }
 }

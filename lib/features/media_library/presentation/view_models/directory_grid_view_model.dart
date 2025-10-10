@@ -14,6 +14,14 @@ import '../../domain/use_cases/get_directories_use_case.dart';
 import '../../domain/use_cases/remove_directory_use_case.dart';
 import '../../domain/use_cases/search_directories_use_case.dart';
 
+/// Sorting options for directories.
+enum DirectorySortOption {
+  nameAscending,
+  nameDescending,
+  lastModifiedNewest,
+  lastModifiedOldest,
+}
+
 /// Sealed class representing the state of the directory grid.
 sealed class DirectoryState {
   const DirectoryState();
@@ -31,24 +39,28 @@ class DirectoryLoaded extends DirectoryState {
     required this.searchQuery,
     required this.selectedTagIds,
     required this.columns,
+    required this.sortOption,
   });
 
   final List<DirectoryEntity> directories;
   final String searchQuery;
   final List<String> selectedTagIds;
   final int columns;
+  final DirectorySortOption sortOption;
 
   DirectoryLoaded copyWith({
     List<DirectoryEntity>? directories,
     String? searchQuery,
     List<String>? selectedTagIds,
     int? columns,
+    DirectorySortOption? sortOption,
   }) {
     return DirectoryLoaded(
       directories: directories ?? this.directories,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
+      sortOption: sortOption ?? this.sortOption,
     );
   }
 }
@@ -73,6 +85,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
     required this.searchQuery,
     required this.selectedTagIds,
     required this.columns,
+    required this.sortOption,
   });
 
   final List<DirectoryEntity> inaccessibleDirectories;
@@ -80,6 +93,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
   final String searchQuery;
   final List<String> selectedTagIds;
   final int columns;
+  final DirectorySortOption sortOption;
 
   DirectoryPermissionRevoked copyWith({
     List<DirectoryEntity>? inaccessibleDirectories,
@@ -87,6 +101,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
     String? searchQuery,
     List<String>? selectedTagIds,
     int? columns,
+    DirectorySortOption? sortOption,
   }) {
     return DirectoryPermissionRevoked(
       inaccessibleDirectories: inaccessibleDirectories ?? this.inaccessibleDirectories,
@@ -94,6 +109,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
+      sortOption: sortOption ?? this.sortOption,
     );
   }
 }
@@ -106,6 +122,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     required this.searchQuery,
     required this.selectedTagIds,
     required this.columns,
+    required this.sortOption,
   });
 
   final List<DirectoryEntity> invalidDirectories;
@@ -113,6 +130,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
   final String searchQuery;
   final List<String> selectedTagIds;
   final int columns;
+  final DirectorySortOption sortOption;
 
   DirectoryBookmarkInvalid copyWith({
     List<DirectoryEntity>? invalidDirectories,
@@ -120,6 +138,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     String? searchQuery,
     List<String>? selectedTagIds,
     int? columns,
+    DirectorySortOption? sortOption,
   }) {
     return DirectoryBookmarkInvalid(
       invalidDirectories: invalidDirectories ?? this.invalidDirectories,
@@ -127,6 +146,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
+      sortOption: sortOption ?? this.sortOption,
     );
   }
 }
@@ -168,12 +188,15 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   final PermissionService _permissionService;
   late final ProviderSubscription<int> _gridColumnsSubscription;
 
-  List<DirectoryEntity> _cachedAccessibleDirectories = const [];
-  List<DirectoryEntity> _cachedInaccessibleDirectories = const [];
-  List<DirectoryEntity> _cachedInvalidDirectories = const [];
+  List<DirectoryEntity> _cachedAccessibleDirectories = const <DirectoryEntity>[];
+  List<DirectoryEntity> _cachedInaccessibleDirectories = const <DirectoryEntity>[];
+  List<DirectoryEntity> _cachedInvalidDirectories = const <DirectoryEntity>[];
   String _currentSearchQuery = '';
   List<String> _currentSelectedTagIds = const <String>[];
   late int _currentColumns;
+  DirectorySortOption _currentSortOption = DirectorySortOption.nameAscending;
+
+  DirectorySortOption get currentSortOption => _currentSortOption;
 
   @override
   void dispose() {
@@ -215,9 +238,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       if (accessibleDirectories.isEmpty && inaccessibleDirectories.isEmpty) {
         LoggingService.instance.info('Setting state to DirectoryEmpty');
         _updateDirectoryCaches(
-          accessible: const [],
-          inaccessible: const [],
-          invalid: const [],
+          accessible: const <DirectoryEntity>[],
+          inaccessible: const <DirectoryEntity>[],
+          invalid: const <DirectoryEntity>[],
         );
         _resetFilters();
         state = const DirectoryEmpty();
@@ -228,7 +251,11 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           for (final dir in accessibleDirectories) {
             LoggingService.instance.debug('  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}');
           }
-          _updateDirectoryCaches(accessible: accessibleDirectories, inaccessible: const [], invalid: const []);
+          _updateDirectoryCaches(
+            accessible: accessibleDirectories,
+            inaccessible: const <DirectoryEntity>[],
+            invalid: const <DirectoryEntity>[],
+          );
         } else {
           LoggingService.instance.info('Setting state to DirectoryPermissionRevoked: ${accessibleDirectories.length} accessible, ${inaccessibleDirectories.length} inaccessible');
           LoggingService.instance.debug('Accessible directory details:');
@@ -242,7 +269,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           _updateDirectoryCaches(
             accessible: accessibleDirectories,
             inaccessible: inaccessibleDirectories,
-            invalid: const [],
+            invalid: const <DirectoryEntity>[],
           );
         }
         _resetFilters();
@@ -258,13 +285,13 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           path: e.directoryPath,
           name: e.directoryPath.split('/').last,
           thumbnailPath: null,
-          tagIds: const [],
+          tagIds: const <String>[],
           lastModified: DateTime.now(),
           bookmarkData: null,
         );
         _updateDirectoryCaches(
-          accessible: const [],
-          inaccessible: const [],
+          accessible: const <DirectoryEntity>[],
+          inaccessible: const <DirectoryEntity>[],
           invalid: [invalidDirectory],
         );
         _resetFilters();
@@ -272,9 +299,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       } else {
         LoggingService.instance.error('Setting state to DirectoryError: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}');
         _updateDirectoryCaches(
-          accessible: const [],
-          inaccessible: const [],
-          invalid: const [],
+          accessible: const <DirectoryEntity>[],
+          inaccessible: const <DirectoryEntity>[],
+          invalid: const <DirectoryEntity>[],
         );
         state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
       }
@@ -349,6 +376,13 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       _currentSearchQuery,
     );
 
+    final sortedAccessible =
+        _sortDirectories(filteredAccessible, _currentSortOption);
+    final sortedInaccessible =
+        _sortDirectories(filteredInaccessible, _currentSortOption);
+    final sortedInvalid =
+        _sortDirectories(filteredInvalid, _currentSortOption);
+
     if (_cachedAccessibleDirectories.isEmpty &&
         _cachedInaccessibleDirectories.isEmpty &&
         _cachedInvalidDirectories.isEmpty) {
@@ -358,32 +392,57 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
     if (_cachedInvalidDirectories.isNotEmpty) {
       state = DirectoryBookmarkInvalid(
-        invalidDirectories: filteredInvalid,
-        accessibleDirectories: filteredAccessible,
+        invalidDirectories: sortedInvalid,
+        accessibleDirectories: sortedAccessible,
         searchQuery: _currentSearchQuery,
         selectedTagIds: _currentSelectedTagIds,
         columns: _currentColumns,
+        sortOption: _currentSortOption,
       );
       return;
     }
 
     if (_cachedInaccessibleDirectories.isNotEmpty) {
       state = DirectoryPermissionRevoked(
-        inaccessibleDirectories: filteredInaccessible,
-        accessibleDirectories: filteredAccessible,
+        inaccessibleDirectories: sortedInaccessible,
+        accessibleDirectories: sortedAccessible,
         searchQuery: _currentSearchQuery,
         selectedTagIds: _currentSelectedTagIds,
         columns: _currentColumns,
+        sortOption: _currentSortOption,
       );
       return;
     }
 
     state = DirectoryLoaded(
-      directories: filteredAccessible,
+      directories: sortedAccessible,
       searchQuery: _currentSearchQuery,
       selectedTagIds: _currentSelectedTagIds,
       columns: _currentColumns,
+      sortOption: _currentSortOption,
     );
+  }
+
+  List<DirectoryEntity> _sortDirectories(
+    List<DirectoryEntity> directories,
+    DirectorySortOption sortOption,
+  ) {
+    final sorted = List<DirectoryEntity>.from(directories);
+    switch (sortOption) {
+      case DirectorySortOption.nameAscending:
+        sorted.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+      case DirectorySortOption.nameDescending:
+        sorted.sort(
+          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
+        );
+      case DirectorySortOption.lastModifiedNewest:
+        sorted.sort((a, b) => b.lastModified.compareTo(a.lastModified));
+      case DirectorySortOption.lastModifiedOldest:
+        sorted.sort((a, b) => a.lastModified.compareTo(b.lastModified));
+    }
+    return sorted;
   }
 
   List<DirectoryEntity> _applySearchIfNeeded(
@@ -401,6 +460,19 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     final clampedColumns = columns.clamp(2, 12);
     final newColumns = clampedColumns is int ? clampedColumns : clampedColumns.toInt();
     _ref.read(gridColumnsProvider.notifier).setColumns(newColumns);
+  }
+
+  /// Sets the sorting option for directories.
+  void sortDirectories(DirectorySortOption sortOption) {
+    if (_currentSortOption == sortOption) {
+      return;
+    }
+    _currentSortOption = sortOption;
+    if (state case DirectoryLoaded() ||
+        DirectoryPermissionRevoked() ||
+        DirectoryBookmarkInvalid()) {
+      _emitFilteredState();
+    }
   }
 
   /// Adds a new directory.

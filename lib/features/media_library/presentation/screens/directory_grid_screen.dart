@@ -34,6 +34,12 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
+    final sortOption = switch (state) {
+      DirectoryLoaded(:final sortOption) => sortOption,
+      DirectoryPermissionRevoked(:final sortOption) => sortOption,
+      DirectoryBookmarkInvalid(:final sortOption) => sortOption,
+      _ => viewModel.currentSortOption,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -46,6 +52,23 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
           IconButton(
             icon: const Icon(Icons.tag),
             onPressed: () => TagCreationDialog.show(context),
+          ),
+          PopupMenuButton<DirectorySortOption>(
+            tooltip: 'Sort',
+            initialValue: sortOption,
+            icon: const Icon(Icons.sort),
+            onSelected: viewModel.sortDirectories,
+            itemBuilder: (context) {
+              return DirectorySortOption.values
+                  .map(
+                    (option) => CheckedPopupMenuItem<DirectorySortOption>(
+                      value: option,
+                      checked: option == sortOption,
+                      child: Text(_directorySortLabel(option)),
+                    ),
+                  )
+                  .toList();
+            },
           ),
           IconButton(
             icon: const Icon(Icons.view_module),
@@ -176,7 +199,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             selected: selectedTagIds.isEmpty,
             onSelected: (_) {
               debugPrint('DirectoryGridScreen: "All" filter chip selected, calling filterByTags with empty list');
-              viewModel.filterByTags(const []);
+              viewModel.filterByTags(const <String>[]);
             },
           ),
           SizedBox(width: UiSpacing.smallGap),
@@ -204,6 +227,19 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         ],
       ),
     );
+  }
+
+  String _directorySortLabel(DirectorySortOption option) {
+    switch (option) {
+      case DirectorySortOption.nameAscending:
+        return 'Name (A-Z)';
+      case DirectorySortOption.nameDescending:
+        return 'Name (Z-A)';
+      case DirectorySortOption.lastModifiedNewest:
+        return 'Last Modified (Newest)';
+      case DirectorySortOption.lastModifiedOldest:
+        return 'Last Modified (Oldest)';
+    }
   }
 
   Widget _buildGrid(
