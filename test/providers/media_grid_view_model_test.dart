@@ -6,6 +6,7 @@ import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/presentation/view_models/media_grid_view_model.dart';
+import 'package:media_fast_view/shared/models/library_sort_option.dart';
 import '../mocks.mocks.dart';
 
 void main() {
@@ -60,15 +61,18 @@ void main() {
         mockMediaRepository.getMediaForDirectoryPath(any, bookmarkData: anyNamed('bookmarkData')),
       ).thenAnswer((_) async => sampleMedia);
 
-      // Mock saveMedia to verify it's called
-      when(
-        mockSharedPreferencesDataSource.saveMedia(any),
-      ).thenAnswer((_) async {});
-
       // Mock getMedia
       when(
         mockSharedPreferencesDataSource.getMedia(),
       ).thenAnswer((_) async => []);
+
+      when(
+        mockSharedPreferencesDataSource.removeMediaForDirectory(any),
+      ).thenAnswer((_) async {});
+
+      when(
+        mockSharedPreferencesDataSource.upsertMedia(any),
+      ).thenAnswer((_) async {});
 
       viewModel = MediaViewModel(
         MediaViewModelParams(
@@ -95,10 +99,12 @@ void main() {
       expect(loadedState.columns, 3);
       expect(loadedState.currentDirectoryPath, testDirectoryPath);
       expect(loadedState.currentDirectoryName, testDirectoryName);
+      expect(loadedState.sortOption, LibrarySortOption.nameAscending);
 
       // Verify interactions
       verify(mockMediaRepository.getMediaForDirectoryPath(testDirectoryPath, bookmarkData: null)).called(1);
-      // Note: saveMedia is not called when using mock repository
+      verify(mockSharedPreferencesDataSource.removeMediaForDirectory(any));
+      verify(mockSharedPreferencesDataSource.upsertMedia(any));
     });
 
     test('loadMedia with empty results transitions to MediaEmpty', () async {
@@ -108,7 +114,10 @@ void main() {
         emptyMock.getMediaForDirectoryPath(any, bookmarkData: anyNamed('bookmarkData')),
       ).thenAnswer((_) async => []);
       when(
-        emptyDataSourceMock.saveMedia(any),
+        emptyDataSourceMock.removeMediaForDirectory(any),
+      ).thenAnswer((_) async {});
+      when(
+        emptyDataSourceMock.upsertMedia(any),
       ).thenAnswer((_) async {});
 
       final emptyViewModel = MediaViewModel(
@@ -130,6 +139,14 @@ void main() {
       when(
         errorMock.getMediaForDirectoryPath(any, bookmarkData: anyNamed('bookmarkData')),
       ).thenThrow(Exception('Scan failed'));
+
+      when(
+        errorDataSourceMock.removeMediaForDirectory(any),
+      ).thenAnswer((_) async {});
+
+      when(
+        errorDataSourceMock.upsertMedia(any),
+      ).thenAnswer((_) async {});
 
       final errorViewModel = MediaViewModel(
         MediaViewModelParams(
@@ -176,6 +193,17 @@ void main() {
       expect(loadedState.columns, 5);
     });
 
+    test('setSortOption updates sorting order', () async {
+      await viewModel.loadMedia();
+
+      viewModel.setSortOption(LibrarySortOption.nameDescending);
+
+      expect(viewModel.state, isA<MediaLoaded>());
+      final loadedState = viewModel.state as MediaLoaded;
+      expect(loadedState.sortOption, LibrarySortOption.nameDescending);
+      expect(loadedState.media.first.name, 'video1.mp4');
+    });
+
     test('filterByTags loads and filters media', () async {
       // First load some media
       await viewModel.loadMedia();
@@ -197,20 +225,17 @@ void main() {
         mockMediaRepository.filterMediaByTagsForDirectory(any, any, bookmarkData: anyNamed('bookmarkData')),
       ).thenAnswer((_) async => taggedMedia);
 
-      viewModel.filterByTags(['tag1']);
-
-      // Wait for async operation to complete
-      await Future.delayed(Duration(milliseconds: 100));
+      await viewModel.filterByTags(['tag1']);
 
       expect(viewModel.state, isA<MediaLoaded>());
       final loadedState = viewModel.state as MediaLoaded;
       expect(loadedState.media.length, 1);
       expect(loadedState.selectedTagIds, ['tag1']);
       expect(loadedState.searchQuery, ''); // Reset on filter
+      expect(loadedState.sortOption, LibrarySortOption.nameAscending);
 
       // Verify interactions
       verify(mockMediaRepository.filterMediaByTagsForDirectory(['tag1'], testDirectoryPath, bookmarkData: null)).called(1);
-      // Note: saveMedia is not called when using mock repository
     });
 
     test('filterByTags with error transitions to MediaError', () async {
@@ -218,10 +243,7 @@ void main() {
         mockMediaRepository.filterMediaByTagsForDirectory(['tag1'], testDirectoryPath, bookmarkData: null),
       ).thenThrow(Exception('Filter failed'));
 
-      viewModel.filterByTags(['tag1']);
-
-      // Wait for async operation to complete
-      await Future.delayed(Duration(milliseconds: 100));
+      await viewModel.filterByTags(['tag1']);
 
       expect(viewModel.state, isA<MediaError>());
     });

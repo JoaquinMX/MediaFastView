@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/ui_constants.dart';
 
+import '../../../../shared/models/library_sort_option.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
@@ -46,6 +47,30 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
           IconButton(
             icon: const Icon(Icons.tag),
             onPressed: () => TagCreationDialog.show(context),
+          ),
+          PopupMenuButton<LibrarySortOption>(
+            icon: const Icon(Icons.sort),
+            tooltip: 'Sort',
+            initialValue: viewModel.sortOption,
+            onSelected: viewModel.setSortOption,
+            itemBuilder: (context) {
+              return LibrarySortOption.values
+                  .map(
+                    (option) => PopupMenuItem<LibrarySortOption>(
+                      value: option,
+                      child: Row(
+                        children: [
+                          if (option == viewModel.sortOption)
+                            const Icon(Icons.check, size: 18),
+                          if (option == viewModel.sortOption)
+                            const SizedBox(width: 8),
+                          Text(option.label),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList();
+            },
           ),
           IconButton(
             icon: const Icon(Icons.view_module),

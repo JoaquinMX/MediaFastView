@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../shared/models/library_sort_option.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
@@ -68,6 +69,31 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                icon: const Icon(Icons.tag),
                tooltip: 'Manage Tags',
                onPressed: () => TagManagementDialog.show(context),
+             ),
+             PopupMenuButton<LibrarySortOption>(
+               icon: const Icon(Icons.sort),
+               tooltip: 'Sort',
+               initialValue: _viewModel?.sortOption ?? LibrarySortOption.nameAscending,
+               onSelected: _viewModel?.setSortOption,
+               itemBuilder: (context) {
+                 final current = _viewModel?.sortOption ?? LibrarySortOption.nameAscending;
+                 return LibrarySortOption.values
+                     .map(
+                       (option) => PopupMenuItem<LibrarySortOption>(
+                         value: option,
+                         child: Row(
+                           children: [
+                             if (option == current)
+                               const Icon(Icons.check, size: 18),
+                             if (option == current)
+                               const SizedBox(width: 8),
+                             Text(option.label),
+                           ],
+                         ),
+                       ),
+                     )
+                     .toList();
+               },
              ),
              IconButton(
                icon: const Icon(Icons.view_module),

@@ -4,6 +4,7 @@ import '../../../../core/error/app_error.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/permission_service.dart';
+import '../../../../shared/models/library_sort_option.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../data/data_sources/local_directory_data_source.dart';
@@ -31,24 +32,28 @@ class DirectoryLoaded extends DirectoryState {
     required this.searchQuery,
     required this.selectedTagIds,
     required this.columns,
+    required this.sortOption,
   });
 
   final List<DirectoryEntity> directories;
   final String searchQuery;
   final List<String> selectedTagIds;
   final int columns;
+  final LibrarySortOption sortOption;
 
   DirectoryLoaded copyWith({
     List<DirectoryEntity>? directories,
     String? searchQuery,
     List<String>? selectedTagIds,
     int? columns,
+    LibrarySortOption? sortOption,
   }) {
     return DirectoryLoaded(
       directories: directories ?? this.directories,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
+      sortOption: sortOption ?? this.sortOption,
     );
   }
 }
@@ -73,6 +78,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
     required this.searchQuery,
     required this.selectedTagIds,
     required this.columns,
+    required this.sortOption,
   });
 
   final List<DirectoryEntity> inaccessibleDirectories;
@@ -80,6 +86,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
   final String searchQuery;
   final List<String> selectedTagIds;
   final int columns;
+  final LibrarySortOption sortOption;
 
   DirectoryPermissionRevoked copyWith({
     List<DirectoryEntity>? inaccessibleDirectories,
@@ -87,6 +94,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
     String? searchQuery,
     List<String>? selectedTagIds,
     int? columns,
+    LibrarySortOption? sortOption,
   }) {
     return DirectoryPermissionRevoked(
       inaccessibleDirectories: inaccessibleDirectories ?? this.inaccessibleDirectories,
@@ -94,6 +102,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
+      sortOption: sortOption ?? this.sortOption,
     );
   }
 }
@@ -106,6 +115,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     required this.searchQuery,
     required this.selectedTagIds,
     required this.columns,
+    required this.sortOption,
   });
 
   final List<DirectoryEntity> invalidDirectories;
@@ -113,6 +123,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
   final String searchQuery;
   final List<String> selectedTagIds;
   final int columns;
+  final LibrarySortOption sortOption;
 
   DirectoryBookmarkInvalid copyWith({
     List<DirectoryEntity>? invalidDirectories,
@@ -120,6 +131,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     String? searchQuery,
     List<String>? selectedTagIds,
     int? columns,
+    LibrarySortOption? sortOption,
   }) {
     return DirectoryBookmarkInvalid(
       invalidDirectories: invalidDirectories ?? this.invalidDirectories,
@@ -127,6 +139,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
+      sortOption: sortOption ?? this.sortOption,
     );
   }
 }
@@ -174,12 +187,15 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   String _currentSearchQuery = '';
   List<String> _currentSelectedTagIds = const <String>[];
   late int _currentColumns;
+  LibrarySortOption _currentSortOption = LibrarySortOption.nameAscending;
 
   @override
   void dispose() {
     _gridColumnsSubscription.close();
     super.dispose();
   }
+
+  LibrarySortOption get sortOption => _currentSortOption;
 
   /// Loads all directories.
   Future<void> loadDirectories() async {
@@ -336,17 +352,23 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   }
 
   void _emitFilteredState() {
-    final filteredAccessible = _applySearchIfNeeded(
-      _filterDirectoriesByTags(_cachedAccessibleDirectories, _currentSelectedTagIds),
-      _currentSearchQuery,
+    final filteredAccessible = _sortDirectories(
+      _applySearchIfNeeded(
+        _filterDirectoriesByTags(_cachedAccessibleDirectories, _currentSelectedTagIds),
+        _currentSearchQuery,
+      ),
     );
-    final filteredInaccessible = _applySearchIfNeeded(
-      _filterDirectoriesByTags(_cachedInaccessibleDirectories, _currentSelectedTagIds),
-      _currentSearchQuery,
+    final filteredInaccessible = _sortDirectories(
+      _applySearchIfNeeded(
+        _filterDirectoriesByTags(_cachedInaccessibleDirectories, _currentSelectedTagIds),
+        _currentSearchQuery,
+      ),
     );
-    final filteredInvalid = _applySearchIfNeeded(
-      _filterDirectoriesByTags(_cachedInvalidDirectories, _currentSelectedTagIds),
-      _currentSearchQuery,
+    final filteredInvalid = _sortDirectories(
+      _applySearchIfNeeded(
+        _filterDirectoriesByTags(_cachedInvalidDirectories, _currentSelectedTagIds),
+        _currentSearchQuery,
+      ),
     );
 
     if (_cachedAccessibleDirectories.isEmpty &&
@@ -363,6 +385,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         searchQuery: _currentSearchQuery,
         selectedTagIds: _currentSelectedTagIds,
         columns: _currentColumns,
+        sortOption: _currentSortOption,
       );
       return;
     }
@@ -374,6 +397,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         searchQuery: _currentSearchQuery,
         selectedTagIds: _currentSelectedTagIds,
         columns: _currentColumns,
+        sortOption: _currentSortOption,
       );
       return;
     }
@@ -383,7 +407,39 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       searchQuery: _currentSearchQuery,
       selectedTagIds: _currentSelectedTagIds,
       columns: _currentColumns,
+      sortOption: _currentSortOption,
     );
+  }
+
+  List<DirectoryEntity> _sortDirectories(List<DirectoryEntity> directories) {
+    final sorted = List<DirectoryEntity>.from(directories);
+    switch (_currentSortOption) {
+      case LibrarySortOption.nameAscending:
+        sorted.sort((a, b) {
+          final comparison = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          if (comparison != 0) {
+            return comparison;
+          }
+          return a.path.compareTo(b.path);
+        });
+      case LibrarySortOption.nameDescending:
+        sorted.sort((a, b) {
+          final comparison = b.name.toLowerCase().compareTo(a.name.toLowerCase());
+          if (comparison != 0) {
+            return comparison;
+          }
+          return b.path.compareTo(a.path);
+        });
+      case LibrarySortOption.lastModifiedDescending:
+        sorted.sort((a, b) {
+          final comparison = b.lastModified.compareTo(a.lastModified);
+          if (comparison != 0) {
+            return comparison;
+          }
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
+    }
+    return sorted;
   }
 
   List<DirectoryEntity> _applySearchIfNeeded(
@@ -401,6 +457,18 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     final clampedColumns = columns.clamp(2, 12);
     final newColumns = clampedColumns is int ? clampedColumns : clampedColumns.toInt();
     _ref.read(gridColumnsProvider.notifier).setColumns(newColumns);
+  }
+
+  void setSortOption(LibrarySortOption sortOption) {
+    if (_currentSortOption == sortOption) {
+      return;
+    }
+    _currentSortOption = sortOption;
+    if (state case DirectoryLoaded() ||
+        DirectoryPermissionRevoked() ||
+        DirectoryBookmarkInvalid()) {
+      _emitFilteredState();
+    }
   }
 
   /// Adds a new directory.
