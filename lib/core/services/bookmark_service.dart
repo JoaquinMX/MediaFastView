@@ -21,6 +21,13 @@ class BookmarkService {
 
   BookmarkService._();
 
+  /// Tracks bookmarks that should remain accessible for the lifetime of the app.
+  ///
+  /// The key is the base64 bookmark data and the value is the resolved path returned
+  /// when starting access. This lets callers refresh directory paths when the
+  /// bookmark resolves to a different location (e.g., when a drive is remounted).
+  final Map<String, String> _activePersistentBookmarks = <String, String>{};
+
   /// Creates a security-scoped bookmark from a directory URL
   /// Returns base64 encoded bookmark data on success
   Future<String> createBookmark(String directoryPath) async {
@@ -141,6 +148,77 @@ class BookmarkService {
     } catch (e) {
       _logError('Unexpected error stopping bookmark access', e);
       // Don't throw - stopping access failure shouldn't break the app
+    }
+  }
+
+  /// Ensures that the provided bookmark keeps its security-scoped access for the
+  /// lifetime of the current application session.
+  ///
+  /// Returns the resolved path when the bookmark access is successfully started.
+  Future<String?> ensurePersistentAccess(String? bookmarkData) async {
+    final bookmarkValue = bookmarkData;
+    if (bookmarkValue == null || bookmarkValue.isEmpty) {
+      return null;
+    }
+
+    if (!Platform.isMacOS) {
+      // Security scoped bookmarks are only relevant on macOS.
+      return null;
+    }
+
+    final existingPath = _activePersistentBookmarks[bookmarkValue];
+    if (existingPath != null) {
+      return existingPath;
+    }
+
+    try {
+      final resolvedPath = await startAccessingBookmark(bookmarkValue);
+      _activePersistentBookmarks[bookmarkValue] = resolvedPath;
+      return resolvedPath;
+    } catch (e) {
+      _logError('Failed to keep bookmark access active', e);
+      return null;
+    }
+  }
+
+  /// Releases a bookmark that was previously kept active via [ensurePersistentAccess].
+  Future<void> releasePersistentAccess(String? bookmarkData) async {
+    final bookmarkValue = bookmarkData;
+    if (bookmarkValue == null || bookmarkValue.isEmpty) {
+      return;
+    }
+
+    if (!Platform.isMacOS) {
+      return;
+    }
+
+    final hasActiveAccess = _activePersistentBookmarks.remove(bookmarkValue) != null;
+    if (!hasActiveAccess) {
+      return;
+    }
+
+    try {
+      await stopAccessingBookmark(bookmarkValue);
+    } catch (e) {
+      _logError('Failed to release persistent bookmark access', e);
+    }
+  }
+
+  /// Releases all persistent bookmark sessions. Useful when clearing cached directories.
+  Future<void> releaseAllPersistentAccesses() async {
+    if (!Platform.isMacOS) {
+      return;
+    }
+
+    final bookmarks = List<String>.from(_activePersistentBookmarks.keys);
+    _activePersistentBookmarks.clear();
+
+    for (final bookmark in bookmarks) {
+      try {
+        await stopAccessingBookmark(bookmark);
+      } catch (e) {
+        _logError('Failed to release bookmark during bulk cleanup', e);
+      }
     }
   }
 

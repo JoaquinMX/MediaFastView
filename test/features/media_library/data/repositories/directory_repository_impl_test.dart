@@ -26,6 +26,10 @@ void main() {
       permissionService = MockPermissionService();
       mediaDataSource = MockSharedPreferencesMediaDataSource();
 
+      when(bookmarkService.ensurePersistentAccess(any)).thenAnswer((_) async => null);
+      when(bookmarkService.releasePersistentAccess(any)).thenAnswer((_) async {});
+      when(bookmarkService.releaseAllPersistentAccesses()).thenAnswer((_) async {});
+
       repository = DirectoryRepositoryImpl(
         directoryDataSource,
         localDirectoryDataSource,

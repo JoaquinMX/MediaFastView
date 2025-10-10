@@ -78,6 +78,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
         // Fall back to the stored path if bookmark resolution fails
         entity = _modelToEntity(normalizedModel);
       }
+      entity = await _ensurePersistentBookmarkAccess(entity);
       entities.add(entity);
     }
 
@@ -182,10 +183,35 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     } else {
       await _directoryDataSource.addDirectory(model);
     }
+
+    final existingBookmark = existing?.bookmarkData;
+    if (existingBookmark != null &&
+        existingBookmark.isNotEmpty &&
+        existingBookmark != resolvedBookmarkData) {
+      await _bookmarkService.releasePersistentAccess(existingBookmark);
+    }
+
+    if (resolvedBookmarkData != null && resolvedBookmarkData.isNotEmpty) {
+      await _bookmarkService.ensurePersistentAccess(resolvedBookmarkData);
+    }
   }
 
   @override
   Future<void> removeDirectory(String id) async {
+    final models = await _directoryDataSource.getDirectories();
+    DirectoryModel? targetModel;
+    for (final model in models) {
+      if (model.id == id) {
+        targetModel = model;
+        break;
+      }
+    }
+
+    if (targetModel?.bookmarkData != null &&
+        targetModel!.bookmarkData!.isNotEmpty) {
+      await _bookmarkService.releasePersistentAccess(targetModel.bookmarkData);
+    }
+
     // Remove the directory itself
     await _directoryDataSource.removeDirectory(id);
   }
@@ -234,9 +260,13 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
   Future<void> updateDirectoryBookmark(String directoryId, String? bookmarkData) async {
     final directory = await getDirectoryById(directoryId);
     if (directory != null) {
+      await _bookmarkService.releasePersistentAccess(directory.bookmarkData);
+
       final updatedDirectory = directory.copyWith(bookmarkData: bookmarkData);
       final model = _entityToModel(updatedDirectory);
       await _directoryDataSource.updateDirectory(model);
+
+      await _bookmarkService.ensurePersistentAccess(bookmarkData);
     }
   }
 
@@ -291,6 +321,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
   @override
   Future<void> clearAllDirectories() async {
     try {
+      await _bookmarkService.releaseAllPersistentAccesses();
       await _directoryDataSource.clearDirectories();
       LoggingService.instance.info('Successfully cleared all directory data from cache');
     } catch (e) {
@@ -335,5 +366,26 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       // Fall back to stored path
       return _modelToEntity(model);
     }
+  }
+
+  Future<DirectoryEntity> _ensurePersistentBookmarkAccess(
+    DirectoryEntity entity,
+  ) async {
+    final bookmarkData = entity.bookmarkData;
+    if (bookmarkData == null || bookmarkData.isEmpty) {
+      return entity;
+    }
+
+    final resolvedPath = await _bookmarkService.ensurePersistentAccess(bookmarkData);
+    if (resolvedPath != null &&
+        resolvedPath.isNotEmpty &&
+        resolvedPath != entity.path) {
+      LoggingService.instance.info(
+        'Updated resolved path for directory ${entity.path} -> $resolvedPath after ensuring persistent access',
+      );
+      return entity.copyWith(path: resolvedPath);
+    }
+
+    return entity;
   }
 }

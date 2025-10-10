@@ -1131,6 +1131,32 @@ class MockBookmarkService extends _i1.Mock implements _i22.BookmarkService {
             ),
           )
           as _i6.Future<String>);
+
+  @override
+  _i6.Future<String?> ensurePersistentAccess(String? bookmarkData) =>
+      (super.noSuchMethod(
+            Invocation.method(#ensurePersistentAccess, [bookmarkData]),
+            returnValue: _i6.Future<String?>.value(),
+            returnValueForMissingStub: _i6.Future<String?>.value(),
+          )
+          as _i6.Future<String?>);
+
+  @override
+  _i6.Future<void> releasePersistentAccess(String? bookmarkData) =>
+      (super.noSuchMethod(
+            Invocation.method(#releasePersistentAccess, [bookmarkData]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> releaseAllPersistentAccesses() => (super.noSuchMethod(
+            Invocation.method(#releaseAllPersistentAccesses, []),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
 }
 
 /// A class which mocks [SharedPreferences].
