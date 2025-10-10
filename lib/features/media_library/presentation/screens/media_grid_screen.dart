@@ -13,6 +13,7 @@ import '../../domain/entities/media_entity.dart';
 import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
+import '../../domain/value_objects/sort_option.dart';
 
 /// Screen for displaying media in a customizable grid layout.
 class MediaGridScreen extends ConsumerStatefulWidget {
@@ -69,6 +70,37 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                tooltip: 'Manage Tags',
                onPressed: () => TagManagementDialog.show(context),
              ),
+             PopupMenuButton<MediaSortOption>(
+               icon: const Icon(Icons.sort),
+               tooltip: 'Sort media',
+               initialValue: _viewModel?.sortOption,
+               onSelected: _viewModel!.setSortOption,
+               itemBuilder: (context) {
+                 final current = _viewModel?.sortOption ?? MediaSortOption.nameAscending;
+                 return MediaSortOption.values
+                     .map(
+                       (option) => PopupMenuItem<MediaSortOption>(
+                         value: option,
+                         child: Row(
+                           mainAxisSize: MainAxisSize.min,
+                           children: [
+                             if (option == current)
+                               Icon(
+                                 Icons.check,
+                                 size: 18,
+                                 color: Theme.of(context).colorScheme.primary,
+                               )
+                             else
+                               const SizedBox(width: 18),
+                             const SizedBox(width: 8),
+                             Text(_describeMediaSortOption(option)),
+                           ],
+                         ),
+                       ),
+                     )
+                     .toList();
+               },
+             ),
              IconButton(
                icon: const Icon(Icons.view_module),
                onPressed: () => _showColumnSelector(context),
@@ -112,6 +144,20 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         maxChipsToShow: UiGrid.maxFilterChips, // Limit to prevent overflow
       ),
     );
+  }
+
+  String _describeMediaSortOption(MediaSortOption option) {
+    return switch (option.field) {
+      MediaSortField.name => option.order == SortOrder.ascending
+          ? 'Name (A-Z)'
+          : 'Name (Z-A)',
+      MediaSortField.lastModified => option.order == SortOrder.descending
+          ? 'Last Modified (Newest)'
+          : 'Last Modified (Oldest)',
+      MediaSortField.size => option.order == SortOrder.descending
+          ? 'Size (Largest)'
+          : 'Size (Smallest)',
+    };
   }
 
   Widget _buildGrid(

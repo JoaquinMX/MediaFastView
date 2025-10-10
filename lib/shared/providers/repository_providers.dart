@@ -26,6 +26,8 @@ import '../../features/media_library/domain/use_cases/delete_file_use_case.dart'
 import '../../features/media_library/domain/use_cases/get_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/remove_directory_use_case.dart';
 import '../../features/media_library/domain/use_cases/search_directories_use_case.dart';
+import '../../features/media_library/domain/use_cases/sort_directories_use_case.dart';
+import '../../features/media_library/domain/use_cases/sort_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/validate_path_use_case.dart';
 import '../../features/tagging/domain/use_cases/get_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/assign_tag_use_case.dart';
@@ -176,6 +178,10 @@ final searchDirectoriesUseCaseProvider = Provider<SearchDirectoriesUseCase>((
   return const SearchDirectoriesUseCase();
 });
 
+final sortDirectoriesUseCaseProvider = Provider<SortDirectoriesUseCase>((ref) {
+  return const SortDirectoriesUseCase();
+});
+
 final addDirectoryUseCaseProvider = Provider<AddDirectoryUseCase>((ref) {
   return AddDirectoryUseCase(ref.watch(directoryRepositoryProvider));
 });
@@ -198,6 +204,10 @@ final deleteFileUseCaseProvider = Provider<DeleteFileUseCase>((ref) {
 
 final deleteDirectoryUseCaseProvider = Provider<DeleteDirectoryUseCase>((ref) {
   return DeleteDirectoryUseCase(ref.watch(fileOperationsRepositoryProvider));
+});
+
+final sortMediaUseCaseProvider = Provider<SortMediaUseCase>((ref) {
+  return const SortMediaUseCase();
 });
 
 final validatePathUseCaseProvider = Provider<ValidatePathUseCase>((ref) {

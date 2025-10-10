@@ -17,6 +17,7 @@ import '../widgets/directory_grid_item.dart';
 import '../widgets/directory_search_bar.dart';
 import '../widgets/column_selector_popup.dart';
 import 'media_grid_screen.dart';
+import '../../domain/value_objects/sort_option.dart';
 
 /// Screen for displaying directories in a customizable grid layout.
 class DirectoryGridScreen extends ConsumerStatefulWidget {
@@ -46,6 +47,37 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
           IconButton(
             icon: const Icon(Icons.tag),
             onPressed: () => TagCreationDialog.show(context),
+          ),
+          PopupMenuButton<DirectorySortOption>(
+            icon: const Icon(Icons.sort),
+            tooltip: 'Sort directories',
+            initialValue: viewModel.sortOption,
+            onSelected: viewModel.setSortOption,
+            itemBuilder: (context) {
+              final current = viewModel.sortOption;
+              return DirectorySortOption.values
+                  .map(
+                    (option) => PopupMenuItem<DirectorySortOption>(
+                      value: option,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (option == current)
+                            Icon(
+                              Icons.check,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.primary,
+                            )
+                          else
+                            const SizedBox(width: 18),
+                          const SizedBox(width: 8),
+                          Text(_describeDirectorySortOption(option)),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList();
+            },
           ),
           IconButton(
             icon: const Icon(Icons.view_module),
@@ -133,6 +165,17 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         ),
       ),
     );
+  }
+
+  String _describeDirectorySortOption(DirectorySortOption option) {
+    return switch (option.field) {
+      DirectorySortField.name => option.order == SortOrder.ascending
+          ? 'Name (A-Z)'
+          : 'Name (Z-A)',
+      DirectorySortField.lastModified => option.order == SortOrder.descending
+          ? 'Last Modified (Newest)'
+          : 'Last Modified (Oldest)',
+    };
   }
 
   void _onDragDone(DropDoneDetails details, DirectoryViewModel viewModel) {
