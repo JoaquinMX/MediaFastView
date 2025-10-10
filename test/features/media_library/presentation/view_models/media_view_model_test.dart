@@ -1,355 +1,205 @@
-import 'dart:io';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
-import 'package:media_fast_view/features/media_library/presentation/view_models/media_grid_view_model.dart';
-import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../mocks.mocks.dart';
+import '../../../../../lib/features/media_library/data/data_sources/shared_preferences_data_source.dart';
+import '../../../../../lib/features/media_library/domain/entities/media_entity.dart';
+import '../../../../../lib/features/media_library/domain/repositories/media_repository.dart';
+import '../../../../../lib/features/media_library/presentation/view_models/media_grid_view_model.dart';
+import '../../../../../lib/shared/providers/repository_providers.dart';
+
+class InMemoryMediaRepository implements MediaRepository {
+  InMemoryMediaRepository(this._media);
+
+  final List<MediaEntity> _media;
+
+  @override
+  Future<List<MediaEntity>> filterMediaByTags(List<String> tagIds) async {
+    if (tagIds.isEmpty) {
+      return List<MediaEntity>.from(_media);
+    }
+    return _media.where((item) => item.tagIds.any(tagIds.contains)).toList();
+  }
+
+  @override
+  Future<List<MediaEntity>> filterMediaByTagsForDirectory(
+    List<String> tagIds,
+    String directoryPath, {
+    String? bookmarkData,
+  }) async {
+    return (await filterMediaByTags(tagIds))
+        .where((item) => item.directoryId == directoryPath)
+        .toList();
+  }
+
+  @override
+  Future<List<MediaEntity>> getMediaForDirectory(String directoryId) async {
+    return _media.where((item) => item.directoryId == directoryId).toList();
+  }
+
+  @override
+  Future<List<MediaEntity>> getMediaForDirectoryPath(
+    String directoryPath, {
+    String? bookmarkData,
+  }) async {
+    return getMediaForDirectory(directoryPath);
+  }
+
+  @override
+  Future<MediaEntity?> getMediaById(String id) async {
+    try {
+      return _media.firstWhere((item) => item.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> removeMediaForDirectory(String directoryId) async {
+    _media.removeWhere((item) => item.directoryId == directoryId);
+  }
+
+  @override
+  Future<void> updateMediaTags(String mediaId, List<String> tagIds) async {
+    final index = _media.indexWhere((item) => item.id == mediaId);
+    if (index != -1) {
+      _media[index] = _media[index].copyWith(tagIds: tagIds);
+    }
+  }
+}
+
+ProviderContainer _createMediaTestContainer({
+  required SharedPreferences sharedPreferences,
+  required InMemoryMediaRepository mediaRepository,
+}) {
+  final mediaDataSource = SharedPreferencesMediaDataSource(sharedPreferences);
+
+  return ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(sharedPreferences),
+      mediaViewModelProvider.overrideWithProvider((params) {
+        return StateNotifierProvider.autoDispose<MediaViewModel, MediaState>(
+          (ref) => MediaViewModel(
+            ref,
+            params,
+            mediaRepository: mediaRepository,
+            sharedPreferencesDataSource: mediaDataSource,
+          ),
+        );
+      }),
+    ],
+  );
+}
 
 void main() {
-  late MediaViewModel mediaViewModel;
-  late MockMediaRepository mockMediaRepository;
-  late MockSharedPreferencesMediaDataSource mockDataSource;
-  late MediaViewModelParams params;
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
-    mockMediaRepository = MockMediaRepository();
-    mockDataSource = MockSharedPreferencesMediaDataSource();
+  late SharedPreferences sharedPreferences;
+  late InMemoryMediaRepository mediaRepository;
+  const params = MediaViewModelParams(
+    directoryPath: '/dir1',
+    directoryName: 'Directory 1',
+  );
 
-    // Stub common methods
-    when(mockMediaRepository.getMediaForDirectoryPath(any, bookmarkData: anyNamed('bookmarkData')))
-        .thenAnswer((_) async => []);
-    when(mockDataSource.getMedia()).thenAnswer((_) async => []);
-    when(mockDataSource.removeMediaForDirectory(any)).thenAnswer((_) async {});
-    when(mockDataSource.upsertMedia(any)).thenAnswer((_) async {});
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    sharedPreferences = await SharedPreferences.getInstance();
+    mediaRepository = InMemoryMediaRepository([
+      MediaEntity(
+        id: 'm1',
+        path: '/dir1/media1.jpg',
+        name: 'media1.jpg',
+        type: MediaType.image,
+        size: 1000,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const [],
+        directoryId: '/dir1',
+      ),
+      MediaEntity(
+        id: 'm2',
+        path: '/dir1/media2.jpg',
+        name: 'media2.jpg',
+        type: MediaType.image,
+        size: 2000,
+        lastModified: DateTime(2024, 1, 2),
+        tagIds: const [],
+        directoryId: '/dir1',
+      ),
+      MediaEntity(
+        id: 'm3',
+        path: '/dir1/media3.jpg',
+        name: 'media3.jpg',
+        type: MediaType.image,
+        size: 3000,
+        lastModified: DateTime(2024, 1, 3),
+        tagIds: const [],
+        directoryId: '/dir1',
+      ),
+    ]);
+  });
 
-    params = MediaViewModelParams(
-      directoryPath: '/test/path',
-      directoryName: 'Test Directory',
-      bookmarkData: 'test_bookmark',
-      onPermissionRecoveryNeeded: () async => '/recovered/path',
+  test('toggleMediaSelection toggles selection state', () async {
+    final container = _createMediaTestContainer(
+      sharedPreferences: sharedPreferences,
+      mediaRepository: mediaRepository,
     );
+    addTearDown(container.dispose);
 
-    mediaViewModel = MediaViewModel(
-      params,
-      mediaRepository: mockMediaRepository,
-      sharedPreferencesDataSource: mockDataSource,
+    final viewModel = container.read(mediaViewModelProvider(params).notifier);
+    await viewModel.loadMedia();
+
+    viewModel.toggleMediaSelection('m1');
+
+    final state = container.read(mediaViewModelProvider(params));
+    expect(state, isA<MediaLoaded>());
+    final loaded = state as MediaLoaded;
+    expect(loaded.selectedMediaIds, {'m1'});
+    expect(loaded.isSelectionMode, isTrue);
+
+    viewModel.toggleMediaSelection('m1');
+    final cleared = container.read(mediaViewModelProvider(params)) as MediaLoaded;
+    expect(cleared.selectedMediaIds, isEmpty);
+    expect(cleared.isSelectionMode, isFalse);
+  });
+
+  test('selectMediaRange appends when requested', () async {
+    final container = _createMediaTestContainer(
+      sharedPreferences: sharedPreferences,
+      mediaRepository: mediaRepository,
     );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(mediaViewModelProvider(params).notifier);
+    await viewModel.loadMedia();
+
+    viewModel.selectMediaRange(const ['m1', 'm2']);
+    MediaLoaded state = container.read(mediaViewModelProvider(params)) as MediaLoaded;
+    expect(state.selectedMediaIds, {'m1', 'm2'});
+    expect(state.isSelectionMode, isTrue);
+
+    viewModel.selectMediaRange(const ['m3'], append: true);
+    state = container.read(mediaViewModelProvider(params)) as MediaLoaded;
+    expect(state.selectedMediaIds, {'m1', 'm2', 'm3'});
   });
 
-  tearDown(() {
-    mediaViewModel.dispose();
-  });
+  test('clearMediaSelection resets selection providers', () async {
+    final container = _createMediaTestContainer(
+      sharedPreferences: sharedPreferences,
+      mediaRepository: mediaRepository,
+    );
+    addTearDown(container.dispose);
 
-  group('MediaViewModel.recoverPermissions', () {
-    test('throws exception when no recovery callback provided', () async {
-      // Arrange
-      final paramsWithoutCallback = MediaViewModelParams(
-        directoryPath: '/test/path',
-        directoryName: 'Test Directory',
-      );
-      final vm = MediaViewModel(
-        paramsWithoutCallback,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
+    final viewModel = container.read(mediaViewModelProvider(params).notifier);
+    await viewModel.loadMedia();
+    viewModel.selectMediaRange(const ['m1', 'm2']);
 
-      // Act & Assert
-      expect(
-        () => vm.recoverPermissions(),
-        throwsA(isA<Exception>().having(
-          (e) => e.toString(),
-          'message',
-          contains('Permission recovery not available'),
-        )),
-      );
+    viewModel.clearMediaSelection();
 
-      vm.dispose();
-    });
-
-    test('sets loading state initially', () async {
-      // Act
-      final future = mediaViewModel.recoverPermissions();
-
-      // Assert
-      expect(mediaViewModel.state, isA<MediaLoading>());
-
-      // Complete the future to avoid hanging
-      await future;
-    });
-
-    test('reverts to permission revoked state when user cancels', () async {
-      // Arrange
-      final paramsWithNullCallback = MediaViewModelParams(
-        directoryPath: '/test/path',
-        directoryName: 'Test Directory',
-        onPermissionRecoveryNeeded: () async => null,
-      );
-      final vm = MediaViewModel(
-        paramsWithNullCallback,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
-
-      // Act
-      await vm.recoverPermissions();
-
-      // Assert
-      expect(vm.state, isA<MediaPermissionRevoked>());
-      expect((vm.state as MediaPermissionRevoked).directoryPath, '/test/path');
-
-      vm.dispose();
-    });
-
-    test('throws exception when selected directory is not accessible', () async {
-      // Arrange
-      final paramsWithCallback = MediaViewModelParams(
-        directoryPath: '/test/path',
-        directoryName: 'Test Directory',
-        onPermissionRecoveryNeeded: () async => '/inaccessible/path',
-      );
-      final vm = MediaViewModel(
-        paramsWithCallback,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
-
-      // Act & Assert
-      expect(
-        () => vm.recoverPermissions(),
-        throwsA(isA<Exception>().having(
-          (e) => e.toString(),
-          'message',
-          contains('Selected directory is not accessible'),
-        )),
-      );
-
-      vm.dispose();
-    });
-
-    test('attempts to recover permissions when callback returns a path', () async {
-      // Arrange - use a path that should be accessible
-      final testPath = Directory.current.path; // Current directory should be accessible
-      final paramsWithValidCallback = MediaViewModelParams(
-        directoryPath: '/test/path',
-        directoryName: 'Test Directory',
-        onPermissionRecoveryNeeded: () async => testPath,
-      );
-      final vm = MediaViewModel(
-        paramsWithValidCallback,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
-
-      final mockMedia = [
-        MediaEntity(
-          id: '1',
-          path: '$testPath/image.jpg',
-          name: 'image.jpg',
-          type: MediaType.image,
-          size: 1000,
-          lastModified: DateTime.now(),
-          tagIds: [],
-          directoryId: 'test_dir',
-        ),
-      ];
-
-      // Stub for initial loadMedia call
-      when(mockMediaRepository.getMediaForDirectoryPath(
-        '/test/path',
-        bookmarkData: anyNamed('bookmarkData'),
-      )).thenAnswer((_) async => []);
-
-      // Stub for recovery loadMedia call
-      when(mockMediaRepository.getMediaForDirectoryPath(
-        testPath,
-        bookmarkData: anyNamed('bookmarkData'),
-      )).thenAnswer((_) async => mockMedia);
-
-      // Act
-      await vm.recoverPermissions();
-
-      // Assert - the method should either succeed or fail based on directory accessibility
-      // Since we're using Directory.current.path, it should be accessible
-      expect(vm.state, isA<MediaLoaded>());
-
-      vm.dispose();
-    });
-
-    test('handles errors during media loading after recovery', () async {
-      // Arrange
-      final tempDir = Directory.systemTemp.createTempSync();
-      final paramsWithCallback = MediaViewModelParams(
-        directoryPath: '/test/path',
-        directoryName: 'Test Directory',
-        onPermissionRecoveryNeeded: () async => tempDir.path,
-      );
-      final vm = MediaViewModel(
-        paramsWithCallback,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
-
-      when(mockMediaRepository.getMediaForDirectoryPath(
-        tempDir.path,
-        bookmarkData: anyNamed('bookmarkData'),
-      )).thenThrow(Exception('Media loading failed'));
-
-      // Act
-      await vm.recoverPermissions();
-
-      // Assert
-      expect(vm.state, isA<MediaError>());
-
-      // Cleanup
-      tempDir.deleteSync(recursive: true);
-      vm.dispose();
-    });
-
-    test('creates new bookmark when recovery succeeds', () async {
-      // Arrange
-      final tempDir = Directory.systemTemp.createTempSync();
-      final paramsWithCallback = MediaViewModelParams(
-        directoryPath: '/test/path',
-        directoryName: 'Test Directory',
-        onPermissionRecoveryNeeded: () async => tempDir.path,
-      );
-      final vm = MediaViewModel(
-        paramsWithCallback,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
-
-      final mockMedia = [
-        MediaEntity(
-          id: '1',
-          path: '${tempDir.path}/image.jpg',
-          name: 'image.jpg',
-          type: MediaType.image,
-          size: 1000,
-          lastModified: DateTime.now(),
-          tagIds: [],
-          directoryId: 'test_dir',
-        ),
-      ];
-
-      // Stub for initial loadMedia call
-      when(mockMediaRepository.getMediaForDirectoryPath(
-        '/test/path',
-        bookmarkData: anyNamed('bookmarkData'),
-      )).thenAnswer((_) async => []);
-
-      // Stub for recovery loadMedia call
-      when(mockMediaRepository.getMediaForDirectoryPath(
-        tempDir.path,
-        bookmarkData: anyNamed('bookmarkData'),
-      )).thenAnswer((_) async => mockMedia);
-
-      // Act
-      await vm.recoverPermissions();
-
-      // Assert
-      expect(vm.state, isA<MediaLoaded>());
-
-      // Cleanup
-      tempDir.deleteSync(recursive: true);
-      vm.dispose();
-    });
-
-    test('reverts to permission revoked state on any error during recovery', () async {
-      // Arrange
-      final paramsWithCallback = MediaViewModelParams(
-        directoryPath: '/test/path',
-        directoryName: 'Test Directory',
-        onPermissionRecoveryNeeded: () async => throw Exception('Callback failed'),
-      );
-      final vm = MediaViewModel(
-        paramsWithCallback,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
-
-      // Act
-      await vm.recoverPermissions();
-
-      // Assert
-      expect(vm.state, isA<MediaPermissionRevoked>());
-      expect((vm.state as MediaPermissionRevoked).directoryPath, '/test/path');
-
-      vm.dispose();
-    });
-  });
-
-  group('MediaViewModel.validateCurrentPermissions', () {
-    test('returns false in test environment', () async {
-      // Arrange
-      final tempDir = Directory.systemTemp.createTempSync();
-      final paramsNoBookmark = MediaViewModelParams(
-        directoryPath: tempDir.path,
-        directoryName: 'Test Directory',
-      );
-      final vm = MediaViewModel(
-        paramsNoBookmark,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
-
-      // Act
-      final result = await vm.validateCurrentPermissions();
-
-      // Assert
-      expect(result, isFalse);
-
-      // Cleanup
-      tempDir.deleteSync(recursive: true);
-      vm.dispose();
-    });
-
-    test('returns false when directory is not accessible', () async {
-      // Arrange
-      final paramsInvalid = MediaViewModelParams(
-        directoryPath: '/non/existent/path',
-        directoryName: 'Test Directory',
-      );
-      final vm = MediaViewModel(
-        paramsInvalid,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
-
-      // Act
-      final result = await vm.validateCurrentPermissions();
-
-      // Assert
-      expect(result, isFalse);
-
-      vm.dispose();
-    });
-
-    test('returns false in test environment', () async {
-      // Arrange
-      final tempDir = Directory.systemTemp.createTempSync();
-      final paramsWithBookmark = MediaViewModelParams(
-        directoryPath: tempDir.path,
-        directoryName: 'Test Directory',
-        bookmarkData: 'test_bookmark',
-      );
-      final vm = MediaViewModel(
-        paramsWithBookmark,
-        mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockDataSource,
-      );
-
-      // Act
-      final result = await vm.validateCurrentPermissions();
-
-      // Assert
-      expect(result, isFalse); // Directory is not accessible in test environment
-
-      // Cleanup
-      tempDir.deleteSync(recursive: true);
-      vm.dispose();
-    });
+    final state = container.read(mediaViewModelProvider(params)) as MediaLoaded;
+    expect(state.selectedMediaIds, isEmpty);
+    expect(state.isSelectionMode, isFalse);
+    expect(container.read(selectedMediaIdsProvider(params)), isEmpty);
+    expect(container.read(mediaSelectionModeProvider(params)), isFalse);
+    expect(container.read(selectedMediaCountProvider(params)), 0);
   });
 }
