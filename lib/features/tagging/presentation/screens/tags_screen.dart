@@ -390,6 +390,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       onTap: () => _openFullScreen(collection, media),
       onFavoriteToggle: (_) =>
           ref.read(tagsViewModelProvider.notifier).refreshFavorites(),
+      onSelectionToggle: () {},
+      isSelected: false,
+      isSelectionMode: false,
     );
   }
 

@@ -49,6 +49,8 @@ class DirectoryLoaded extends DirectoryState {
     required this.selectedTagIds,
     required this.columns,
     required this.sortOption,
+    required this.selectedDirectoryIds,
+    required this.isSelectionMode,
   });
 
   final List<DirectoryEntity> directories;
@@ -56,6 +58,8 @@ class DirectoryLoaded extends DirectoryState {
   final List<String> selectedTagIds;
   final int columns;
   final DirectorySortOption sortOption;
+  final Set<String> selectedDirectoryIds;
+  final bool isSelectionMode;
 
   DirectoryLoaded copyWith({
     List<DirectoryEntity>? directories,
@@ -63,6 +67,8 @@ class DirectoryLoaded extends DirectoryState {
     List<String>? selectedTagIds,
     int? columns,
     DirectorySortOption? sortOption,
+    Set<String>? selectedDirectoryIds,
+    bool? isSelectionMode,
   }) {
     return DirectoryLoaded(
       directories: directories ?? this.directories,
@@ -70,6 +76,9 @@ class DirectoryLoaded extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
+      selectedDirectoryIds:
+          selectedDirectoryIds ?? this.selectedDirectoryIds,
+      isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
 }
@@ -95,6 +104,8 @@ class DirectoryPermissionRevoked extends DirectoryState {
     required this.selectedTagIds,
     required this.columns,
     required this.sortOption,
+    required this.selectedDirectoryIds,
+    required this.isSelectionMode,
   });
 
   final List<DirectoryEntity> inaccessibleDirectories;
@@ -103,6 +114,8 @@ class DirectoryPermissionRevoked extends DirectoryState {
   final List<String> selectedTagIds;
   final int columns;
   final DirectorySortOption sortOption;
+  final Set<String> selectedDirectoryIds;
+  final bool isSelectionMode;
 
   DirectoryPermissionRevoked copyWith({
     List<DirectoryEntity>? inaccessibleDirectories,
@@ -111,14 +124,21 @@ class DirectoryPermissionRevoked extends DirectoryState {
     List<String>? selectedTagIds,
     int? columns,
     DirectorySortOption? sortOption,
+    Set<String>? selectedDirectoryIds,
+    bool? isSelectionMode,
   }) {
     return DirectoryPermissionRevoked(
-      inaccessibleDirectories: inaccessibleDirectories ?? this.inaccessibleDirectories,
-      accessibleDirectories: accessibleDirectories ?? this.accessibleDirectories,
+      inaccessibleDirectories:
+          inaccessibleDirectories ?? this.inaccessibleDirectories,
+      accessibleDirectories:
+          accessibleDirectories ?? this.accessibleDirectories,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
+      selectedDirectoryIds:
+          selectedDirectoryIds ?? this.selectedDirectoryIds,
+      isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
 }
@@ -132,6 +152,8 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     required this.selectedTagIds,
     required this.columns,
     required this.sortOption,
+    required this.selectedDirectoryIds,
+    required this.isSelectionMode,
   });
 
   final List<DirectoryEntity> invalidDirectories;
@@ -140,6 +162,8 @@ class DirectoryBookmarkInvalid extends DirectoryState {
   final List<String> selectedTagIds;
   final int columns;
   final DirectorySortOption sortOption;
+  final Set<String> selectedDirectoryIds;
+  final bool isSelectionMode;
 
   DirectoryBookmarkInvalid copyWith({
     List<DirectoryEntity>? invalidDirectories,
@@ -148,14 +172,20 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     List<String>? selectedTagIds,
     int? columns,
     DirectorySortOption? sortOption,
+    Set<String>? selectedDirectoryIds,
+    bool? isSelectionMode,
   }) {
     return DirectoryBookmarkInvalid(
       invalidDirectories: invalidDirectories ?? this.invalidDirectories,
-      accessibleDirectories: accessibleDirectories ?? this.accessibleDirectories,
+      accessibleDirectories:
+          accessibleDirectories ?? this.accessibleDirectories,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
+      selectedDirectoryIds:
+          selectedDirectoryIds ?? this.selectedDirectoryIds,
+      isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
 }
@@ -204,13 +234,81 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   List<String> _currentSelectedTagIds = const <String>[];
   late int _currentColumns;
   DirectorySortOption _currentSortOption = DirectorySortOption.nameAscending;
+  Set<String> _selectedDirectoryIds = <String>{};
+  bool _isSelectionMode = false;
 
   DirectorySortOption get currentSortOption => _currentSortOption;
+  Set<String> get selectedDirectoryIds => Set<String>.unmodifiable(_selectedDirectoryIds);
+  bool get isSelectionMode => _isSelectionMode;
+  int get selectedDirectoryCount => _selectedDirectoryIds.length;
 
   @override
   void dispose() {
     _gridColumnsSubscription.close();
     super.dispose();
+  }
+
+  /// Toggles the selection state for a single directory.
+  void toggleDirectorySelection(String directoryId) {
+    final updated = Set<String>.from(_selectedDirectoryIds);
+    if (!updated.remove(directoryId)) {
+      updated.add(directoryId);
+    }
+    _applySelectionUpdate(updated);
+  }
+
+  /// Selects a specific set of directory IDs. When [append] is true the IDs
+  /// are merged with the existing selection, otherwise the selection is
+  /// replaced entirely.
+  void selectDirectoryRange(Iterable<String> directoryIds, {bool append = false}) {
+    final updated = append
+        ? Set<String>.from(_selectedDirectoryIds)..addAll(directoryIds)
+        : Set<String>.from(directoryIds);
+    _applySelectionUpdate(updated);
+  }
+
+  /// Clears all selected directories and exits selection mode.
+  void clearDirectorySelection() {
+    if (_selectedDirectoryIds.isEmpty && !_isSelectionMode) {
+      return;
+    }
+    _selectedDirectoryIds = <String>{};
+    _isSelectionMode = false;
+    _emitFilteredState();
+  }
+
+  void _applySelectionUpdate(Set<String> updatedSelection) {
+    final sanitized = updatedSelection..removeWhere((id) => id.isEmpty);
+    _selectedDirectoryIds = sanitized;
+    _isSelectionMode = _selectedDirectoryIds.isNotEmpty;
+    _emitFilteredState();
+  }
+
+  void _clearSelectionInternal() {
+    _selectedDirectoryIds = <String>{};
+    _isSelectionMode = false;
+  }
+
+  void _synchronizeSelectionWithCaches() {
+    if (_selectedDirectoryIds.isEmpty) {
+      _isSelectionMode = false;
+      return;
+    }
+
+    final availableIds = <String>{
+      for (final directory in _cachedAccessibleDirectories) directory.id,
+      for (final directory in _cachedInaccessibleDirectories) directory.id,
+      for (final directory in _cachedInvalidDirectories) directory.id,
+    };
+
+    final sanitized = _selectedDirectoryIds
+        .where(availableIds.contains)
+        .toSet();
+
+    if (sanitized.length != _selectedDirectoryIds.length) {
+      _selectedDirectoryIds = sanitized;
+    }
+    _isSelectionMode = _selectedDirectoryIds.isNotEmpty;
   }
 
   /// Loads all directories.
@@ -251,6 +349,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           inaccessible: const [],
           invalid: const [],
         );
+        _clearSelectionInternal();
         _resetFilters();
         state = const DirectoryEmpty();
       } else {
@@ -277,6 +376,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
             invalid: const [],
           );
         }
+        _clearSelectionInternal();
         _resetFilters();
         _emitFilteredState();
       }
@@ -299,6 +399,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           inaccessible: const [],
           invalid: [invalidDirectory],
         );
+        _clearSelectionInternal();
         _resetFilters();
         _emitFilteredState();
       } else {
@@ -308,6 +409,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           inaccessible: const [],
           invalid: const [],
         );
+        _clearSelectionInternal();
         state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
       }
     }
@@ -385,9 +487,15 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     final sortedInaccessible = _sortDirectories(filteredInaccessible);
     final sortedInvalid = _sortDirectories(filteredInvalid);
 
+    _synchronizeSelectionWithCaches();
+    final selectionSnapshot = Set<String>.unmodifiable(_selectedDirectoryIds);
+    final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
+    _isSelectionMode = selectionMode;
+
     if (_cachedAccessibleDirectories.isEmpty &&
         _cachedInaccessibleDirectories.isEmpty &&
         _cachedInvalidDirectories.isEmpty) {
+      _clearSelectionInternal();
       state = const DirectoryEmpty();
       return;
     }
@@ -400,6 +508,8 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         selectedTagIds: _currentSelectedTagIds,
         columns: _currentColumns,
         sortOption: _currentSortOption,
+        selectedDirectoryIds: selectionSnapshot,
+        isSelectionMode: selectionMode,
       );
       return;
     }
@@ -412,6 +522,8 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         selectedTagIds: _currentSelectedTagIds,
         columns: _currentColumns,
         sortOption: _currentSortOption,
+        selectedDirectoryIds: selectionSnapshot,
+        isSelectionMode: selectionMode,
       );
       return;
     }
@@ -422,6 +534,8 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       selectedTagIds: _currentSelectedTagIds,
       columns: _currentColumns,
       sortOption: _currentSortOption,
+      selectedDirectoryIds: selectionSnapshot,
+      isSelectionMode: selectionMode,
     );
   }
 
@@ -597,3 +711,35 @@ final directoryViewModelProvider =
         ref.watch(permissionServiceProvider),
       ),
     );
+
+Set<String> _extractDirectorySelection(DirectoryState state) => switch (state) {
+      DirectoryLoaded(selectedDirectoryIds: final ids) => ids,
+      DirectoryPermissionRevoked(selectedDirectoryIds: final ids) => ids,
+      DirectoryBookmarkInvalid(selectedDirectoryIds: final ids) => ids,
+      _ => const <String>{},
+    };
+
+bool _extractDirectorySelectionMode(DirectoryState state) => switch (state) {
+      DirectoryLoaded(isSelectionMode: final mode) => mode,
+      DirectoryPermissionRevoked(isSelectionMode: final mode) => mode,
+      DirectoryBookmarkInvalid(isSelectionMode: final mode) => mode,
+      _ => false,
+    };
+
+/// Provider exposing the current set of selected directory IDs.
+final selectedDirectoryIdsProvider = Provider.autoDispose<Set<String>>((ref) {
+  final state = ref.watch(directoryViewModelProvider);
+  return _extractDirectorySelection(state);
+});
+
+/// Provider exposing whether selection mode is currently enabled for directories.
+final directorySelectionModeProvider = Provider.autoDispose<bool>((ref) {
+  final state = ref.watch(directoryViewModelProvider);
+  return _extractDirectorySelectionMode(state);
+});
+
+/// Provider exposing the current directory selection count.
+final selectedDirectoryCountProvider = Provider.autoDispose<int>((ref) {
+  final state = ref.watch(directoryViewModelProvider);
+  return _extractDirectorySelection(state).length;
+});

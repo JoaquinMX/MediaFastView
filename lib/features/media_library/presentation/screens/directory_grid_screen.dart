@@ -34,6 +34,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
+    final selectedDirectoryIds = ref.watch(selectedDirectoryIdsProvider);
+    final isSelectionMode = ref.watch(directorySelectionModeProvider);
     final currentSortOption = switch (state) {
       DirectoryLoaded(:final sortOption) => sortOption,
       DirectoryPermissionRevoked(:final sortOption) => sortOption,
@@ -88,7 +90,13 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                       child: CircularProgressIndicator(),
                     ),
                     DirectoryLoaded(:final directories, :final columns) =>
-                      _buildGrid(directories, columns, viewModel),
+                      _buildGrid(
+                        directories,
+                        columns,
+                        viewModel,
+                        selectedDirectoryIds,
+                        isSelectionMode,
+                      ),
                     DirectoryPermissionRevoked(
                       :final inaccessibleDirectories,
                       :final accessibleDirectories,
@@ -99,6 +107,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                         inaccessibleDirectories,
                         columns,
                         viewModel,
+                        selectedDirectoryIds,
+                        isSelectionMode,
                       ),
                     DirectoryBookmarkInvalid(
                       :final invalidDirectories,
@@ -110,6 +120,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                         invalidDirectories,
                         columns,
                         viewModel,
+                        selectedDirectoryIds,
+                        isSelectionMode,
                       ),
                     DirectoryError(:final message) => _buildError(
                       message,
@@ -229,6 +241,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     List<DirectoryEntity> directories,
     int columns,
     DirectoryViewModel viewModel,
+    Set<String> selectedDirectoryIds,
+    bool isSelectionMode,
   ) {
     return GridView.builder(
       padding: UiSpacing.gridPadding,
@@ -241,12 +255,17 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       itemCount: directories.length,
       itemBuilder: (context, index) {
         final directory = directories[index];
+        final isSelected = selectedDirectoryIds.contains(directory.id);
         return DirectoryGridItem(
           directory: directory,
           onTap: () => _navigateToMediaGrid(context, directory),
           onDelete: () =>
               _showDeleteConfirmation(context, directory, viewModel),
           onAssignTags: (tagIds) => _assignTagsToDirectory(directory, tagIds),
+          onSelectionToggle: () =>
+              viewModel.toggleDirectorySelection(directory.id),
+          isSelected: isSelected,
+          isSelectionMode: isSelectionMode,
         );
       },
     );
@@ -257,6 +276,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     List<DirectoryEntity> inaccessibleDirectories,
     int columns,
     DirectoryViewModel viewModel,
+    Set<String> selectedDirectoryIds,
+    bool isSelectionMode,
   ) {
     final allDirectories = [...accessibleDirectories, ...inaccessibleDirectories];
 
@@ -302,6 +323,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
               final directory = allDirectories[index];
               final isInaccessible = inaccessibleDirectories.contains(directory);
 
+              final isSelected = selectedDirectoryIds.contains(directory.id);
               return Opacity(
                 opacity: isInaccessible ? UiOpacity.disabled : 1.0,
                 child: DirectoryGridItem(
@@ -312,6 +334,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                   onDelete: () =>
                       _showDeleteConfirmation(context, directory, viewModel),
                   onAssignTags: (tagIds) => _assignTagsToDirectory(directory, tagIds),
+                  onSelectionToggle: () =>
+                      viewModel.toggleDirectorySelection(directory.id),
+                  isSelected: isSelected,
+                  isSelectionMode: isSelectionMode,
                 ),
               );
             },
@@ -326,6 +352,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     List<DirectoryEntity> invalidDirectories,
     int columns,
     DirectoryViewModel viewModel,
+    Set<String> selectedDirectoryIds,
+    bool isSelectionMode,
   ) {
     final allDirectories = [...accessibleDirectories, ...invalidDirectories];
 
@@ -371,6 +399,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
               final directory = allDirectories[index];
               final isInvalid = invalidDirectories.contains(directory);
 
+              final isSelected = selectedDirectoryIds.contains(directory.id);
               return Opacity(
                 opacity: isInvalid ? UiOpacity.disabled : 1.0,
                 child: DirectoryGridItem(
@@ -381,6 +410,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                   onDelete: () =>
                       _showDeleteConfirmation(context, directory, viewModel),
                   onAssignTags: (tagIds) => _assignTagsToDirectory(directory, tagIds),
+                  onSelectionToggle: () =>
+                      viewModel.toggleDirectorySelection(directory.id),
+                  isSelected: isSelected,
+                  isSelectionMode: isSelectionMode,
                 ),
               );
             },
