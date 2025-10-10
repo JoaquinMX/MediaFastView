@@ -151,6 +151,8 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
                 onPrevious: viewModel.previousItem,
                 onToggleLoop: viewModel.toggleLoop,
                 onToggleMute: viewModel.toggleMute,
+                onToggleShuffle: viewModel.toggleShuffle,
+                onDurationSelected: viewModel.setImageDisplayDuration,
               ),
 
               const SizedBox(height: 16),
@@ -252,6 +254,10 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
 
       case LogicalKeyboardKey.keyM:
         viewModel.toggleMute();
+        return KeyEventResult.handled;
+
+      case LogicalKeyboardKey.keyS:
+        viewModel.toggleShuffle();
         return KeyEventResult.handled;
 
       default:

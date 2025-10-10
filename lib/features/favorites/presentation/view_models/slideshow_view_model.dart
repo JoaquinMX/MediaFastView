@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,6 +23,8 @@ class SlideshowPlaying extends SlideshowState {
     required this.isLooping,
     required this.isMuted,
     required this.progress,
+    required this.isShuffleEnabled,
+    required this.imageDisplayDuration,
   });
 
   final int currentIndex;
@@ -29,6 +32,8 @@ class SlideshowPlaying extends SlideshowState {
   final bool isLooping;
   final bool isMuted;
   final double progress;
+  final bool isShuffleEnabled;
+  final Duration imageDisplayDuration;
 
   SlideshowPlaying copyWith({
     int? currentIndex,
@@ -36,6 +41,8 @@ class SlideshowPlaying extends SlideshowState {
     bool? isLooping,
     bool? isMuted,
     double? progress,
+    bool? isShuffleEnabled,
+    Duration? imageDisplayDuration,
   }) {
     return SlideshowPlaying(
       currentIndex: currentIndex ?? this.currentIndex,
@@ -43,6 +50,9 @@ class SlideshowPlaying extends SlideshowState {
       isLooping: isLooping ?? this.isLooping,
       isMuted: isMuted ?? this.isMuted,
       progress: progress ?? this.progress,
+      isShuffleEnabled: isShuffleEnabled ?? this.isShuffleEnabled,
+      imageDisplayDuration:
+          imageDisplayDuration ?? this.imageDisplayDuration,
     );
   }
 }
@@ -54,12 +64,16 @@ class SlideshowPaused extends SlideshowState {
     required this.isLooping,
     required this.isMuted,
     required this.progress,
+    required this.isShuffleEnabled,
+    required this.imageDisplayDuration,
   });
 
   final int currentIndex;
   final bool isLooping;
   final bool isMuted;
   final double progress;
+  final bool isShuffleEnabled;
+  final Duration imageDisplayDuration;
 }
 
 /// Slideshow finished state.
@@ -77,16 +91,41 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
 
   final List<MediaEntity> _mediaList;
   Timer? _timer;
-  static const Duration _imageDisplayDuration = Duration(seconds: 5);
+  final Random _random = Random();
+  bool _isShuffleEnabled = false;
+  Duration _imageDisplayDuration = const Duration(seconds: 5);
+  List<int> _playOrder = [];
   static const Duration _progressInterval = Duration(milliseconds: 100);
-  static final double _imageProgressIncrement =
-      _progressInterval.inMilliseconds / _imageDisplayDuration.inMilliseconds;
 
-  int get currentIndex => switch (state) {
-    SlideshowPlaying(:final currentIndex) => currentIndex,
-    SlideshowPaused(:final currentIndex) => currentIndex,
-    _ => 0,
-  };
+  double get _imageProgressIncrement {
+    final durationMs = _imageDisplayDuration.inMilliseconds;
+    if (durationMs <= 0) {
+      return 1.0;
+    }
+    return _progressInterval.inMilliseconds / durationMs;
+  }
+
+  int get currentIndex {
+    final index = switch (state) {
+      SlideshowPlaying(:final currentIndex) => currentIndex,
+      SlideshowPaused(:final currentIndex) => currentIndex,
+      _ => 0,
+    };
+
+    if (_playOrder.isEmpty) {
+      return index;
+    }
+
+    if (index < 0) {
+      return 0;
+    }
+
+    if (index >= _playOrder.length) {
+      return _playOrder.length - 1;
+    }
+
+    return index;
+  }
 
   bool get isPlaying =>
       state is SlideshowPlaying && (state as SlideshowPlaying).isPlaying;
@@ -101,25 +140,42 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     _ => false,
   };
 
-  MediaEntity? get currentMedia =>
-      _mediaList.isNotEmpty && currentIndex < _mediaList.length
-      ? _mediaList[currentIndex]
-      : null;
+  MediaEntity? get currentMedia {
+    if (_mediaList.isEmpty || _playOrder.isEmpty) {
+      return null;
+    }
+    final orderIndex = currentIndex;
+    if (orderIndex < 0 || orderIndex >= _playOrder.length) {
+      return null;
+    }
+    final mediaIndex = _playOrder[orderIndex];
+    if (mediaIndex < 0 || mediaIndex >= _mediaList.length) {
+      return null;
+    }
+    return _mediaList[mediaIndex];
+  }
 
-  int get totalItems => _mediaList.length;
+  int get totalItems => _playOrder.isNotEmpty ? _playOrder.length : _mediaList.length;
 
   void _initializeSlideshow() {
+    _rebuildPlayOrder();
     state = SlideshowPaused(
       currentIndex: 0,
       isLooping: false,
       isMuted: false,
       progress: 0.0,
+      isShuffleEnabled: _isShuffleEnabled,
+      imageDisplayDuration: _imageDisplayDuration,
     );
   }
 
   /// Starts the slideshow.
   void startSlideshow() {
     if (_mediaList.isEmpty) return;
+    if (_playOrder.isEmpty) {
+      _rebuildPlayOrder();
+    }
+    if (_playOrder.isEmpty) return;
 
     state = SlideshowPlaying(
       currentIndex: currentIndex,
@@ -127,6 +183,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       isLooping: isLooping,
       isMuted: isMuted,
       progress: 0.0,
+      isShuffleEnabled: _isShuffleEnabled,
+      imageDisplayDuration: _imageDisplayDuration,
     );
 
     _startTimer();
@@ -147,6 +205,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isLooping: isLooping,
           isMuted: isMuted,
           progress: progress,
+          isShuffleEnabled: _isShuffleEnabled,
+          imageDisplayDuration: _imageDisplayDuration,
         ),
       _ => state,
     };
@@ -169,6 +229,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isLooping: isLooping,
           isMuted: isMuted,
           progress: progress,
+          isShuffleEnabled: _isShuffleEnabled,
+          imageDisplayDuration: _imageDisplayDuration,
         ),
       _ => state,
     };
@@ -184,9 +246,9 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
 
   /// Goes to the next item in the slideshow.
   void nextItem() {
-    if (_mediaList.isEmpty) return;
+    if (_mediaList.isEmpty || _playOrder.isEmpty) return;
 
-    final nextIndex = (currentIndex + 1) % _mediaList.length;
+    final nextIndex = (currentIndex + 1) % _playOrder.length;
     if (nextIndex == 0 && !isLooping) {
       // End of slideshow
       _timer?.cancel();
@@ -199,17 +261,17 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
 
   /// Goes to the previous item in the slideshow.
   void previousItem() {
-    if (_mediaList.isEmpty) return;
+    if (_mediaList.isEmpty || _playOrder.isEmpty) return;
 
     final prevIndex = currentIndex > 0
         ? currentIndex - 1
-        : _mediaList.length - 1;
+        : _playOrder.length - 1;
     _goToIndex(prevIndex);
   }
 
   /// Goes to a specific index in the slideshow.
   void goToIndex(int index) {
-    if (index < 0 || index >= _mediaList.length) return;
+    if (index < 0 || index >= _playOrder.length) return;
     _goToIndex(index);
   }
 
@@ -218,20 +280,43 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     _timer?.cancel();
 
     state = switch (state) {
-      SlideshowPlaying(:final isLooping, :final isMuted) => SlideshowPlaying(
-        currentIndex: index,
-        isPlaying: wasPlaying,
-        isLooping: isLooping,
-        isMuted: isMuted,
-        progress: 0.0,
-      ),
-      SlideshowPaused(:final isLooping, :final isMuted) => SlideshowPaused(
-        currentIndex: index,
-        isLooping: isLooping,
-        isMuted: isMuted,
-        progress: 0.0,
-      ),
-      _ => state,
+      SlideshowPlaying(:final isLooping, :final isMuted) =>
+        SlideshowPlaying(
+          currentIndex: index,
+          isPlaying: wasPlaying,
+          isLooping: isLooping,
+          isMuted: isMuted,
+          progress: 0.0,
+          isShuffleEnabled: _isShuffleEnabled,
+          imageDisplayDuration: _imageDisplayDuration,
+        ),
+      SlideshowPaused(:final isLooping, :final isMuted) =>
+        SlideshowPaused(
+          currentIndex: index,
+          isLooping: isLooping,
+          isMuted: isMuted,
+          progress: 0.0,
+          isShuffleEnabled: _isShuffleEnabled,
+          imageDisplayDuration: _imageDisplayDuration,
+        ),
+      _ => wasPlaying
+          ? SlideshowPlaying(
+              currentIndex: index,
+              isPlaying: wasPlaying,
+              isLooping: false,
+              isMuted: false,
+              progress: 0.0,
+              isShuffleEnabled: _isShuffleEnabled,
+              imageDisplayDuration: _imageDisplayDuration,
+            )
+          : SlideshowPaused(
+              currentIndex: index,
+              isLooping: false,
+              isMuted: false,
+              progress: 0.0,
+              isShuffleEnabled: _isShuffleEnabled,
+              imageDisplayDuration: _imageDisplayDuration,
+            ),
     };
 
     if (wasPlaying) {
@@ -248,6 +333,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
         :final isLooping,
         :final isMuted,
         :final progress,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
       ) =>
         SlideshowPlaying(
           currentIndex: currentIndex,
@@ -255,18 +342,24 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isLooping: !isLooping,
           isMuted: isMuted,
           progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
         ),
       SlideshowPaused(
         :final currentIndex,
         :final isLooping,
         :final isMuted,
         :final progress,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
       ) =>
         SlideshowPaused(
           currentIndex: currentIndex,
           isLooping: !isLooping,
           isMuted: isMuted,
           progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
         ),
       _ => state,
     };
@@ -281,6 +374,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
         :final isLooping,
         :final isMuted,
         :final progress,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
       ) =>
         SlideshowPlaying(
           currentIndex: currentIndex,
@@ -288,21 +383,105 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isLooping: isLooping,
           isMuted: !isMuted,
           progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
         ),
       SlideshowPaused(
         :final currentIndex,
         :final isLooping,
         :final isMuted,
         :final progress,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
       ) =>
         SlideshowPaused(
           currentIndex: currentIndex,
           isLooping: isLooping,
           isMuted: !isMuted,
           progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
         ),
       _ => state,
     };
+  }
+
+  /// Toggles shuffle mode and rebuilds the play order.
+  void toggleShuffle() {
+    if (_mediaList.isEmpty) return;
+
+    final previousMediaIndex =
+        _playOrder.isNotEmpty && currentIndex < _playOrder.length
+            ? _playOrder[currentIndex]
+            : null;
+
+    _isShuffleEnabled = !_isShuffleEnabled;
+    _rebuildPlayOrder();
+
+    if (_playOrder.isEmpty) {
+      return;
+    }
+
+    final newIndex = previousMediaIndex != null
+        ? _playOrder.indexOf(previousMediaIndex)
+        : 0;
+
+    _goToIndex(newIndex >= 0 ? newIndex : 0);
+  }
+
+  /// Updates the image display duration and restarts the timer if needed.
+  void setImageDisplayDuration(Duration duration) {
+    if (duration.inMilliseconds <= 0) return;
+
+    _imageDisplayDuration = duration;
+    final wasPlaying = isPlaying;
+    _timer?.cancel();
+
+    state = switch (state) {
+      SlideshowPlaying(
+        :final currentIndex,
+        :final isLooping,
+        :final isMuted,
+      ) =>
+        SlideshowPlaying(
+          currentIndex: currentIndex,
+          isPlaying: true,
+          isLooping: isLooping,
+          isMuted: isMuted,
+          progress: 0.0,
+          isShuffleEnabled: _isShuffleEnabled,
+          imageDisplayDuration: _imageDisplayDuration,
+        ),
+      SlideshowPaused(
+        :final currentIndex,
+        :final isLooping,
+        :final isMuted,
+      ) =>
+        SlideshowPaused(
+          currentIndex: currentIndex,
+          isLooping: isLooping,
+          isMuted: isMuted,
+          progress: 0.0,
+          isShuffleEnabled: _isShuffleEnabled,
+          imageDisplayDuration: _imageDisplayDuration,
+        ),
+      SlideshowIdle() =>
+        _playOrder.isEmpty
+            ? const SlideshowIdle()
+            : SlideshowPaused(
+                currentIndex: 0,
+                isLooping: false,
+                isMuted: false,
+                progress: 0.0,
+                isShuffleEnabled: _isShuffleEnabled,
+                imageDisplayDuration: _imageDisplayDuration,
+              ),
+      _ => state,
+    };
+
+    if (wasPlaying) {
+      _startTimer();
+    }
   }
 
   /// Updates progress (for video playback).
@@ -313,6 +492,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
         :final isPlaying,
         :final isLooping,
         :final isMuted,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
       ) =>
         SlideshowPlaying(
           currentIndex: currentIndex,
@@ -320,16 +501,33 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isLooping: isLooping,
           isMuted: isMuted,
           progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
         ),
-      SlideshowPaused(:final currentIndex, :final isLooping, :final isMuted) =>
+      SlideshowPaused(
+        :final currentIndex,
+        :final isLooping,
+        :final isMuted,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
+      ) =>
         SlideshowPaused(
           currentIndex: currentIndex,
           isLooping: isLooping,
           isMuted: isMuted,
           progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
         ),
       _ => state,
     };
+  }
+
+  void _rebuildPlayOrder() {
+    _playOrder = List.generate(_mediaList.length, (index) => index);
+    if (_isShuffleEnabled) {
+      _playOrder.shuffle(_random);
+    }
   }
 
   void _startTimer() {
