@@ -13,9 +13,11 @@ import '../../../tagging/presentation/view_models/tag_management_view_model.dart
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../view_models/directory_grid_view_model.dart';
+import '../view_models/library_sort_option.dart';
 import '../widgets/directory_grid_item.dart';
 import '../widgets/directory_search_bar.dart';
 import '../widgets/column_selector_popup.dart';
+import '../widgets/library_sort_menu_button.dart';
 import 'media_grid_screen.dart';
 
 /// Screen for displaying directories in a customizable grid layout.
@@ -34,11 +36,28 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
+    final sortOption = switch (state) {
+      DirectoryLoaded(:final sortOption) => sortOption,
+      DirectoryPermissionRevoked(:final sortOption) => sortOption,
+      DirectoryBookmarkInvalid(:final sortOption) => sortOption,
+      _ => LibrarySortOption.nameAscending,
+    };
+    final isSortEnabled = switch (state) {
+      DirectoryLoaded() => true,
+      DirectoryPermissionRevoked() => true,
+      DirectoryBookmarkInvalid() => true,
+      _ => false,
+    };
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Directories'),
         actions: [
+          LibrarySortMenuButton(
+            selectedOption: sortOption,
+            onSelected: viewModel.changeSortOption,
+            enabled: isSortEnabled,
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => _showAddDirectoryDialog(context, ref),

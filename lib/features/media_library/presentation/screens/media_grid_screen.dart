@@ -11,8 +11,10 @@ import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
 import '../view_models/media_grid_view_model.dart';
+import '../view_models/library_sort_option.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
+import '../widgets/library_sort_menu_button.dart';
 
 /// Screen for displaying media in a customizable grid layout.
 class MediaGridScreen extends ConsumerStatefulWidget {
@@ -59,11 +61,20 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
     final state = ref.watch(mediaViewModelProvider(_params!));
     _viewModel = ref.read(mediaViewModelProvider(_params!).notifier);
+    final sortOption = state is MediaLoaded
+        ? state.sortOption
+        : LibrarySortOption.nameAscending;
+    final isSortEnabled = state is MediaLoaded;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.directoryName),
         actions: [
+             LibrarySortMenuButton(
+               selectedOption: sortOption,
+               onSelected: _viewModel!.changeSortOption,
+               enabled: isSortEnabled,
+             ),
              IconButton(
                icon: const Icon(Icons.tag),
                tooltip: 'Manage Tags',

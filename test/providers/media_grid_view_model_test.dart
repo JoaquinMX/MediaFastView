@@ -6,6 +6,7 @@ import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/presentation/view_models/media_grid_view_model.dart';
+import 'package:media_fast_view/features/media_library/presentation/view_models/library_sort_option.dart';
 import '../mocks.mocks.dart';
 
 void main() {
@@ -95,6 +96,7 @@ void main() {
       expect(loadedState.columns, 3);
       expect(loadedState.currentDirectoryPath, testDirectoryPath);
       expect(loadedState.currentDirectoryName, testDirectoryName);
+      expect(loadedState.sortOption, LibrarySortOption.nameAscending);
 
       // Verify interactions
       verify(mockMediaRepository.getMediaForDirectoryPath(testDirectoryPath, bookmarkData: null)).called(1);
@@ -155,6 +157,7 @@ void main() {
       expect(loadedState.media.length, 1);
       expect(loadedState.media.first.name, 'image1.jpg');
       expect(loadedState.searchQuery, 'image');
+      expect(loadedState.sortOption, LibrarySortOption.nameAscending);
     });
 
     test('searchMedia with empty query returns all media', () async {
@@ -165,6 +168,7 @@ void main() {
       final loadedState = viewModel.state as MediaLoaded;
       expect(loadedState.media.length, 0);
       expect(loadedState.searchQuery, 'nonexistent');
+      expect(loadedState.sortOption, LibrarySortOption.nameAscending);
     });
 
     test('setColumns updates columns in state', () async {
@@ -207,10 +211,27 @@ void main() {
       expect(loadedState.media.length, 1);
       expect(loadedState.selectedTagIds, ['tag1']);
       expect(loadedState.searchQuery, ''); // Reset on filter
+      expect(loadedState.sortOption, LibrarySortOption.nameAscending);
 
       // Verify interactions
       verify(mockMediaRepository.filterMediaByTagsForDirectory(['tag1'], testDirectoryPath, bookmarkData: null)).called(1);
       // Note: saveMedia is not called when using mock repository
+    });
+
+    test('changeSortOption sorts media correctly', () async {
+      await viewModel.loadMedia();
+
+      viewModel.changeSortOption(LibrarySortOption.nameDescending);
+      expect(viewModel.state, isA<MediaLoaded>());
+      var loadedState = viewModel.state as MediaLoaded;
+      expect(loadedState.media.first.name, 'video1.mp4');
+      expect(loadedState.sortOption, LibrarySortOption.nameDescending);
+
+      viewModel.changeSortOption(LibrarySortOption.lastModified);
+      expect(viewModel.state, isA<MediaLoaded>());
+      loadedState = viewModel.state as MediaLoaded;
+      expect(loadedState.media.first.name, 'video1.mp4');
+      expect(loadedState.sortOption, LibrarySortOption.lastModified);
     });
 
     test('filterByTags with error transitions to MediaError', () async {

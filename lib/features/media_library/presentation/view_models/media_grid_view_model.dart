@@ -12,6 +12,7 @@ import '../../data/repositories/filesystem_media_repository_impl.dart';
 import '../../data/data_sources/local_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
+import 'library_sort_option.dart';
 
 /// Sealed class representing the state of the media grid.
 sealed class MediaState {
@@ -32,6 +33,7 @@ class MediaLoaded extends MediaState {
     required this.columns,
     required this.currentDirectoryPath,
     required this.currentDirectoryName,
+    required this.sortOption,
   });
 
   final List<MediaEntity> media;
@@ -40,6 +42,7 @@ class MediaLoaded extends MediaState {
   final int columns;
   final String currentDirectoryPath;
   final String currentDirectoryName;
+  final LibrarySortOption sortOption;
 
   MediaLoaded copyWith({
     List<MediaEntity>? media,
@@ -48,6 +51,7 @@ class MediaLoaded extends MediaState {
     int? columns,
     String? currentDirectoryPath,
     String? currentDirectoryName,
+    LibrarySortOption? sortOption,
   }) {
     return MediaLoaded(
       media: media ?? this.media,
@@ -56,6 +60,7 @@ class MediaLoaded extends MediaState {
       columns: columns ?? this.columns,
       currentDirectoryPath: currentDirectoryPath ?? this.currentDirectoryPath,
       currentDirectoryName: currentDirectoryName ?? this.currentDirectoryName,
+      sortOption: sortOption ?? this.sortOption,
     );
   }
 }
@@ -96,6 +101,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     _bookmarkData = _params.bookmarkData;
     _mediaRepository = mediaRepository;
     _sharedPreferencesDataSource = sharedPreferencesDataSource;
+    _currentColumns = _ref.read(gridColumnsProvider);
     _gridColumnsSubscription = _ref.listen<int>(
       gridColumnsProvider,
       (_, next) => _applyColumnUpdate(next),
@@ -111,6 +117,11 @@ class MediaViewModel extends StateNotifier<MediaState> {
   late final String _directoryName;
   late final String? _bookmarkData;
   late final ProviderSubscription<int> _gridColumnsSubscription;
+  List<MediaEntity> _cachedMedia = const [];
+  String _currentSearchQuery = '';
+  List<String> _currentSelectedTagIds = const <String>[];
+  LibrarySortOption _currentSortOption = LibrarySortOption.nameAscending;
+  late int _currentColumns;
 
   /// Gets the directory ID generated from the directory path.
   String get directoryId {
@@ -171,19 +182,18 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final totalTime = DateTime.now().difference(loadStartTime);
       LoggingService.instance.info('Media loading completed in ${totalTime.inMilliseconds}ms (scan: ${scanTime.inMilliseconds}ms, merge: ${mergeTime.inMilliseconds}ms, persist: ${persistTime.inMilliseconds}ms)');
 
-      if (media.isEmpty) {
+      _cachedMedia = List<MediaEntity>.from(media);
+      _currentSelectedTagIds = const [];
+      _currentSearchQuery = '';
+      _currentSortOption = LibrarySortOption.nameAscending;
+      _currentColumns = _ref.read(gridColumnsProvider);
+
+      if (_cachedMedia.isEmpty) {
         LoggingService.instance.info('No media found, setting empty state');
         state = const MediaEmpty();
       } else {
-        LoggingService.instance.info('Media loaded successfully, setting loaded state');
-        state = MediaLoaded(
-          media: media,
-          searchQuery: '',
-          selectedTagIds: const [],
-          columns: _ref.read(gridColumnsProvider),
-          currentDirectoryPath: _directoryPath,
-          currentDirectoryName: _directoryName,
-        );
+        LoggingService.instance.info('Media loaded successfully, applying active sort');
+        _emitFilteredState();
       }
     } catch (e) {
         final totalTime = DateTime.now().difference(loadStartTime);
@@ -205,24 +215,10 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   /// Searches media by query.
   void searchMedia(String query) {
-    state = switch (state) {
-      MediaLoaded(
-        :final media,
-        :final selectedTagIds,
-        :final columns,
-        :final currentDirectoryPath,
-        :final currentDirectoryName,
-      ) =>
-        MediaLoaded(
-          media: _searchMedia(media, query),
-          searchQuery: query,
-          selectedTagIds: selectedTagIds,
-          columns: columns,
-          currentDirectoryPath: currentDirectoryPath,
-          currentDirectoryName: currentDirectoryName,
-        ),
-      _ => state,
-    };
+    _currentSearchQuery = query;
+    if (state case MediaLoaded() || MediaEmpty()) {
+      _emitFilteredState();
+    }
   }
 
   /// Filters media by tag IDs.
@@ -260,14 +256,11 @@ class MediaViewModel extends StateNotifier<MediaState> {
       // discarding media from other directories or filters
       await _sharedPreferencesDataSource.upsertMedia(mediaModels);
 
-      state = MediaLoaded(
-        media: media,
-        searchQuery: '', // Reset search when filtering
-        selectedTagIds: tagIds,
-        columns: previousColumns,
-        currentDirectoryPath: _directoryPath,
-        currentDirectoryName: _directoryName,
-      );
+      _cachedMedia = List<MediaEntity>.from(media);
+      _currentSelectedTagIds = List<String>.unmodifiable(tagIds);
+      _currentSearchQuery = '';
+      _currentColumns = previousColumns;
+      _emitFilteredState();
     } catch (e) {
       // Check if this is a permission-related error
       final errorMessage = e.toString();
@@ -279,6 +272,17 @@ class MediaViewModel extends StateNotifier<MediaState> {
       } else {
         state = MediaError(errorMessage);
       }
+    }
+  }
+
+  /// Updates the active sort option and refreshes the view.
+  void changeSortOption(LibrarySortOption option) {
+    if (_currentSortOption == option) {
+      return;
+    }
+    _currentSortOption = option;
+    if (state case MediaLoaded() || MediaEmpty()) {
+      _emitFilteredState();
     }
   }
 
@@ -385,11 +389,58 @@ class MediaViewModel extends StateNotifier<MediaState> {
   }
 
   /// Helper method to search media.
-  List<MediaEntity> _searchMedia(List<MediaEntity> media, String query) {
-    if (query.isEmpty) return media;
+  List<MediaEntity> _applySearch(List<MediaEntity> media, String query) {
+    if (query.isEmpty) {
+      return media;
+    }
+    final lowerQuery = query.toLowerCase();
     return media
-        .where((item) => item.name.toLowerCase().contains(query.toLowerCase()))
+        .where((item) => item.name.toLowerCase().contains(lowerQuery))
         .toList();
+  }
+
+  void _emitFilteredState() {
+    if (_cachedMedia.isEmpty &&
+        _currentSelectedTagIds.isEmpty &&
+        _currentSearchQuery.isEmpty) {
+      state = const MediaEmpty();
+      return;
+    }
+
+    final filteredMedia = _applySearch(_cachedMedia, _currentSearchQuery);
+    final sortedMedia = _applySort(filteredMedia);
+
+    state = MediaLoaded(
+      media: sortedMedia,
+      searchQuery: _currentSearchQuery,
+      selectedTagIds: _currentSelectedTagIds,
+      columns: _currentColumns,
+      currentDirectoryPath: _directoryPath,
+      currentDirectoryName: _directoryName,
+      sortOption: _currentSortOption,
+    );
+  }
+
+  List<MediaEntity> _applySort(List<MediaEntity> media) {
+    final sorted = List<MediaEntity>.from(media);
+    switch (_currentSortOption) {
+      case LibrarySortOption.nameAscending:
+        sorted.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+        break;
+      case LibrarySortOption.nameDescending:
+        sorted.sort(
+          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
+        );
+        break;
+      case LibrarySortOption.lastModified:
+        sorted.sort(
+          (a, b) => b.lastModified.compareTo(a.lastModified),
+        );
+        break;
+    }
+    return sorted;
   }
 
 
@@ -402,19 +453,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
   }
 
   void _applyColumnUpdate(int columns) {
-    if (state case MediaLoaded(:final media,
-        :final searchQuery,
-        :final selectedTagIds,
-        :final currentDirectoryPath,
-        :final currentDirectoryName)) {
-      state = MediaLoaded(
-        media: media,
-        searchQuery: searchQuery,
-        selectedTagIds: selectedTagIds,
-        columns: columns,
-        currentDirectoryPath: currentDirectoryPath,
-        currentDirectoryName: currentDirectoryName,
-      );
+    _currentColumns = columns;
+    if (state case MediaLoaded() || MediaEmpty()) {
+      _emitFilteredState();
     }
   }
 }

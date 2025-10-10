@@ -8,6 +8,7 @@ import '../../../../../lib/features/media_library/domain/use_cases/get_directori
 import '../../../../../lib/features/media_library/domain/use_cases/remove_directory_use_case.dart';
 import '../../../../../lib/features/media_library/domain/use_cases/search_directories_use_case.dart';
 import '../../../../../lib/features/media_library/presentation/view_models/directory_grid_view_model.dart';
+import '../../../../../lib/features/media_library/presentation/view_models/library_sort_option.dart';
 import '../../../../../lib/features/media_library/data/data_sources/local_directory_data_source.dart';
 import '../../../../../lib/core/services/permission_service.dart';
 
@@ -159,6 +160,7 @@ void main() {
       expect(loadedState.directories.length, 1);
       expect(loadedState.directories.first.id, '1');
       expect(loadedState.selectedTagIds, ['tag1']);
+      expect(loadedState.sortOption, LibrarySortOption.nameAscending);
     });
   });
 }
