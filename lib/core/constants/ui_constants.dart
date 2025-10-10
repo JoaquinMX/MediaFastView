@@ -26,7 +26,10 @@ class UiSpacing {
   static const EdgeInsets gridPadding = EdgeInsets.all(16);
 
   /// Tag filter padding
-  static const EdgeInsets tagFilterPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 8);
+  static const EdgeInsets tagFilterPadding = EdgeInsets.symmetric(
+    horizontal: 16,
+    vertical: 8,
+  );
 
   /// Dialog content padding
   static const EdgeInsets dialogPadding = EdgeInsets.all(24);
@@ -35,7 +38,10 @@ class UiSpacing {
   static const EdgeInsets dialogMargin = EdgeInsets.symmetric(horizontal: 32);
 
   /// Button padding for elevated buttons
-  static const EdgeInsets buttonPadding = EdgeInsets.symmetric(horizontal: 24, vertical: 12);
+  static const EdgeInsets buttonPadding = EdgeInsets.symmetric(
+    horizontal: 24,
+    vertical: 12,
+  );
 
   /// Small padding for overlays and chips
   static const EdgeInsets smallPadding = EdgeInsets.all(4);
@@ -165,7 +171,7 @@ class UiContent {
   static const int textPreviewMaxLength = 200;
 
   /// Maximum lines for text display
-  static const int maxLinesTitle = 2;
+  static const int maxLinesTitle = 1;
   static const int maxLinesBody = 5;
   static const int maxLinesSingle = 1;
 }
