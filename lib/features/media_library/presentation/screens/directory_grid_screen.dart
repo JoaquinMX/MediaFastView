@@ -34,6 +34,12 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
+    final currentSortOption = switch (state) {
+      DirectoryLoaded(:final sortOption) => sortOption,
+      DirectoryPermissionRevoked(:final sortOption) => sortOption,
+      DirectoryBookmarkInvalid(:final sortOption) => sortOption,
+      _ => viewModel.currentSortOption,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -46,6 +52,19 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
           IconButton(
             icon: const Icon(Icons.tag),
             onPressed: () => TagCreationDialog.show(context),
+          ),
+          PopupMenuButton<DirectorySortOption>(
+            icon: const Icon(Icons.sort),
+            tooltip: 'Sort',
+            onSelected: viewModel.changeSortOption,
+            itemBuilder: (context) => [
+              for (final option in DirectorySortOption.values)
+                CheckedPopupMenuItem<DirectorySortOption>(
+                  value: option,
+                  checked: option == currentSortOption,
+                  child: Text(option.label),
+                ),
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.view_module),
