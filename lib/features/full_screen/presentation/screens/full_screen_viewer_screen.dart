@@ -41,12 +41,19 @@ class _FullScreenViewerScreenState
   Timer? _hideControlsTimer;
   final GlobalKey<FullScreenVideoPlayerState> _videoPlayerKey =
       GlobalKey<FullScreenVideoPlayerState>();
+  late final FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
     _viewModel = ref.read(fullScreenViewModelProvider.notifier);
+    _focusNode = FocusNode();
     _initializeViewer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _focusNode.requestFocus();
+      }
+    });
   }
 
   Future<void> _initializeViewer() async {
@@ -61,6 +68,7 @@ class _FullScreenViewerScreenState
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -74,6 +82,7 @@ class _FullScreenViewerScreenState
     return Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
+        focusNode: _focusNode,
         autofocus: true,
         onKeyEvent: _handleKeyEvent,
         child: Stack(
@@ -152,17 +161,22 @@ class _FullScreenViewerScreenState
                         ],
                       ),
                     ),
-                    padding: const EdgeInsets.all(16),
-                    child: FullScreenVideoControls(
-                      isPlaying: state.isPlaying,
-                      isMuted: state.isMuted,
-                      isLooping: state.isLooping,
-                      currentPosition: state.currentPosition,
-                      totalDuration: state.totalDuration,
-                      onPlayPause: _viewModel.togglePlayPause,
-                      onMute: _viewModel.toggleMute,
-                      onLoop: _viewModel.toggleLoop,
-                      onSeek: _handleSeek,
+                    child: SafeArea(
+                      top: false,
+                      left: false,
+                      right: false,
+                      minimum: const EdgeInsets.all(16),
+                      child: FullScreenVideoControls(
+                        isPlaying: state.isPlaying,
+                        isMuted: state.isMuted,
+                        isLooping: state.isLooping,
+                        currentPosition: state.currentPosition,
+                        totalDuration: state.totalDuration,
+                        onPlayPause: _viewModel.togglePlayPause,
+                        onMute: _viewModel.toggleMute,
+                        onLoop: _viewModel.toggleLoop,
+                        onSeek: _handleSeek,
+                      ),
                     ),
                   ),
                 ),
@@ -173,14 +187,21 @@ class _FullScreenViewerScreenState
                 top: 0,
                 bottom: 0,
                 child: Center(
-                  child: IconButton(
-                    onPressed: state.currentIndex > 0
-                        ? _viewModel.previousMedia
-                        : null,
-                    icon: Icon(
-                      Icons.chevron_left,
-                      color: colorScheme.onSurface,
-                      size: 48,
+                  child: SizedBox(
+                    width: 96,
+                    height: 96,
+                    child: IconButton(
+                      tooltip: 'Previous media',
+                      padding: EdgeInsets.zero,
+                      splashRadius: 48,
+                      onPressed: state.currentIndex > 0
+                          ? () => _viewModel.previousMedia()
+                          : null,
+                      icon: Icon(
+                        Icons.chevron_left,
+                        color: colorScheme.onSurface,
+                        size: 48,
+                      ),
                     ),
                   ),
                 ),
@@ -190,14 +211,22 @@ class _FullScreenViewerScreenState
                 top: 0,
                 bottom: 0,
                 child: Center(
-                  child: IconButton(
-                    onPressed: state.currentIndex < state.mediaList.length - 1
-                        ? _viewModel.nextMedia
-                        : null,
-                    icon: Icon(
-                      Icons.chevron_right,
-                      color: colorScheme.onSurface,
-                      size: 48,
+                  child: SizedBox(
+                    width: 96,
+                    height: 96,
+                    child: IconButton(
+                      tooltip: 'Next media',
+                      padding: EdgeInsets.zero,
+                      splashRadius: 48,
+                      onPressed:
+                          state.currentIndex < state.mediaList.length - 1
+                              ? () => _viewModel.nextMedia()
+                              : null,
+                      icon: Icon(
+                        Icons.chevron_right,
+                        color: colorScheme.onSurface,
+                        size: 48,
+                      ),
                     ),
                   ),
                 ),
@@ -214,15 +243,25 @@ class _FullScreenViewerScreenState
     final colorScheme = Theme.of(context).colorScheme;
 
     return GestureDetector(
-      onTap: () => setState(() => _showControls = !_showControls),
+      onTap: () {
+        _ensureFocus();
+        setState(() => _showControls = !_showControls);
+      },
       onDoubleTap: () =>
           Navigator.of(context).pop(), // Double-tap to exit full-screen
-      onLongPress: () => _showMediaInfo(media), // Long-press to show media info
-      onSecondaryTap: () => _showContextMenu(media), // Right-click context menu
+      onLongPress: () {
+        _ensureFocus();
+        _showMediaInfo(media); // Long-press to show media info
+      },
+      onSecondaryTap: () {
+        _ensureFocus();
+        _showContextMenu(media); // Right-click context menu
+      },
       child: MouseRegion(
         onHover: (_) {
           _hideControlsTimer?.cancel();
           setState(() => _showControls = true);
+          _ensureFocus();
         },
         onExit: (_) {
           _hideControlsTimer?.cancel();
@@ -340,6 +379,12 @@ class _FullScreenViewerScreenState
   void _handleSeek(Duration position) {
     _videoPlayerKey.currentState?.seekTo(position);
     _viewModel.seekTo(position);
+  }
+
+  void _ensureFocus() {
+    if (!_focusNode.hasFocus) {
+      _focusNode.requestFocus();
+    }
   }
 
   Widget _buildPermissionRevoked() {
