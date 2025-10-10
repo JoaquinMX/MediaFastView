@@ -59,6 +59,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
     final state = ref.watch(mediaViewModelProvider(_params!));
     _viewModel = ref.read(mediaViewModelProvider(_params!).notifier);
+    final currentSortOption = state is MediaLoaded
+        ? state.sortOption
+        : MediaSortOption.nameAscending;
 
     return Scaffold(
       appBar: AppBar(
@@ -68,6 +71,34 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                icon: const Icon(Icons.tag),
                tooltip: 'Manage Tags',
                onPressed: () => TagManagementDialog.show(context),
+             ),
+             PopupMenuButton<MediaSortOption>(
+               icon: const Icon(Icons.sort),
+               tooltip: 'Sort media',
+               initialValue: currentSortOption,
+               onSelected: _viewModel!.sortMedia,
+               itemBuilder: (context) {
+                 return MediaSortOption.values.map((option) {
+                   final isSelected = option == currentSortOption;
+                   return PopupMenuItem<MediaSortOption>(
+                     value: option,
+                     child: Row(
+                       children: [
+                         if (isSelected)
+                           Icon(
+                             Icons.check,
+                             size: UiSizing.iconSmall,
+                             color: Theme.of(context).colorScheme.primary,
+                           )
+                         else
+                           const SizedBox(width: UiSizing.iconSmall),
+                         SizedBox(width: UiSpacing.smallGap),
+                         Text(option.label),
+                       ],
+                     ),
+                   );
+                 }).toList();
+               },
              ),
              IconButton(
                icon: const Icon(Icons.view_module),

@@ -34,6 +34,12 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
+    final currentSortOption = switch (state) {
+      DirectoryLoaded(:final sortOption) => sortOption,
+      DirectoryPermissionRevoked(:final sortOption) => sortOption,
+      DirectoryBookmarkInvalid(:final sortOption) => sortOption,
+      _ => DirectorySortOption.nameAscending,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -46,6 +52,34 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
           IconButton(
             icon: const Icon(Icons.tag),
             onPressed: () => TagCreationDialog.show(context),
+          ),
+          PopupMenuButton<DirectorySortOption>(
+            icon: const Icon(Icons.sort),
+            tooltip: 'Sort directories',
+            initialValue: currentSortOption,
+            onSelected: viewModel.sortDirectories,
+            itemBuilder: (context) {
+              return DirectorySortOption.values.map((option) {
+                final isSelected = option == currentSortOption;
+                return PopupMenuItem<DirectorySortOption>(
+                  value: option,
+                  child: Row(
+                    children: [
+                      if (isSelected)
+                        Icon(
+                          Icons.check,
+                          size: UiSizing.iconSmall,
+                          color: Theme.of(context).colorScheme.primary,
+                        )
+                      else
+                        const SizedBox(width: UiSizing.iconSmall),
+                      SizedBox(width: UiSpacing.smallGap),
+                      Text(option.label),
+                    ],
+                  ),
+                );
+              }).toList();
+            },
           ),
           IconButton(
             icon: const Icon(Icons.view_module),
