@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../view_models/slideshow_view_model.dart';
@@ -164,7 +165,36 @@ class SlideshowControls extends StatelessWidget {
           ),
           Row(
             children: [
-              const Icon(Icons.timer, color: Colors.white),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.timer, color: Colors.white),
+                tooltip: 'Adjust duration range',
+                onPressed: () async {
+                  final updatedRange = await _showDurationSettingsDialog(
+                    context,
+                    minSeconds,
+                    maxSeconds,
+                  );
+
+                  if (updatedRange == null) {
+                    return;
+                  }
+
+                  final minValue = updatedRange.minSeconds;
+                  final maxValue = updatedRange.maxSeconds;
+
+                  AppConfig.slideshowMinDuration =
+                      Duration(seconds: minValue);
+                  AppConfig.slideshowMaxDuration =
+                      Duration(seconds: maxValue);
+
+                  final targetSeconds = currentSeconds
+                      .clamp(minValue, maxValue)
+                      .toInt();
+                  onDurationSelected(Duration(seconds: targetSeconds));
+                },
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: SliderTheme(
@@ -195,6 +225,113 @@ class SlideshowControls extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<({int minSeconds, int maxSeconds})?> _showDurationSettingsDialog(
+    BuildContext context,
+    int initialMin,
+    int initialMax,
+  ) async {
+    final minController =
+        TextEditingController(text: initialMin.toString());
+    final maxController =
+        TextEditingController(text: initialMax.toString());
+    String? errorText;
+
+    final result = await showDialog<({int minSeconds, int maxSeconds})>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Set slide duration range'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: minController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Minimum seconds',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: maxController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Maximum seconds',
+                    ),
+                  ),
+                  if (errorText != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        errorText!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final minValue = int.tryParse(minController.text);
+                    final maxValue = int.tryParse(maxController.text);
+
+                    if (minValue == null || maxValue == null) {
+                      setState(() {
+                        errorText = 'Please enter valid numbers.';
+                      });
+                      return;
+                    }
+
+                    if (minValue < 1) {
+                      setState(() {
+                        errorText =
+                            'Minimum duration must be at least 1 second.';
+                      });
+                      return;
+                    }
+
+                    if (maxValue <= minValue) {
+                      setState(() {
+                        errorText =
+                            'Maximum duration must be greater than minimum.';
+                      });
+                      return;
+                    }
+
+                    Navigator.of(dialogContext).pop((
+                      minSeconds: minValue,
+                      maxSeconds: maxValue,
+                    ));
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    minController.dispose();
+    maxController.dispose();
+    return result;
   }
 
   Widget _buildProgressBar() {
