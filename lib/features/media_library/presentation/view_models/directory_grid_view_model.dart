@@ -24,11 +24,11 @@ enum DirectorySortOption {
 
 extension DirectorySortOptionX on DirectorySortOption {
   String get label => switch (this) {
-        DirectorySortOption.nameAscending => 'Name (A-Z)',
-        DirectorySortOption.nameDescending => 'Name (Z-A)',
-        DirectorySortOption.lastModifiedDescending => 'Last Modified (Newest)',
-        DirectorySortOption.lastModifiedAscending => 'Last Modified (Oldest)',
-      };
+    DirectorySortOption.nameAscending => 'Name (A-Z)',
+    DirectorySortOption.nameDescending => 'Name (Z-A)',
+    DirectorySortOption.lastModifiedDescending => 'Last Modified (Newest)',
+    DirectorySortOption.lastModifiedAscending => 'Last Modified (Oldest)',
+  };
 }
 
 /// Sealed class representing the state of the directory grid.
@@ -76,8 +76,7 @@ class DirectoryLoaded extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
-      selectedDirectoryIds:
-          selectedDirectoryIds ?? this.selectedDirectoryIds,
+      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
@@ -136,8 +135,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
-      selectedDirectoryIds:
-          selectedDirectoryIds ?? this.selectedDirectoryIds,
+      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
@@ -183,8 +181,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
-      selectedDirectoryIds:
-          selectedDirectoryIds ?? this.selectedDirectoryIds,
+      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
@@ -203,17 +200,15 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     this._permissionService,
   ) : super(const DirectoryLoading()) {
     _currentColumns = _ref.read(gridColumnsProvider);
-    _gridColumnsSubscription = _ref.listen<int>(
-      gridColumnsProvider,
-      (_, next) {
-        _currentColumns = next;
-        if (state case DirectoryLoaded() ||
-            DirectoryPermissionRevoked() ||
-            DirectoryBookmarkInvalid()) {
-          _emitFilteredState();
-        }
-      },
-    );
+    _gridColumnsSubscription = _ref.listen<int>(gridColumnsProvider, (_, next) {
+      _currentColumns = next;
+      if (state
+          case DirectoryLoaded() ||
+              DirectoryPermissionRevoked() ||
+              DirectoryBookmarkInvalid()) {
+        _emitFilteredState();
+      }
+    });
     loadDirectories();
   }
 
@@ -238,7 +233,8 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   bool _isSelectionMode = false;
 
   DirectorySortOption get currentSortOption => _currentSortOption;
-  Set<String> get selectedDirectoryIds => Set<String>.unmodifiable(_selectedDirectoryIds);
+  Set<String> get selectedDirectoryIds =>
+      Set<String>.unmodifiable(_selectedDirectoryIds);
   bool get isSelectionMode => _isSelectionMode;
   int get selectedDirectoryCount => _selectedDirectoryIds.length;
 
@@ -260,10 +256,16 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   /// Selects a specific set of directory IDs. When [append] is true the IDs
   /// are merged with the existing selection, otherwise the selection is
   /// replaced entirely.
-  void selectDirectoryRange(Iterable<String> directoryIds, {bool append = false}) {
-    final updated = append
-        ? Set<String>.from(_selectedDirectoryIds)..addAll(directoryIds)
-        : Set<String>.from(directoryIds);
+  void selectDirectoryRange(
+    Iterable<String> directoryIds, {
+    bool append = false,
+  }) {
+    Set<String> updated = Set<String>.from(_selectedDirectoryIds);
+    if (append) {
+      updated.addAll(directoryIds);
+    } else {
+      Set<String>.from(directoryIds);
+    }
     _applySelectionUpdate(updated);
   }
 
@@ -318,29 +320,41 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     try {
       LoggingService.instance.debug('Fetching directories from use case');
       final directories = await _getDirectoriesUseCase();
-      LoggingService.instance.debug('Retrieved ${directories.length} directories from use case');
+      LoggingService.instance.debug(
+        'Retrieved ${directories.length} directories from use case',
+      );
 
       // Separate accessible and inaccessible directories
       final accessibleDirectories = <DirectoryEntity>[];
       final inaccessibleDirectories = <DirectoryEntity>[];
 
-      LoggingService.instance.debug('Checking directory accessibility for ${directories.length} directories');
+      LoggingService.instance.debug(
+        'Checking directory accessibility for ${directories.length} directories',
+      );
       for (final directory in directories) {
         try {
           if (await _isDirectoryAccessible(directory)) {
             accessibleDirectories.add(directory);
-            LoggingService.instance.debug('Directory ${directory.path} is accessible');
+            LoggingService.instance.debug(
+              'Directory ${directory.path} is accessible',
+            );
           } else {
             inaccessibleDirectories.add(directory);
-            LoggingService.instance.debug('Directory ${directory.path} is not accessible');
+            LoggingService.instance.debug(
+              'Directory ${directory.path} is not accessible',
+            );
           }
         } catch (e) {
-          LoggingService.instance.warning('Error checking accessibility for directory ${directory.path}: $e');
+          LoggingService.instance.warning(
+            'Error checking accessibility for directory ${directory.path}: $e',
+          );
           inaccessibleDirectories.add(directory);
         }
       }
 
-      LoggingService.instance.debug('Accessibility check complete: ${accessibleDirectories.length} accessible, ${inaccessibleDirectories.length} inaccessible');
+      LoggingService.instance.debug(
+        'Accessibility check complete: ${accessibleDirectories.length} accessible, ${inaccessibleDirectories.length} inaccessible',
+      );
 
       if (accessibleDirectories.isEmpty && inaccessibleDirectories.isEmpty) {
         LoggingService.instance.info('Setting state to DirectoryEmpty');
@@ -353,22 +367,37 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         _resetFilters();
         state = const DirectoryEmpty();
       } else {
-        if (accessibleDirectories.isNotEmpty && inaccessibleDirectories.isEmpty) {
-          LoggingService.instance.info('Setting state to DirectoryLoaded with ${accessibleDirectories.length} directories');
+        if (accessibleDirectories.isNotEmpty &&
+            inaccessibleDirectories.isEmpty) {
+          LoggingService.instance.info(
+            'Setting state to DirectoryLoaded with ${accessibleDirectories.length} directories',
+          );
           LoggingService.instance.debug('Directory details:');
           for (final dir in accessibleDirectories) {
-            LoggingService.instance.debug('  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}');
+            LoggingService.instance.debug(
+              '  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}',
+            );
           }
-          _updateDirectoryCaches(accessible: accessibleDirectories, inaccessible: const [], invalid: const []);
+          _updateDirectoryCaches(
+            accessible: accessibleDirectories,
+            inaccessible: const [],
+            invalid: const [],
+          );
         } else {
-          LoggingService.instance.info('Setting state to DirectoryPermissionRevoked: ${accessibleDirectories.length} accessible, ${inaccessibleDirectories.length} inaccessible');
+          LoggingService.instance.info(
+            'Setting state to DirectoryPermissionRevoked: ${accessibleDirectories.length} accessible, ${inaccessibleDirectories.length} inaccessible',
+          );
           LoggingService.instance.debug('Accessible directory details:');
           for (final dir in accessibleDirectories) {
-            LoggingService.instance.debug('  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}');
+            LoggingService.instance.debug(
+              '  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}',
+            );
           }
           LoggingService.instance.debug('Inaccessible directory details:');
           for (final dir in inaccessibleDirectories) {
-            LoggingService.instance.debug('  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}');
+            LoggingService.instance.debug(
+              '  Directory: ${dir.name} (id: ${dir.id}), tagIds: ${dir.tagIds}',
+            );
           }
           _updateDirectoryCaches(
             accessible: accessibleDirectories,
@@ -383,7 +412,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     } catch (e) {
       LoggingService.instance.error('Error in loadDirectories: $e');
       if (e is BookmarkInvalidError) {
-        LoggingService.instance.info('Handling BookmarkInvalidError for directory ${e.directoryPath}');
+        LoggingService.instance.info(
+          'Handling BookmarkInvalidError for directory ${e.directoryPath}',
+        );
         // Set to bookmark invalid state
         final invalidDirectory = DirectoryEntity(
           id: e.directoryId,
@@ -403,14 +434,18 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         _resetFilters();
         _emitFilteredState();
       } else {
-        LoggingService.instance.error('Setting state to DirectoryError: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}');
+        LoggingService.instance.error(
+          'Setting state to DirectoryError: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}',
+        );
         _updateDirectoryCaches(
           accessible: const [],
           inaccessible: const [],
           invalid: const [],
         );
         _clearSelectionInternal();
-        state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
+        state = DirectoryError(
+          ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)),
+        );
       }
     }
   }
@@ -425,7 +460,10 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     };
     _currentColumns = previousColumns;
     _currentSearchQuery = query;
-    if (state case DirectoryLoaded() || DirectoryPermissionRevoked() || DirectoryBookmarkInvalid()) {
+    if (state
+        case DirectoryLoaded() ||
+            DirectoryPermissionRevoked() ||
+            DirectoryBookmarkInvalid()) {
       _emitFilteredState();
     }
   }
@@ -443,7 +481,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     };
     _currentColumns = previousColumns;
     _currentSelectedTagIds = List<String>.unmodifiable(tagIds);
-    LoggingService.instance.info('filterByTags completed. New selectedTagIds: $tagIds');
+    LoggingService.instance.info(
+      'filterByTags completed. New selectedTagIds: $tagIds',
+    );
     _emitFilteredState();
   }
 
@@ -471,15 +511,24 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
   void _emitFilteredState() {
     final filteredAccessible = _applySearchIfNeeded(
-      _filterDirectoriesByTags(_cachedAccessibleDirectories, _currentSelectedTagIds),
+      _filterDirectoriesByTags(
+        _cachedAccessibleDirectories,
+        _currentSelectedTagIds,
+      ),
       _currentSearchQuery,
     );
     final filteredInaccessible = _applySearchIfNeeded(
-      _filterDirectoriesByTags(_cachedInaccessibleDirectories, _currentSelectedTagIds),
+      _filterDirectoriesByTags(
+        _cachedInaccessibleDirectories,
+        _currentSelectedTagIds,
+      ),
       _currentSearchQuery,
     );
     final filteredInvalid = _applySearchIfNeeded(
-      _filterDirectoriesByTags(_cachedInvalidDirectories, _currentSelectedTagIds),
+      _filterDirectoriesByTags(
+        _cachedInvalidDirectories,
+        _currentSelectedTagIds,
+      ),
       _currentSearchQuery,
     );
 
@@ -552,7 +601,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   /// Sets the number of columns for the grid.
   void setColumns(int columns) {
     final clampedColumns = columns.clamp(2, 12);
-    final newColumns = clampedColumns is int ? clampedColumns : clampedColumns.toInt();
+    final newColumns = clampedColumns is int
+        ? clampedColumns
+        : clampedColumns.toInt();
     _ref.read(gridColumnsProvider.notifier).setColumns(newColumns);
   }
 
@@ -563,7 +614,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       await _addDirectoryUseCase(path, silent: silent);
       await loadDirectories(); // Reload to show the new directory
     } catch (e) {
-      state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
+      state = DirectoryError(
+        ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)),
+      );
     }
   }
 
@@ -584,14 +637,21 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       await _addDirectoryUseCase(directoryPath);
       await loadDirectories(); // Reload to show the re-added directory
     } catch (e) {
-      state = DirectoryError('Failed to re-grant permissions: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}');
+      state = DirectoryError(
+        'Failed to re-grant permissions: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}',
+      );
     }
   }
 
   /// Recovers access to a directory with invalid bookmark by prompting user to re-select.
-  Future<void> recoverDirectoryBookmark(String directoryId, String directoryPath) async {
+  Future<void> recoverDirectoryBookmark(
+    String directoryId,
+    String directoryPath,
+  ) async {
     try {
-      final recoveryResult = await _permissionService.recoverDirectoryAccess(directoryPath);
+      final recoveryResult = await _permissionService.recoverDirectoryAccess(
+        directoryPath,
+      );
       if (recoveryResult != null) {
         // Remove the old directory entry
         await _removeDirectoryUseCase(directoryId);
@@ -600,7 +660,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         await loadDirectories(); // Reload to reflect the changes
       }
     } catch (e) {
-      state = DirectoryError('Failed to recover directory access: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}');
+      state = DirectoryError(
+        'Failed to recover directory access: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}',
+      );
     }
   }
 
@@ -610,12 +672,18 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     try {
       LoggingService.instance.debug('Calling clear directories use case');
       await _clearDirectoriesUseCase();
-      LoggingService.instance.debug('Clear directories use case completed, reloading directories');
+      LoggingService.instance.debug(
+        'Clear directories use case completed, reloading directories',
+      );
       await loadDirectories(); // Reload to show empty state
-      LoggingService.instance.info('Directory cache clear operation completed successfully');
+      LoggingService.instance.info(
+        'Directory cache clear operation completed successfully',
+      );
     } catch (e) {
       LoggingService.instance.error('Failed to clear directory cache: $e');
-      state = DirectoryError('Failed to clear directory cache: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}');
+      state = DirectoryError(
+        'Failed to clear directory cache: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}',
+      );
     }
   }
 
@@ -624,10 +692,14 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     List<DirectoryEntity> directories,
     List<String> tagIds,
   ) {
-    LoggingService.instance.debug('_filterDirectoriesByTags called with ${directories.length} directories and tagIds: $tagIds');
+    LoggingService.instance.debug(
+      '_filterDirectoriesByTags called with ${directories.length} directories and tagIds: $tagIds',
+    );
 
     if (tagIds.isEmpty) {
-      LoggingService.instance.debug('tagIds is empty, returning all ${directories.length} directories (no filtering)');
+      LoggingService.instance.debug(
+        'tagIds is empty, returning all ${directories.length} directories (no filtering)',
+      );
       return directories;
     }
 
@@ -636,16 +708,24 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         .where((dir) => dir.tagIds.any((tagId) => tagIds.contains(tagId)))
         .toList();
 
-    LoggingService.instance.debug('Filtering result: ${filtered.length} directories match out of ${directories.length}');
+    LoggingService.instance.debug(
+      'Filtering result: ${filtered.length} directories match out of ${directories.length}',
+    );
     LoggingService.instance.debug('Directories that passed filter:');
     for (final dir in filtered) {
-      LoggingService.instance.debug('  ${dir.name}: tagIds=${dir.tagIds}, matched tagIds=${tagIds.where((tagId) => dir.tagIds.contains(tagId)).toList()}');
+      LoggingService.instance.debug(
+        '  ${dir.name}: tagIds=${dir.tagIds}, matched tagIds=${tagIds.where((tagId) => dir.tagIds.contains(tagId)).toList()}',
+      );
     }
 
     LoggingService.instance.debug('Directories that were filtered out:');
-    final filteredOut = directories.where((dir) => !dir.tagIds.any((tagId) => tagIds.contains(tagId))).toList();
+    final filteredOut = directories
+        .where((dir) => !dir.tagIds.any((tagId) => tagIds.contains(tagId)))
+        .toList();
     for (final dir in filteredOut) {
-      LoggingService.instance.debug('  ${dir.name}: tagIds=${dir.tagIds}, no match with selected tagIds=$tagIds');
+      LoggingService.instance.debug(
+        '  ${dir.name}: tagIds=${dir.tagIds}, no match with selected tagIds=$tagIds',
+      );
     }
 
     return filtered;
@@ -655,11 +735,17 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   Future<bool> _isDirectoryAccessible(DirectoryEntity directory) async {
     try {
       LoggingService.instance.debug('Validating directory: ${directory.path}');
-      final result = await _localDirectoryDataSource.validateDirectory(directory);
-      LoggingService.instance.debug('Directory validation result for ${directory.path}: $result');
+      final result = await _localDirectoryDataSource.validateDirectory(
+        directory,
+      );
+      LoggingService.instance.debug(
+        'Directory validation result for ${directory.path}: $result',
+      );
       return result;
     } catch (e) {
-      LoggingService.instance.error('Error validating directory ${directory.path}: $e');
+      LoggingService.instance.error(
+        'Error validating directory ${directory.path}: $e',
+      );
       rethrow;
     }
   }
@@ -713,18 +799,18 @@ final directoryViewModelProvider =
     );
 
 Set<String> _extractDirectorySelection(DirectoryState state) => switch (state) {
-      DirectoryLoaded(selectedDirectoryIds: final ids) => ids,
-      DirectoryPermissionRevoked(selectedDirectoryIds: final ids) => ids,
-      DirectoryBookmarkInvalid(selectedDirectoryIds: final ids) => ids,
-      _ => const <String>{},
-    };
+  DirectoryLoaded(selectedDirectoryIds: final ids) => ids,
+  DirectoryPermissionRevoked(selectedDirectoryIds: final ids) => ids,
+  DirectoryBookmarkInvalid(selectedDirectoryIds: final ids) => ids,
+  _ => const <String>{},
+};
 
 bool _extractDirectorySelectionMode(DirectoryState state) => switch (state) {
-      DirectoryLoaded(isSelectionMode: final mode) => mode,
-      DirectoryPermissionRevoked(isSelectionMode: final mode) => mode,
-      DirectoryBookmarkInvalid(isSelectionMode: final mode) => mode,
-      _ => false,
-    };
+  DirectoryLoaded(isSelectionMode: final mode) => mode,
+  DirectoryPermissionRevoked(isSelectionMode: final mode) => mode,
+  DirectoryBookmarkInvalid(isSelectionMode: final mode) => mode,
+  _ => false,
+};
 
 /// Provider exposing the current set of selected directory IDs.
 final selectedDirectoryIdsProvider = Provider.autoDispose<Set<String>>((ref) {

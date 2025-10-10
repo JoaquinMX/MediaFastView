@@ -177,9 +177,13 @@ class MediaViewModel extends StateNotifier<MediaState> {
   /// Selects a set of media IDs, optionally appending to the current
   /// selection when [append] is true.
   void selectMediaRange(Iterable<String> mediaIds, {bool append = false}) {
-    final updated = append
-        ? Set<String>.from(_selectedMediaIds)..addAll(mediaIds)
-        : Set<String>.from(mediaIds);
+    Set<String> updated = Set<String>.from(_selectedMediaIds);
+    if (append) {
+      updated.addAll(mediaIds);
+    }
+    else {
+      updated = Set<String>.from(mediaIds);
+    }
     _applySelectionUpdate(updated);
   }
 
