@@ -13,6 +13,8 @@ class AppConfig {
   static const String _fileNamingPatternKey = 'fileNamingPattern';
   static const String _cacheMaxSizeKey = 'cacheMaxSize';
   static const String _cacheExpirationKey = 'cacheExpiration';
+  static const String _slideshowMinDurationKey = 'slideshowMinDuration';
+  static const String _slideshowMaxDurationKey = 'slideshowMaxDuration';
 
   // Default values
   static const int defaultGridColumns = 3;
@@ -22,6 +24,8 @@ class AppConfig {
   static const String defaultFileNamingPattern = '{name}_{date}';
   static const int defaultCacheMaxSize = 100 * 1024 * 1024; // 100 MB
   static const Duration defaultCacheExpiration = Duration(days: 1);
+  static const Duration defaultSlideshowMinDuration = Duration(seconds: 2);
+  static const Duration defaultSlideshowMaxDuration = Duration(seconds: 15);
 
   // File size formatting constants
   static const int kbBytes = 1024;
@@ -117,6 +121,30 @@ class AppConfig {
     _prefs?.setInt(_cacheExpirationKey, value.inMilliseconds);
   }
 
+  /// Get the minimum slideshow duration.
+  static Duration get slideshowMinDuration {
+    final ms = _prefs?.getInt(_slideshowMinDurationKey) ??
+        defaultSlideshowMinDuration.inMilliseconds;
+    return Duration(milliseconds: ms);
+  }
+
+  /// Set the minimum slideshow duration.
+  static set slideshowMinDuration(Duration value) {
+    _prefs?.setInt(_slideshowMinDurationKey, value.inMilliseconds);
+  }
+
+  /// Get the maximum slideshow duration.
+  static Duration get slideshowMaxDuration {
+    final ms = _prefs?.getInt(_slideshowMaxDurationKey) ??
+        defaultSlideshowMaxDuration.inMilliseconds;
+    return Duration(milliseconds: ms);
+  }
+
+  /// Set the maximum slideshow duration.
+  static set slideshowMaxDuration(Duration value) {
+    _prefs?.setInt(_slideshowMaxDurationKey, value.inMilliseconds);
+  }
+
   /// Reset all configuration values to defaults.
   static void resetToDefaults() {
     gridColumns = defaultGridColumns;
@@ -126,5 +154,7 @@ class AppConfig {
     fileNamingPattern = defaultFileNamingPattern;
     cacheMaxSize = defaultCacheMaxSize;
     cacheExpiration = defaultCacheExpiration;
+    slideshowMinDuration = defaultSlideshowMinDuration;
+    slideshowMaxDuration = defaultSlideshowMaxDuration;
   }
 }
