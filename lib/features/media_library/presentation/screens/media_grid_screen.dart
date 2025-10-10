@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../shared/providers/grid_columns_provider.dart';
 
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
 import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
@@ -70,7 +71,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
              ),
              IconButton(
                icon: const Icon(Icons.view_module),
-               onPressed: () => _showColumnSelector(context, _viewModel!, state),
+               onPressed: () => _showColumnSelector(context),
              ),
            ],
       ),
@@ -279,23 +280,18 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
   }
 
-  void _showColumnSelector(
-    BuildContext context,
-    MediaViewModel viewModel,
-    MediaState state,
-  ) {
-    if (state is MediaLoaded) {
-      showDialog(
-        context: context,
-        builder: (context) => ColumnSelectorPopup(
-          currentColumns: state.columns,
-          onColumnsSelected: (columns) {
-            viewModel.setColumns(columns);
-            Navigator.of(context).pop();
-          },
-        ),
-      );
-    }
+  void _showColumnSelector(BuildContext context) {
+    final currentColumns = ref.read(gridColumnsProvider);
+    showDialog(
+      context: context,
+      builder: (context) => ColumnSelectorPopup(
+        currentColumns: currentColumns,
+        onColumnsSelected: (columns) {
+          _viewModel?.setColumns(columns);
+          Navigator.of(context).pop();
+        },
+      ),
+    );
   }
 
   void _onMediaTap(BuildContext context, MediaEntity media) {
