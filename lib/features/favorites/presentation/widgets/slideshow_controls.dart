@@ -12,6 +12,8 @@ class SlideshowControls extends StatelessWidget {
     required this.onPrevious,
     required this.onToggleLoop,
     required this.onToggleMute,
+    required this.onToggleShuffle,
+    required this.onDurationSelected,
   });
 
   final SlideshowState state;
@@ -20,48 +22,45 @@ class SlideshowControls extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onToggleLoop;
   final VoidCallback onToggleMute;
+  final VoidCallback onToggleShuffle;
+  final ValueChanged<Duration> onDurationSelected;
+
+  static const List<Duration> _durationOptions = <Duration>[
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+    Duration(seconds: 15),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Previous button
         IconButton(
           icon: const Icon(Icons.skip_previous, color: Colors.white),
           onPressed: onPrevious,
           tooltip: 'Previous',
           iconSize: 32,
         ),
-
         const SizedBox(width: 16),
-
-        // Play/Pause button
         _buildPlayPauseButton(),
-
         const SizedBox(width: 16),
-
-        // Next button
         IconButton(
           icon: const Icon(Icons.skip_next, color: Colors.white),
           onPressed: onNext,
           tooltip: 'Next',
           iconSize: 32,
         ),
-
         const SizedBox(width: 32),
-
-        // Loop toggle
         _buildLoopButton(),
-
         const SizedBox(width: 16),
-
-        // Mute toggle
+        _buildShuffleButton(),
+        const SizedBox(width: 16),
         _buildMuteButton(),
-
         const SizedBox(width: 32),
-
-        // Progress bar (for video controls)
+        _buildDurationMenu(),
+        const SizedBox(width: 32),
         if (_isVideoState()) _buildProgressBar(),
       ],
     );
@@ -99,6 +98,23 @@ class SlideshowControls extends StatelessWidget {
     );
   }
 
+  Widget _buildShuffleButton() {
+    final isShuffled = switch (state) {
+      SlideshowPlaying(:final isShuffleEnabled) => isShuffleEnabled,
+      SlideshowPaused(:final isShuffleEnabled) => isShuffleEnabled,
+      _ => false,
+    };
+
+    return IconButton(
+      icon: Icon(
+        Icons.shuffle,
+        color: isShuffled ? Colors.blue : Colors.white,
+      ),
+      onPressed: onToggleShuffle,
+      tooltip: isShuffled ? 'Disable shuffle' : 'Enable shuffle',
+    );
+  }
+
   Widget _buildMuteButton() {
     final isMuted = switch (state) {
       SlideshowPlaying(:final isMuted) => isMuted,
@@ -113,6 +129,55 @@ class SlideshowControls extends StatelessWidget {
       ),
       onPressed: onToggleMute,
       tooltip: isMuted ? 'Unmute' : 'Mute',
+    );
+  }
+
+  Widget _buildDurationMenu() {
+    final currentDuration = switch (state) {
+      SlideshowPlaying(:final imageDisplayDuration) => imageDisplayDuration,
+      SlideshowPaused(:final imageDisplayDuration) => imageDisplayDuration,
+      _ => _durationOptions.elementAt(1),
+    };
+
+    return PopupMenuButton<Duration>(
+      tooltip: 'Slide duration',
+      onSelected: onDurationSelected,
+      itemBuilder: (context) {
+        return _durationOptions
+            .map(
+              (duration) => PopupMenuItem<Duration>(
+                value: duration,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('${duration.inSeconds} seconds'),
+                    if (duration == currentDuration)
+                      const Icon(Icons.check, size: 16),
+                  ],
+                ),
+              ),
+            )
+            .toList();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.timer, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              '${currentDuration.inSeconds}s',
+              style: const TextStyle(color: Colors.white),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.white),
+          ],
+        ),
+      ),
     );
   }
 
