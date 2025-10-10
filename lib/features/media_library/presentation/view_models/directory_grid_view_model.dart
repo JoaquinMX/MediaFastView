@@ -19,13 +19,15 @@ enum DirectorySortOption {
   nameAscending,
   nameDescending,
   lastModifiedDescending,
+  lastModifiedAscending,
 }
 
 extension DirectorySortOptionX on DirectorySortOption {
   String get label => switch (this) {
         DirectorySortOption.nameAscending => 'Name (A-Z)',
         DirectorySortOption.nameDescending => 'Name (Z-A)',
-        DirectorySortOption.lastModifiedDescending => 'Last Modified',
+        DirectorySortOption.lastModifiedDescending => 'Last Modified (Newest)',
+        DirectorySortOption.lastModifiedAscending => 'Last Modified (Oldest)',
       };
 }
 
@@ -572,6 +574,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         break;
       case DirectorySortOption.lastModifiedDescending:
         sorted.sort((a, b) => b.lastModified.compareTo(a.lastModified));
+        break;
+      case DirectorySortOption.lastModifiedAscending:
+        sorted.sort((a, b) => a.lastModified.compareTo(b.lastModified));
         break;
     }
     return sorted;

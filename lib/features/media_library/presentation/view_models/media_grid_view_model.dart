@@ -18,6 +18,7 @@ enum MediaSortOption {
   nameAscending,
   nameDescending,
   lastModifiedDescending,
+  lastModifiedAscending,
   sizeDescending,
 }
 
@@ -25,7 +26,8 @@ extension MediaSortOptionX on MediaSortOption {
   String get label => switch (this) {
         MediaSortOption.nameAscending => 'Name (A-Z)',
         MediaSortOption.nameDescending => 'Name (Z-A)',
-        MediaSortOption.lastModifiedDescending => 'Last Modified',
+        MediaSortOption.lastModifiedDescending => 'Last Modified (Newest)',
+        MediaSortOption.lastModifiedAscending => 'Last Modified (Oldest)',
         MediaSortOption.sizeDescending => 'Size',
       };
 }
@@ -508,6 +510,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
         break;
       case MediaSortOption.lastModifiedDescending:
         sorted.sort((a, b) => b.lastModified.compareTo(a.lastModified));
+        break;
+      case MediaSortOption.lastModifiedAscending:
+        sorted.sort((a, b) => a.lastModified.compareTo(b.lastModified));
         break;
       case MediaSortOption.sizeDescending:
         sorted.sort((a, b) => b.size.compareTo(a.size));
