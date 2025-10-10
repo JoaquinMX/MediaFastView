@@ -1,9 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/app_error.dart';
+import '../../../../core/error/error_handler.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/permission_service.dart';
+import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../data/data_sources/local_directory_data_source.dart';
 import '../../domain/entities/directory_entity.dart';
@@ -133,6 +134,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
 /// ViewModel for managing directory grid state and operations.
 class DirectoryViewModel extends StateNotifier<DirectoryState> {
   DirectoryViewModel(
+    this._ref,
     this._getDirectoriesUseCase,
     this._searchDirectoriesUseCase,
     this._addDirectoryUseCase,
@@ -141,9 +143,22 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     this._localDirectoryDataSource,
     this._permissionService,
   ) : super(const DirectoryLoading()) {
+    _currentColumns = _ref.read(gridColumnsProvider);
+    _gridColumnsSubscription = _ref.listen<int>(
+      gridColumnsProvider,
+      (_, next) {
+        _currentColumns = next;
+        if (state case DirectoryLoaded() ||
+            DirectoryPermissionRevoked() ||
+            DirectoryBookmarkInvalid()) {
+          _emitFilteredState();
+        }
+      },
+    );
     loadDirectories();
   }
 
+  final Ref _ref;
   final GetDirectoriesUseCase _getDirectoriesUseCase;
   final SearchDirectoriesUseCase _searchDirectoriesUseCase;
   final AddDirectoryUseCase _addDirectoryUseCase;
@@ -151,13 +166,20 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   final ClearDirectoriesUseCase _clearDirectoriesUseCase;
   final LocalDirectoryDataSource _localDirectoryDataSource;
   final PermissionService _permissionService;
+  late final ProviderSubscription<int> _gridColumnsSubscription;
 
   List<DirectoryEntity> _cachedAccessibleDirectories = const [];
   List<DirectoryEntity> _cachedInaccessibleDirectories = const [];
   List<DirectoryEntity> _cachedInvalidDirectories = const [];
   String _currentSearchQuery = '';
   List<String> _currentSelectedTagIds = const <String>[];
-  int _currentColumns = 3;
+  late int _currentColumns;
+
+  @override
+  void dispose() {
+    _gridColumnsSubscription.close();
+    super.dispose();
+  }
 
   /// Loads all directories.
   Future<void> loadDirectories() async {
@@ -310,7 +332,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   void _resetFilters() {
     _currentSearchQuery = '';
     _currentSelectedTagIds = const <String>[];
-    _currentColumns = 3;
+    _currentColumns = _ref.read(gridColumnsProvider);
   }
 
   void _emitFilteredState() {
@@ -376,10 +398,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
   /// Sets the number of columns for the grid.
   void setColumns(int columns) {
-    _currentColumns = columns;
-    if (state case DirectoryLoaded() || DirectoryPermissionRevoked() || DirectoryBookmarkInvalid()) {
-      _emitFilteredState();
-    }
+    final clampedColumns = columns.clamp(2, 12);
+    final newColumns = clampedColumns is int ? clampedColumns : clampedColumns.toInt();
+    _ref.read(gridColumnsProvider.notifier).setColumns(newColumns);
   }
 
   /// Adds a new directory.
@@ -495,6 +516,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 final directoryViewModelProvider =
     StateNotifierProvider.autoDispose<DirectoryViewModel, DirectoryState>(
       (ref) => DirectoryViewModel(
+        ref,
         ref.watch(getDirectoriesUseCaseProvider),
         ref.watch(searchDirectoriesUseCaseProvider),
         ref.watch(addDirectoryUseCaseProvider),

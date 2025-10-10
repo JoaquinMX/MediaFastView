@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
+import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/repositories/media_repository.dart';
 import '../../domain/entities/media_entity.dart';
@@ -85,6 +86,7 @@ class MediaPermissionRevoked extends MediaState {
 /// ViewModel for managing media grid state and operations.
 class MediaViewModel extends StateNotifier<MediaState> {
   MediaViewModel(
+    this._ref,
     this._params, {
     required MediaRepository mediaRepository,
     required SharedPreferencesMediaDataSource sharedPreferencesDataSource,
@@ -94,21 +96,33 @@ class MediaViewModel extends StateNotifier<MediaState> {
     _bookmarkData = _params.bookmarkData;
     _mediaRepository = mediaRepository;
     _sharedPreferencesDataSource = sharedPreferencesDataSource;
+    _gridColumnsSubscription = _ref.listen<int>(
+      gridColumnsProvider,
+      (_, next) => _applyColumnUpdate(next),
+    );
     loadMedia();
   }
 
+  final Ref _ref;
   late final MediaRepository _mediaRepository;
   late final SharedPreferencesMediaDataSource _sharedPreferencesDataSource;
   final MediaViewModelParams _params;
   late final String _directoryPath;
   late final String _directoryName;
   late final String? _bookmarkData;
+  late final ProviderSubscription<int> _gridColumnsSubscription;
 
   /// Gets the directory ID generated from the directory path.
   String get directoryId {
     final bytes = utf8.encode(_directoryPath);
     final digest = sha256.convert(bytes);
     return digest.toString();
+  }
+
+  @override
+  void dispose() {
+    _gridColumnsSubscription.close();
+    super.dispose();
   }
 
   /// Loads media for the current directory.
@@ -158,19 +172,19 @@ class MediaViewModel extends StateNotifier<MediaState> {
       LoggingService.instance.info('Media loading completed in ${totalTime.inMilliseconds}ms (scan: ${scanTime.inMilliseconds}ms, merge: ${mergeTime.inMilliseconds}ms, persist: ${persistTime.inMilliseconds}ms)');
 
       if (media.isEmpty) {
-          LoggingService.instance.info('No media found, setting empty state');
-          state = const MediaEmpty();
-        } else {
-          LoggingService.instance.info('Media loaded successfully, setting loaded state');
-          state = MediaLoaded(
-           media: media,
-           searchQuery: '',
-           selectedTagIds: const [],
-           columns: 3, // Default to 3 columns
-           currentDirectoryPath: _directoryPath,
-           currentDirectoryName: _directoryName,
-         );
-       }
+        LoggingService.instance.info('No media found, setting empty state');
+        state = const MediaEmpty();
+      } else {
+        LoggingService.instance.info('Media loaded successfully, setting loaded state');
+        state = MediaLoaded(
+          media: media,
+          searchQuery: '',
+          selectedTagIds: const [],
+          columns: _ref.read(gridColumnsProvider),
+          currentDirectoryPath: _directoryPath,
+          currentDirectoryName: _directoryName,
+        );
+      }
     } catch (e) {
         final totalTime = DateTime.now().difference(loadStartTime);
         LoggingService.instance.error('Error loading media after ${totalTime.inMilliseconds}ms: $e');
@@ -213,9 +227,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   /// Filters media by tag IDs.
   void filterByTags(List<String> tagIds) async {
-    final previousState = state;
-    final previousColumns =
-        previousState is MediaLoaded ? previousState.columns : 3;
+    final previousColumns = _ref.read(gridColumnsProvider);
     state = const MediaLoading();
     try {
       final media = await _mediaRepository.filterMediaByTagsForDirectory(
@@ -272,25 +284,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   /// Sets the number of columns for the grid.
   void setColumns(int columns) {
-    final clampedColumns = columns.clamp(1, 12);
-    state = switch (state) {
-      MediaLoaded(
-        :final media,
-        :final searchQuery,
-        :final selectedTagIds,
-        :final currentDirectoryPath,
-        :final currentDirectoryName,
-      ) =>
-        MediaLoaded(
-          media: media,
-          searchQuery: searchQuery,
-          selectedTagIds: selectedTagIds,
-          columns: clampedColumns,
-          currentDirectoryPath: currentDirectoryPath,
-          currentDirectoryName: currentDirectoryName,
-        ),
-      _ => state,
-    };
+    final clampedColumns = columns.clamp(2, 12);
+    final newColumns = clampedColumns is int ? clampedColumns : clampedColumns.toInt();
+    _ref.read(gridColumnsProvider.notifier).setColumns(newColumns);
   }
 
   /// Navigates to a subdirectory.
@@ -404,12 +400,30 @@ class MediaViewModel extends StateNotifier<MediaState> {
            errorMessage.contains('Permission denied') ||
            errorMessage.contains('FileSystemError');
   }
+
+  void _applyColumnUpdate(int columns) {
+    if (state case MediaLoaded(:final media,
+        :final searchQuery,
+        :final selectedTagIds,
+        :final currentDirectoryPath,
+        :final currentDirectoryName)) {
+      state = MediaLoaded(
+        media: media,
+        searchQuery: searchQuery,
+        selectedTagIds: selectedTagIds,
+        columns: columns,
+        currentDirectoryPath: currentDirectoryPath,
+        currentDirectoryName: currentDirectoryName,
+      );
+    }
+  }
 }
 
 /// Provider for MediaViewModel with auto-dispose.
 final mediaViewModelProvider = StateNotifierProvider.autoDispose
     .family<MediaViewModel, MediaState, MediaViewModelParams>(
       (ref, params) => MediaViewModel(
+        ref,
         params,
         mediaRepository: FilesystemMediaRepositoryImpl(
           ref.watch(bookmarkServiceProvider),
