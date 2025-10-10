@@ -12,7 +12,12 @@ class DirectorySearchBar extends ConsumerWidget {
     final state = ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
 
-    final searchQuery = state is DirectoryLoaded ? state.searchQuery : '';
+    final searchQuery = switch (state) {
+      DirectoryLoaded(:final searchQuery) => searchQuery,
+      DirectoryPermissionRevoked(:final searchQuery) => searchQuery,
+      DirectoryBookmarkInvalid(:final searchQuery) => searchQuery,
+      _ => '',
+    };
 
     return Padding(
       padding: const EdgeInsets.all(16),

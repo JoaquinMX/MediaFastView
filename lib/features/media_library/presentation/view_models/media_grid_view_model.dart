@@ -13,6 +13,23 @@ import '../../data/data_sources/local_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
 
+/// Defines the available sort options for media items.
+enum MediaSortOption {
+  nameAscending,
+  nameDescending,
+  lastModifiedDescending,
+  sizeDescending,
+}
+
+extension MediaSortOptionX on MediaSortOption {
+  String get label => switch (this) {
+        MediaSortOption.nameAscending => 'Name (A-Z)',
+        MediaSortOption.nameDescending => 'Name (Z-A)',
+        MediaSortOption.lastModifiedDescending => 'Last Modified',
+        MediaSortOption.sizeDescending => 'Size',
+      };
+}
+
 /// Sealed class representing the state of the media grid.
 sealed class MediaState {
   const MediaState();
@@ -32,6 +49,7 @@ class MediaLoaded extends MediaState {
     required this.columns,
     required this.currentDirectoryPath,
     required this.currentDirectoryName,
+    required this.sortOption,
   });
 
   final List<MediaEntity> media;
@@ -40,6 +58,7 @@ class MediaLoaded extends MediaState {
   final int columns;
   final String currentDirectoryPath;
   final String currentDirectoryName;
+  final MediaSortOption sortOption;
 
   MediaLoaded copyWith({
     List<MediaEntity>? media,
@@ -48,6 +67,7 @@ class MediaLoaded extends MediaState {
     int? columns,
     String? currentDirectoryPath,
     String? currentDirectoryName,
+    MediaSortOption? sortOption,
   }) {
     return MediaLoaded(
       media: media ?? this.media,
@@ -56,6 +76,7 @@ class MediaLoaded extends MediaState {
       columns: columns ?? this.columns,
       currentDirectoryPath: currentDirectoryPath ?? this.currentDirectoryPath,
       currentDirectoryName: currentDirectoryName ?? this.currentDirectoryName,
+      sortOption: sortOption ?? this.sortOption,
     );
   }
 }
@@ -111,6 +132,10 @@ class MediaViewModel extends StateNotifier<MediaState> {
   late final String _directoryName;
   late final String? _bookmarkData;
   late final ProviderSubscription<int> _gridColumnsSubscription;
+  List<MediaEntity> _cachedMedia = const [];
+  MediaSortOption _currentSortOption = MediaSortOption.nameAscending;
+
+  MediaSortOption get currentSortOption => _currentSortOption;
 
   /// Gets the directory ID generated from the directory path.
   String get directoryId {
@@ -171,58 +196,66 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final totalTime = DateTime.now().difference(loadStartTime);
       LoggingService.instance.info('Media loading completed in ${totalTime.inMilliseconds}ms (scan: ${scanTime.inMilliseconds}ms, merge: ${mergeTime.inMilliseconds}ms, persist: ${persistTime.inMilliseconds}ms)');
 
+      _cachedMedia = _sortMedia(media, _currentSortOption);
+
       if (media.isEmpty) {
         LoggingService.instance.info('No media found, setting empty state');
         state = const MediaEmpty();
       } else {
         LoggingService.instance.info('Media loaded successfully, setting loaded state');
         state = MediaLoaded(
-          media: media,
+          media: _cachedMedia,
           searchQuery: '',
           selectedTagIds: const [],
           columns: _ref.read(gridColumnsProvider),
           currentDirectoryPath: _directoryPath,
           currentDirectoryName: _directoryName,
+          sortOption: _currentSortOption,
         );
       }
     } catch (e) {
-        final totalTime = DateTime.now().difference(loadStartTime);
-        LoggingService.instance.error('Error loading media after ${totalTime.inMilliseconds}ms: $e');
-        // Check if this is a permission-related error
-        final errorMessage = e.toString();
-        if (_isPermissionError(errorMessage)) {
-          LoggingService.instance.warning('Permission error detected, setting permission revoked state');
-          state = MediaPermissionRevoked(
-           directoryPath: _directoryPath,
-           directoryName: _directoryName,
-         );
-       } else {
-         LoggingService.instance.error('Non-permission error, setting error state');
-         state = MediaError(errorMessage);
-       }
+      final totalTime = DateTime.now().difference(loadStartTime);
+      LoggingService.instance
+          .error('Error loading media after ${totalTime.inMilliseconds}ms: $e');
+      // Check if this is a permission-related error
+      final errorMessage = e.toString();
+      _cachedMedia = const [];
+      if (_isPermissionError(errorMessage)) {
+        LoggingService.instance.warning(
+          'Permission error detected, setting permission revoked state',
+        );
+        state = MediaPermissionRevoked(
+          directoryPath: _directoryPath,
+          directoryName: _directoryName,
+        );
+      } else {
+        LoggingService.instance
+            .error('Non-permission error, setting error state');
+        state = MediaError(errorMessage);
+      }
     }
   }
 
   /// Searches media by query.
   void searchMedia(String query) {
-    state = switch (state) {
-      MediaLoaded(
-        :final media,
-        :final selectedTagIds,
-        :final columns,
-        :final currentDirectoryPath,
-        :final currentDirectoryName,
-      ) =>
-        MediaLoaded(
-          media: _searchMedia(media, query),
-          searchQuery: query,
-          selectedTagIds: selectedTagIds,
-          columns: columns,
-          currentDirectoryPath: currentDirectoryPath,
-          currentDirectoryName: currentDirectoryName,
-        ),
-      _ => state,
-    };
+    if (state case MediaLoaded(
+      :final selectedTagIds,
+      :final columns,
+      :final currentDirectoryPath,
+      :final currentDirectoryName,
+      :final sortOption,
+    )) {
+      final results = _applySearch(_cachedMedia, query);
+      state = MediaLoaded(
+        media: results,
+        searchQuery: query,
+        selectedTagIds: selectedTagIds,
+        columns: columns,
+        currentDirectoryPath: currentDirectoryPath,
+        currentDirectoryName: currentDirectoryName,
+        sortOption: sortOption,
+      );
+    }
   }
 
   /// Filters media by tag IDs.
@@ -260,17 +293,21 @@ class MediaViewModel extends StateNotifier<MediaState> {
       // discarding media from other directories or filters
       await _sharedPreferencesDataSource.upsertMedia(mediaModels);
 
+      _cachedMedia = _sortMedia(media, _currentSortOption);
+
       state = MediaLoaded(
-        media: media,
+        media: _cachedMedia,
         searchQuery: '', // Reset search when filtering
         selectedTagIds: tagIds,
         columns: previousColumns,
         currentDirectoryPath: _directoryPath,
         currentDirectoryName: _directoryName,
+        sortOption: _currentSortOption,
       );
     } catch (e) {
       // Check if this is a permission-related error
       final errorMessage = e.toString();
+      _cachedMedia = const [];
       if (_isPermissionError(errorMessage)) {
         state = MediaPermissionRevoked(
           directoryPath: _directoryPath,
@@ -392,6 +429,13 @@ class MediaViewModel extends StateNotifier<MediaState> {
         .toList();
   }
 
+  List<MediaEntity> _applySearch(List<MediaEntity> media, String query) {
+    if (query.isEmpty) {
+      return List<MediaEntity>.from(media);
+    }
+    return _searchMedia(media, query);
+  }
+
 
   /// Helper method to check if an error is permission-related.
   bool _isPermissionError(String errorMessage) {
@@ -406,7 +450,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
         :final searchQuery,
         :final selectedTagIds,
         :final currentDirectoryPath,
-        :final currentDirectoryName)) {
+        :final currentDirectoryName,
+        :final sortOption)) {
       state = MediaLoaded(
         media: media,
         searchQuery: searchQuery,
@@ -414,8 +459,61 @@ class MediaViewModel extends StateNotifier<MediaState> {
         columns: columns,
         currentDirectoryPath: currentDirectoryPath,
         currentDirectoryName: currentDirectoryName,
+        sortOption: sortOption,
       );
     }
+  }
+
+  /// Updates the active sort option and reapplies sorting and filtering.
+  void changeSortOption(MediaSortOption option) {
+    if (_currentSortOption == option) {
+      return;
+    }
+
+    _currentSortOption = option;
+    _cachedMedia = _sortMedia(_cachedMedia, _currentSortOption);
+
+    if (state case MediaLoaded(
+      :final searchQuery,
+      :final selectedTagIds,
+      :final columns,
+      :final currentDirectoryPath,
+      :final currentDirectoryName,
+    )) {
+      final results = _applySearch(_cachedMedia, searchQuery);
+      state = MediaLoaded(
+        media: results,
+        searchQuery: searchQuery,
+        selectedTagIds: selectedTagIds,
+        columns: columns,
+        currentDirectoryPath: currentDirectoryPath,
+        currentDirectoryName: currentDirectoryName,
+        sortOption: _currentSortOption,
+      );
+    }
+  }
+
+  List<MediaEntity> _sortMedia(List<MediaEntity> media, MediaSortOption option) {
+    final sorted = List<MediaEntity>.from(media);
+    switch (option) {
+      case MediaSortOption.nameAscending:
+        sorted.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+        break;
+      case MediaSortOption.nameDescending:
+        sorted.sort(
+          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
+        );
+        break;
+      case MediaSortOption.lastModifiedDescending:
+        sorted.sort((a, b) => b.lastModified.compareTo(a.lastModified));
+        break;
+      case MediaSortOption.sizeDescending:
+        sorted.sort((a, b) => b.size.compareTo(a.size));
+        break;
+    }
+    return sorted;
   }
 }
 
