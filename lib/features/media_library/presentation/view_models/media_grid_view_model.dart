@@ -203,11 +203,20 @@ class MediaViewModel extends StateNotifier<MediaState> {
     Set<String> updated = Set<String>.from(_selectedMediaIds);
     if (append) {
       updated.addAll(mediaIds);
-    } 
-    else {
+    } else {
       updated = Set<String>.from(mediaIds);
     }
     _applySelectionUpdate(updated);
+  }
+
+  /// Selects every media item currently loaded in the grid.
+  void selectAllMedia() {
+    if (_cachedMedia.isEmpty) {
+      _applySelectionUpdate(<String>{});
+      return;
+    }
+    final allIds = {for (final media in _cachedMedia) media.id};
+    _applySelectionUpdate(allIds);
   }
 
   /// Clears the current media selection and exits selection mode.
