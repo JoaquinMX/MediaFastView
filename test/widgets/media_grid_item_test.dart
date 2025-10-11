@@ -41,7 +41,13 @@ void main() {
           ],
           child: MaterialApp(
             home: Scaffold(
-              body: MediaGridItem(media: testMedia, onTap: () {}),
+              body: MediaGridItem(
+                media: testMedia,
+                onTap: () {},
+                onSelectionToggle: () {},
+                isSelected: false,
+                isSelectionMode: false,
+              ),
             ),
           ),
         ),
@@ -68,7 +74,13 @@ void main() {
           ],
           child: MaterialApp(
             home: Scaffold(
-              body: MediaGridItem(media: dirMedia, onTap: () {}),
+              body: MediaGridItem(
+                media: dirMedia,
+                onTap: () {},
+                onSelectionToggle: () {},
+                isSelected: false,
+                isSelectionMode: false,
+              ),
             ),
           ),
         ),
@@ -89,7 +101,13 @@ void main() {
           ],
           child: MaterialApp(
             home: Scaffold(
-              body: MediaGridItem(media: videoMedia, onTap: () {}),
+              body: MediaGridItem(
+                media: videoMedia,
+                onTap: () {},
+                onSelectionToggle: () {},
+                isSelected: false,
+                isSelectionMode: false,
+              ),
             ),
           ),
         ),

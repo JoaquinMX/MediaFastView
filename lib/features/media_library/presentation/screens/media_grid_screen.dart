@@ -59,6 +59,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
     final state = ref.watch(mediaViewModelProvider(_params!));
     _viewModel = ref.read(mediaViewModelProvider(_params!).notifier);
+    final selectedMediaIds = ref.watch(selectedMediaIdsProvider(_params!));
+    final isSelectionMode = ref.watch(mediaSelectionModeProvider(_params!));
     final sortOption = state is MediaLoaded
         ? state.sortOption
         : _viewModel?.currentSortOption ?? MediaSortOption.nameAscending;
@@ -103,6 +105,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                 media,
                 columns,
                 _viewModel!,
+                selectedMediaIds,
+                isSelectionMode,
               ),
               MediaPermissionRevoked(:final directoryPath, :final directoryName) =>
                 _buildPermissionRevoked(directoryPath, directoryName, _viewModel!),
@@ -134,6 +138,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     List<MediaEntity> media,
     int columns,
     MediaViewModel viewModel,
+    Set<String> selectedMediaIds,
+    bool isSelectionMode,
   ) {
     debugPrint('MediaGridScreen: Building grid with ${media.length} items, $columns columns, screen size: ${MediaQuery.of(context).size}');
     return GridView.builder(
@@ -147,6 +153,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       itemCount: media.length,
       itemBuilder: (context, index) {
         final mediaItem = media[index];
+        final isSelected = selectedMediaIds.contains(mediaItem.id);
         return MediaGridItem(
           media: mediaItem,
           onTap: () => _onMediaTap(context, mediaItem),
@@ -155,6 +162,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           onSecondaryTap: () => _onMediaSecondaryTap(context, mediaItem),
           onOperationComplete: () =>
               viewModel.loadMedia(), // Refresh after delete
+          onSelectionToggle: () => viewModel.toggleMediaSelection(mediaItem.id),
+          isSelected: isSelected,
+          isSelectionMode: isSelectionMode,
         );
       },
     );
