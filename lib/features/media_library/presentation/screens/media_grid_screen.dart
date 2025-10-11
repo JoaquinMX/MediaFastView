@@ -22,7 +22,6 @@ import '../../domain/entities/media_entity.dart';
 import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
-import '../widgets/selection_toolbar.dart';
 
 /// Screen for displaying media in a customizable grid layout.
 class MediaGridScreen extends ConsumerStatefulWidget {
@@ -111,33 +110,14 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            appBar: AppBar(
-              title: Text(widget.directoryName),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.tag),
-                  tooltip: 'Manage Tags',
-                  onPressed: () => TagManagementDialog.show(context),
-                ),
-                PopupMenuButton<MediaSortOption>(
-                  icon: const Icon(Icons.sort),
-                  tooltip: 'Sort',
-                  onSelected: _viewModel!.changeSortOption,
-                  itemBuilder: (context) => [
-                    for (final option in MediaSortOption.values)
-                      CheckedPopupMenuItem<MediaSortOption>(
-                        value: option,
-                        checked: option == sortOption,
-                        child: Text(option.label),
-                      ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(Icons.view_module),
-                  onPressed: () => _showColumnSelector(context),
-                ),
-              ],
-            ),
+            appBar: isSelectionMode
+                ? _buildSelectionAppBar(
+                    selectedMediaCount,
+                    _viewModel!,
+                    state as MediaLoaded,
+                    selectedMediaIds,
+                  )
+                : _buildNormalAppBar(sortOption, _viewModel!),
             body: Stack(
               children: [
                 Column(
@@ -173,36 +153,94 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     ),
                   ],
                 ),
-                if (isSelectionMode && state is MediaLoaded)
-                  SelectionToolbar(
-                    selectedCount: selectedMediaCount,
-                    onClearSelection: _viewModel!.clearMediaSelection,
-                    actions: [
-                      SelectionToolbarAction(
-                        icon: Icons.tag,
-                        label: 'Assign Tags',
-                        tooltip: 'Replace tags on selected media',
-                        onPressed: () =>
-                            unawaited(_assignTagsToSelectedMedia(_viewModel!)),
-                      ),
-                      SelectionToolbarAction(
-                        icon: Icons.favorite,
-                        label: 'Toggle Favorites',
-                        tooltip: 'Toggle favorites for selected media',
-                        onPressed: () => unawaited(
-                          _toggleSelectedMediaFavorites(
-                            state.media,
-                            selectedMediaIds,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  AppBar _buildNormalAppBar(MediaSortOption sortOption, MediaViewModel viewModel) {
+    return AppBar(
+      title: Text(widget.directoryName),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.tag),
+          tooltip: 'Manage Tags',
+          onPressed: () => TagManagementDialog.show(context),
+        ),
+        PopupMenuButton<MediaSortOption>(
+          icon: const Icon(Icons.sort),
+          tooltip: 'Sort',
+          onSelected: viewModel.changeSortOption,
+          itemBuilder: (context) => [
+            for (final option in MediaSortOption.values)
+              CheckedPopupMenuItem<MediaSortOption>(
+                value: option,
+                checked: option == sortOption,
+                child: Text(option.label),
+              ),
+          ],
+        ),
+        IconButton(
+          icon: const Icon(Icons.view_module),
+          onPressed: () => _showColumnSelector(context),
+        ),
+      ],
+    );
+  }
+
+  AppBar _buildSelectionAppBar(
+    int selectedCount,
+    MediaViewModel viewModel,
+    MediaLoaded state,
+    Set<String> selectedMediaIds,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        tooltip: 'Clear selection',
+        onPressed: viewModel.clearMediaSelection,
+      ),
+      title: Text(
+        '$selectedCount selected',
+        style: theme.textTheme.titleLarge?.copyWith(
+          color: colorScheme.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      actions: [
+        FilledButton.icon(
+          onPressed: () => unawaited(_assignTagsToSelectedMedia(viewModel)),
+          icon: const Icon(Icons.tag),
+          label: const Text('Assign Tags'),
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          onPressed: () => unawaited(
+            _toggleSelectedMediaFavorites(state.media, selectedMediaIds),
+          ),
+          icon: const Icon(Icons.favorite),
+          label: const Text('Toggle Favorites'),
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+        ),
+        const SizedBox(width: 8),
+      ],
     );
   }
 
