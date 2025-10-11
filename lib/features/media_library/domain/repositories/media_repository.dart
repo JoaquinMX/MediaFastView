@@ -1,3 +1,4 @@
+import '../../../../core/utils/batch_update_result.dart';
 import '../entities/media_entity.dart';
 
 /// Repository interface for media operations.
@@ -29,6 +30,13 @@ abstract class MediaRepository {
 
   /// Updates the tags for a media item.
   Future<void> updateMediaTags(String mediaId, List<String> tagIds);
+
+  /// Replaces the tag collections for multiple media items in a single
+  /// operation. Implementations should persist the updates atomically when
+  /// possible to avoid partial writes.
+  Future<BatchUpdateResult> updateMediaTagsBatch(
+    Map<String, List<String>> mediaTags,
+  );
 
   /// Removes all cached media entries for a directory.
   Future<void> removeMediaForDirectory(String directoryId);

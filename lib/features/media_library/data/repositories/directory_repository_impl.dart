@@ -1,14 +1,15 @@
+import '../../../../core/error/app_error.dart';
+import '../../../../core/services/bookmark_service.dart';
+import '../../../../core/services/logging_service.dart';
+import '../../../../core/services/permission_service.dart';
+import '../../../../core/utils/batch_update_result.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
 import '../data_sources/local_directory_data_source.dart';
 import '../data_sources/local_media_data_source.dart';
 import '../data_sources/shared_preferences_data_source.dart';
 import '../models/directory_model.dart';
-import '../../../../core/error/app_error.dart';
-import '../../../../core/services/bookmark_service.dart';
-import '../../../../core/services/logging_service.dart';
-import '../../../../core/services/permission_service.dart';
-import '../../../../shared/utils/directory_id_utils.dart';
 
 /// Implementation of DirectoryRepository using SharedPreferences and local file system.
 class DirectoryRepositoryImpl implements DirectoryRepository {
@@ -228,6 +229,52 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       final model = _entityToModel(updatedDirectory);
       await _directoryDataSource.updateDirectory(model);
     }
+  }
+
+  @override
+  Future<BatchUpdateResult> updateDirectoryTagsBatch(
+    Map<String, List<String>> directoryTags,
+  ) async {
+    if (directoryTags.isEmpty) {
+      return BatchUpdateResult.empty;
+    }
+
+    final models = await _directoryDataSource.getDirectories();
+    final indexById = {
+      for (var i = 0; i < models.length; i++) models[i].id: i,
+    };
+
+    final successes = <String>[];
+    final failures = <String, String>{};
+
+    for (final entry in directoryTags.entries) {
+      final index = indexById[entry.key];
+      if (index == null) {
+        failures[entry.key] = 'Directory not found';
+        continue;
+      }
+
+      models[index] = models[index].copyWith(tagIds: entry.value);
+      successes.add(entry.key);
+    }
+
+    if (successes.isNotEmpty) {
+      await _directoryDataSource.saveDirectories(models);
+      LoggingService.instance.info(
+        'Updated tags for ${successes.length} directories in a single batch.',
+      );
+    }
+
+    if (failures.isNotEmpty) {
+      LoggingService.instance.warning(
+        'Failed to update tags for directories: ${failures.keys.join(', ')}',
+      );
+    }
+
+    return BatchUpdateResult(
+      successfulIds: successes,
+      failureReasons: failures,
+    );
   }
 
   @override

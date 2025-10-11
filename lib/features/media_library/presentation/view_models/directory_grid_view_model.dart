@@ -325,16 +325,35 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       LinkedHashSet<String>.from(tagIds),
     );
 
-    for (final directoryId in _selectedDirectoryIds) {
-      await assignTagUseCase.setTagsForDirectory(directoryId, sanitizedTags);
+    final result = await assignTagUseCase.setTagsForDirectories(
+      _selectedDirectoryIds.toList(),
+      sanitizedTags,
+    );
+
+    if (result.successfulIds.isNotEmpty) {
+      final updatedIds = result.successfulIds.toSet();
+      _cachedAccessibleDirectories = _updateTagsForSelection(
+        _cachedAccessibleDirectories,
+        updatedIds,
+        sanitizedTags,
+      );
+      _cachedInaccessibleDirectories = _updateTagsForSelection(
+        _cachedInaccessibleDirectories,
+        updatedIds,
+        sanitizedTags,
+      );
+      _cachedInvalidDirectories = _updateTagsForSelection(
+        _cachedInvalidDirectories,
+        updatedIds,
+        sanitizedTags,
+      );
     }
 
-    _cachedAccessibleDirectories =
-        _updateTagsForSelection(_cachedAccessibleDirectories, sanitizedTags);
-    _cachedInaccessibleDirectories =
-        _updateTagsForSelection(_cachedInaccessibleDirectories, sanitizedTags);
-    _cachedInvalidDirectories =
-        _updateTagsForSelection(_cachedInvalidDirectories, sanitizedTags);
+    if (result.hasFailures) {
+      LoggingService.instance.warning(
+        'Failed to update tags for directories: ${result.failureReasons}',
+      );
+    }
 
     _emitFilteredState();
   }
@@ -353,14 +372,15 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
   List<DirectoryEntity> _updateTagsForSelection(
     List<DirectoryEntity> directories,
+    Set<String> targetDirectoryIds,
     List<String> tagIds,
   ) {
-    if (directories.isEmpty || _selectedDirectoryIds.isEmpty) {
+    if (directories.isEmpty || targetDirectoryIds.isEmpty) {
       return List<DirectoryEntity>.from(directories);
     }
     return directories
         .map(
-          (directory) => _selectedDirectoryIds.contains(directory.id)
+          (directory) => targetDirectoryIds.contains(directory.id)
               ? directory.copyWith(tagIds: tagIds)
               : directory,
         )
