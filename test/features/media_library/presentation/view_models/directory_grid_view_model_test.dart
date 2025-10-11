@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../../lib/core/services/permission_service.dart';
@@ -18,7 +19,10 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
   final List<DirectoryEntity> _directories;
 
   @override
-  Future<void> addDirectory(DirectoryEntity directory, {bool silent = false}) async {
+  Future<void> addDirectory(
+    DirectoryEntity directory, {
+    bool silent = false,
+  }) async {
     _directories.add(directory);
   }
 
@@ -28,11 +32,15 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
   }
 
   @override
-  Future<List<DirectoryEntity>> filterDirectoriesByTags(List<String> tagIds) async {
+  Future<List<DirectoryEntity>> filterDirectoriesByTags(
+    List<String> tagIds,
+  ) async {
     if (tagIds.isEmpty) {
       return getDirectories();
     }
-    return _directories.where((dir) => dir.tagIds.any(tagIds.contains)).toList();
+    return _directories
+        .where((dir) => dir.tagIds.any(tagIds.contains))
+        .toList();
   }
 
   @override
@@ -66,15 +74,23 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
   }
 
   @override
-  Future<void> updateDirectoryBookmark(String directoryId, String? bookmarkData) async {
+  Future<void> updateDirectoryBookmark(
+    String directoryId,
+    String? bookmarkData,
+  ) async {
     final index = _directories.indexWhere((dir) => dir.id == directoryId);
     if (index != -1) {
-      _directories[index] = _directories[index].copyWith(bookmarkData: bookmarkData);
+      _directories[index] = _directories[index].copyWith(
+        bookmarkData: bookmarkData,
+      );
     }
   }
 
   @override
-  Future<void> updateDirectoryTags(String directoryId, List<String> tagIds) async {
+  Future<void> updateDirectoryTags(
+    String directoryId,
+    List<String> tagIds,
+  ) async {
     final index = _directories.indexWhere((dir) => dir.id == directoryId);
     if (index != -1) {
       _directories[index] = _directories[index].copyWith(tagIds: tagIds);
@@ -101,9 +117,9 @@ class InMemoryMediaRepository implements MediaRepository {
     String directoryPath, {
     String? bookmarkData,
   }) async {
-    return (await filterMediaByTags(tagIds))
-        .where((item) => item.directoryId == directoryPath)
-        .toList();
+    return (await filterMediaByTags(
+      tagIds,
+    )).where((item) => item.directoryId == directoryPath).toList();
   }
 
   @override
@@ -167,7 +183,8 @@ class InMemoryFavoritesRepository implements FavoritesRepository {
 }
 
 class FakeLocalDirectoryDataSource extends LocalDirectoryDataSource {
-  const FakeLocalDirectoryDataSource() : super(bookmarkService: BookmarkService.instance);
+  FakeLocalDirectoryDataSource()
+    : super(bookmarkService: BookmarkService.instance);
 
   @override
   Future<bool> validateDirectory(DirectoryEntity directory) async => true;
@@ -186,7 +203,9 @@ Future<ProviderContainer> _createDirectoryTestContainer({
   final container = ProviderContainer(
     overrides: [
       sharedPreferencesProvider.overrideWithValue(sharedPreferences),
-      localDirectoryDataSourceProvider.overrideWithValue(const FakeLocalDirectoryDataSource()),
+      localDirectoryDataSourceProvider.overrideWithValue(
+        FakeLocalDirectoryDataSource(),
+      ),
       permissionServiceProvider.overrideWithValue(FakePermissionService()),
       directoryRepositoryProvider.overrideWith((ref) {
         return DirectoryRepositoryNotifier(directoryRepository);
@@ -220,7 +239,7 @@ void main() {
         path: '/dir1',
         name: 'Directory 1',
         thumbnailPath: null,
-        tagIds: const ['tag1'],
+        tagIds: const ['shared', 'tag1'],
         lastModified: DateTime(2024, 1, 1),
       ),
       DirectoryEntity(
@@ -228,7 +247,7 @@ void main() {
         path: '/dir2',
         name: 'Directory 2',
         thumbnailPath: null,
-        tagIds: const ['tag2'],
+        tagIds: const ['shared', 'tag2'],
         lastModified: DateTime(2024, 1, 2),
       ),
       DirectoryEntity(
@@ -265,7 +284,8 @@ void main() {
     expect(loaded.isSelectionMode, isTrue);
 
     viewModel.toggleDirectorySelection('1');
-    final cleared = container.read(directoryViewModelProvider) as DirectoryLoaded;
+    final cleared =
+        container.read(directoryViewModelProvider) as DirectoryLoaded;
     expect(cleared.selectedDirectoryIds, isEmpty);
     expect(cleared.isSelectionMode, isFalse);
   });
@@ -283,7 +303,8 @@ void main() {
     await viewModel.loadDirectories();
 
     viewModel.selectDirectoryRange(const ['1', '2']);
-    DirectoryLoaded state = container.read(directoryViewModelProvider) as DirectoryLoaded;
+    DirectoryLoaded state =
+        container.read(directoryViewModelProvider) as DirectoryLoaded;
     expect(state.selectedDirectoryIds, {'1', '2'});
     expect(state.isSelectionMode, isTrue);
 
@@ -314,4 +335,59 @@ void main() {
     expect(container.read(directorySelectionModeProvider), isFalse);
     expect(container.read(selectedDirectoryCountProvider), 0);
   });
+
+  test(
+    'commonTagIdsForSelection returns tags shared across selected directories',
+    () async {
+      final container = await _createDirectoryTestContainer(
+        directoryRepository: directoryRepository,
+        mediaRepository: mediaRepository,
+        favoritesRepository: favoritesRepository,
+        sharedPreferences: sharedPreferences,
+      );
+      addTearDown(container.dispose);
+
+      final viewModel = container.read(directoryViewModelProvider.notifier);
+      await viewModel.loadDirectories();
+      viewModel.selectDirectoryRange(const ['1', '2']);
+
+      final commonTags = viewModel.commonTagIdsForSelection();
+      expect(commonTags, ['shared']);
+    },
+  );
+
+  test(
+    'applyTagsToSelection updates repositories and state for selection',
+    () async {
+      final container = await _createDirectoryTestContainer(
+        directoryRepository: directoryRepository,
+        mediaRepository: mediaRepository,
+        favoritesRepository: favoritesRepository,
+        sharedPreferences: sharedPreferences,
+      );
+      addTearDown(container.dispose);
+
+      final viewModel = container.read(directoryViewModelProvider.notifier);
+      await viewModel.loadDirectories();
+      viewModel.selectDirectoryRange(const ['1', '3']);
+
+      await viewModel.applyTagsToSelection(const ['bulk', 'bulk']);
+
+      final repoDirectories = await directoryRepository.getDirectories();
+      expect(repoDirectories.firstWhere((dir) => dir.id == '1').tagIds, [
+        'bulk',
+      ]);
+      expect(repoDirectories.firstWhere((dir) => dir.id == '3').tagIds, [
+        'bulk',
+      ]);
+
+      final state = container.read(directoryViewModelProvider);
+      expect(state, isA<DirectoryLoaded>());
+      final loaded = state as DirectoryLoaded;
+      expect(loaded.selectedDirectoryIds, {'1', '3'});
+      expect(loaded.directories.firstWhere((dir) => dir.id == '1').tagIds, [
+        'bulk',
+      ]);
+    },
+  );
 }

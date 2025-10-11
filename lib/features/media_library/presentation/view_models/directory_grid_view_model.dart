@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/error/app_error.dart';
@@ -76,7 +78,8 @@ class DirectoryLoaded extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
-      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
+      selectedDirectoryIds:
+          selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
@@ -135,7 +138,8 @@ class DirectoryPermissionRevoked extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
-      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
+      selectedDirectoryIds:
+          selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
@@ -181,7 +185,8 @@ class DirectoryBookmarkInvalid extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
-      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
+      selectedDirectoryIds:
+          selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
@@ -233,10 +238,41 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   bool _isSelectionMode = false;
 
   DirectorySortOption get currentSortOption => _currentSortOption;
-  Set<String> get selectedDirectoryIds =>
-      Set<String>.unmodifiable(_selectedDirectoryIds);
+  Set<String> get selectedDirectoryIds => Set<String>.unmodifiable(_selectedDirectoryIds);
   bool get isSelectionMode => _isSelectionMode;
   int get selectedDirectoryCount => _selectedDirectoryIds.length;
+
+  /// Returns the collection of tag IDs that are common to every selected
+  /// directory. When no directories are selected the list will be empty.
+  List<String> commonTagIdsForSelection() {
+    if (_selectedDirectoryIds.isEmpty) {
+      return const <String>[];
+    }
+
+    LinkedHashSet<String>? common;
+
+    void intersectWith(List<DirectoryEntity> directories) {
+      for (final directory in directories) {
+        if (!_selectedDirectoryIds.contains(directory.id)) {
+          continue;
+        }
+        final tagSet = LinkedHashSet<String>.from(directory.tagIds);
+        common = common == null
+            ? tagSet
+            : LinkedHashSet<String>.from(
+                common!.where(tagSet.contains),
+              );
+      }
+    }
+
+    intersectWith(_cachedAccessibleDirectories);
+    intersectWith(_cachedInaccessibleDirectories);
+    intersectWith(_cachedInvalidDirectories);
+
+    return common == null
+        ? const <String>[]
+        : List<String>.unmodifiable(common!);
+  }
 
   @override
   void dispose() {
@@ -256,15 +292,13 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   /// Selects a specific set of directory IDs. When [append] is true the IDs
   /// are merged with the existing selection, otherwise the selection is
   /// replaced entirely.
-  void selectDirectoryRange(
-    Iterable<String> directoryIds, {
-    bool append = false,
-  }) {
+  void selectDirectoryRange(Iterable<String> directoryIds, {bool append = false}) {
     Set<String> updated = Set<String>.from(_selectedDirectoryIds);
     if (append) {
       updated.addAll(directoryIds);
-    } else {
-      Set<String>.from(directoryIds);
+    } 
+    else {
+      updated = Set<String>.from(directoryIds);
     }
     _applySelectionUpdate(updated);
   }
@@ -279,6 +313,32 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     _emitFilteredState();
   }
 
+  /// Applies the provided [tagIds] to every selected directory. Existing tags
+  /// are replaced with the provided collection.
+  Future<void> applyTagsToSelection(List<String> tagIds) async {
+    if (_selectedDirectoryIds.isEmpty) {
+      return;
+    }
+
+    final assignTagUseCase = _ref.read(assignTagUseCaseProvider);
+    final sanitizedTags = List<String>.unmodifiable(
+      LinkedHashSet<String>.from(tagIds),
+    );
+
+    for (final directoryId in _selectedDirectoryIds) {
+      await assignTagUseCase.setTagsForDirectory(directoryId, sanitizedTags);
+    }
+
+    _cachedAccessibleDirectories =
+        _updateTagsForSelection(_cachedAccessibleDirectories, sanitizedTags);
+    _cachedInaccessibleDirectories =
+        _updateTagsForSelection(_cachedInaccessibleDirectories, sanitizedTags);
+    _cachedInvalidDirectories =
+        _updateTagsForSelection(_cachedInvalidDirectories, sanitizedTags);
+
+    _emitFilteredState();
+  }
+
   void _applySelectionUpdate(Set<String> updatedSelection) {
     final sanitized = updatedSelection..removeWhere((id) => id.isEmpty);
     _selectedDirectoryIds = sanitized;
@@ -289,6 +349,22 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   void _clearSelectionInternal() {
     _selectedDirectoryIds = <String>{};
     _isSelectionMode = false;
+  }
+
+  List<DirectoryEntity> _updateTagsForSelection(
+    List<DirectoryEntity> directories,
+    List<String> tagIds,
+  ) {
+    if (directories.isEmpty || _selectedDirectoryIds.isEmpty) {
+      return List<DirectoryEntity>.from(directories);
+    }
+    return directories
+        .map(
+          (directory) => _selectedDirectoryIds.contains(directory.id)
+              ? directory.copyWith(tagIds: tagIds)
+              : directory,
+        )
+        .toList();
   }
 
   void _synchronizeSelectionWithCaches() {
@@ -443,9 +519,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           invalid: const [],
         );
         _clearSelectionInternal();
-        state = DirectoryError(
-          ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)),
-        );
+        state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
       }
     }
   }
@@ -799,18 +873,18 @@ final directoryViewModelProvider =
     );
 
 Set<String> _extractDirectorySelection(DirectoryState state) => switch (state) {
-  DirectoryLoaded(selectedDirectoryIds: final ids) => ids,
-  DirectoryPermissionRevoked(selectedDirectoryIds: final ids) => ids,
-  DirectoryBookmarkInvalid(selectedDirectoryIds: final ids) => ids,
-  _ => const <String>{},
-};
+      DirectoryLoaded(selectedDirectoryIds: final ids) => ids,
+      DirectoryPermissionRevoked(selectedDirectoryIds: final ids) => ids,
+      DirectoryBookmarkInvalid(selectedDirectoryIds: final ids) => ids,
+      _ => const <String>{},
+    };
 
 bool _extractDirectorySelectionMode(DirectoryState state) => switch (state) {
-  DirectoryLoaded(isSelectionMode: final mode) => mode,
-  DirectoryPermissionRevoked(isSelectionMode: final mode) => mode,
-  DirectoryBookmarkInvalid(isSelectionMode: final mode) => mode,
-  _ => false,
-};
+      DirectoryLoaded(isSelectionMode: final mode) => mode,
+      DirectoryPermissionRevoked(isSelectionMode: final mode) => mode,
+      DirectoryBookmarkInvalid(isSelectionMode: final mode) => mode,
+      _ => false,
+    };
 
 /// Provider exposing the current set of selected directory IDs.
 final selectedDirectoryIdsProvider = Provider.autoDispose<Set<String>>((ref) {
