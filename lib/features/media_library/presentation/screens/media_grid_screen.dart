@@ -41,10 +41,15 @@ class MediaGridScreen extends ConsumerStatefulWidget {
 }
 
 class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
+  static const double _autoScrollEdgeExtent = 72;
+  static const double _autoScrollMaxVelocityPerTick = 28;
+  static const Duration _autoScrollTickDuration = Duration(milliseconds: 16);
+
   MediaViewModelParams? _params;
   MediaViewModel? _viewModel;
   final GlobalKey _mediaGridOverlayKey = GlobalKey();
   final Map<String, GlobalKey> _mediaItemKeys = <String, GlobalKey>{};
+  final ScrollController _mediaScrollController = ScrollController();
   Rect? _mediaSelectionRect;
   Offset? _mediaDragStart;
   bool _isMediaMarqueeActive = false;
@@ -52,6 +57,15 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   Set<String> _mediaMarqueeBaseSelection = <String>{};
   Set<String> _mediaLastMarqueeSelection = <String>{};
   Map<String, Rect> _mediaCachedItemRects = <String, Rect>{};
+  Timer? _mediaAutoScrollTimer;
+  double _mediaAutoScrollVelocity = 0;
+
+  @override
+  void dispose() {
+    _stopMediaAutoScroll();
+    _mediaScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +103,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     return Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.escape): _ClearMediaSelectionIntent(),
+        LogicalKeySet(LogicalKeyboardKey.metaLeft, LogicalKeyboardKey.keyA):
+            const _SelectAllMediaIntent(),
+        LogicalKeySet(LogicalKeyboardKey.metaRight, LogicalKeyboardKey.keyA):
+            const _SelectAllMediaIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -103,6 +121,15 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                         .read(mediaViewModelProvider(_params!).notifier)
                         .clearMediaSelection();
                   }
+                  return null;
+                },
+              ),
+          _SelectAllMediaIntent:
+              CallbackAction<_SelectAllMediaIntent>(
+                onInvoke: (_) {
+                  ref
+                      .read(mediaViewModelProvider(_params!).notifier)
+                      .selectAllVisibleMedia();
                   return null;
                 },
               ),
@@ -217,6 +244,18 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         ),
       ),
       actions: [
+        FilledButton.icon(
+          onPressed: viewModel.selectAllVisibleMedia,
+          icon: const Icon(Icons.select_all),
+          label: const Text('Select All'),
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+        ),
+        const SizedBox(width: 8),
         FilledButton.icon(
           onPressed: () => unawaited(_assignTagsToSelectedMedia(viewModel)),
           icon: const Icon(Icons.tag),
@@ -365,6 +404,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     _pruneMediaItemKeys(media);
     final gridView = GridView.builder(
       padding: UiSpacing.gridPadding,
+      controller: _mediaScrollController,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
         crossAxisSpacing: UiGrid.crossAxisSpacing,
@@ -453,6 +493,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
     _mediaCachedItemRects = _computeMediaItemRects();
     final localPosition = overlayBox.globalToLocal(event.position);
+    _stopMediaAutoScroll();
     if (_isPointInsideAnyRect(localPosition, _mediaCachedItemRects.values)) {
       return;
     }
@@ -501,6 +542,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
     _mediaCachedItemRects = _computeMediaItemRects();
     _updateMediaMarqueeSelection(viewModel);
+    _updateMediaAutoScroll(localPosition.dy, overlayBox.size.height, viewModel);
   }
 
   void _endMediaMarquee() {
@@ -517,6 +559,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     _mediaMarqueeBaseSelection = <String>{};
     _mediaLastMarqueeSelection = <String>{};
     _mediaCachedItemRects = <String, Rect>{};
+    _stopMediaAutoScroll();
   }
 
   void _updateMediaMarqueeSelection(MediaViewModel viewModel) {
@@ -546,6 +589,69 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
     _mediaLastMarqueeSelection = desiredSelection;
     viewModel.selectMediaRange(desiredSelection, append: false);
+  }
+
+  void _updateMediaAutoScroll(
+    double pointerDy,
+    double overlayHeight,
+    MediaViewModel viewModel,
+  ) {
+    if (!_mediaScrollController.hasClients) {
+      _stopMediaAutoScroll();
+      return;
+    }
+
+    double velocity = 0;
+    if (pointerDy < _autoScrollEdgeExtent) {
+      final distance = (_autoScrollEdgeExtent - pointerDy)
+          .clamp(0, _autoScrollEdgeExtent)
+          .toDouble();
+      velocity = -_autoScrollMaxVelocityPerTick *
+          (distance / _autoScrollEdgeExtent);
+    } else if (pointerDy > overlayHeight - _autoScrollEdgeExtent) {
+      final distance = (pointerDy - (overlayHeight - _autoScrollEdgeExtent))
+          .clamp(0, _autoScrollEdgeExtent)
+          .toDouble();
+      velocity = _autoScrollMaxVelocityPerTick *
+          (distance / _autoScrollEdgeExtent);
+    }
+
+    if (velocity == 0) {
+      _stopMediaAutoScroll();
+      return;
+    }
+
+    _mediaAutoScrollVelocity = velocity;
+    _mediaAutoScrollTimer ??=
+        Timer.periodic(_autoScrollTickDuration, (_) {
+      _performMediaAutoScroll(viewModel);
+    });
+  }
+
+  void _performMediaAutoScroll(MediaViewModel viewModel) {
+    if (_mediaAutoScrollVelocity == 0 ||
+        !_mediaScrollController.hasClients) {
+      _stopMediaAutoScroll();
+      return;
+    }
+
+    final position = _mediaScrollController.position;
+    final target = (position.pixels + _mediaAutoScrollVelocity)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    if (target == position.pixels) {
+      _stopMediaAutoScroll();
+      return;
+    }
+
+    _mediaScrollController.jumpTo(target);
+    _mediaCachedItemRects = _computeMediaItemRects();
+    _updateMediaMarqueeSelection(viewModel);
+  }
+
+  void _stopMediaAutoScroll() {
+    _mediaAutoScrollTimer?.cancel();
+    _mediaAutoScrollTimer = null;
+    _mediaAutoScrollVelocity = 0;
   }
 
   Map<String, Rect> _computeMediaItemRects() {
@@ -851,6 +957,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
+}
+
+class _SelectAllMediaIntent extends Intent {
+  const _SelectAllMediaIntent();
 }
 
 class _ClearMediaSelectionIntent extends Intent {

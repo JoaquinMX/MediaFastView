@@ -296,11 +296,47 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     Set<String> updated = Set<String>.from(_selectedDirectoryIds);
     if (append) {
       updated.addAll(directoryIds);
-    } 
+    }
     else {
       updated = Set<String>.from(directoryIds);
     }
     _applySelectionUpdate(updated);
+  }
+
+  /// Selects every directory currently visible in the active state.
+  void selectAllVisibleDirectories() {
+    final stateSnapshot = state;
+    final allIds = <String>{};
+
+    switch (stateSnapshot) {
+      case DirectoryLoaded(:final directories):
+        allIds.addAll(directories.map((directory) => directory.id));
+        break;
+      case DirectoryPermissionRevoked(
+          :final accessibleDirectories,
+          :final inaccessibleDirectories,
+        ):
+        allIds
+          ..addAll(accessibleDirectories.map((directory) => directory.id))
+          ..addAll(inaccessibleDirectories.map((directory) => directory.id));
+        break;
+      case DirectoryBookmarkInvalid(
+          :final accessibleDirectories,
+          :final invalidDirectories,
+        ):
+        allIds
+          ..addAll(accessibleDirectories.map((directory) => directory.id))
+          ..addAll(invalidDirectories.map((directory) => directory.id));
+        break;
+      default:
+        break;
+    }
+
+    if (allIds.isEmpty) {
+      return;
+    }
+
+    _applySelectionUpdate(allIds);
   }
 
   /// Clears all selected directories and exits selection mode.

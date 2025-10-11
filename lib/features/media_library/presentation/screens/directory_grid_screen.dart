@@ -37,9 +37,14 @@ class DirectoryGridScreen extends ConsumerStatefulWidget {
 }
 
 class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
+  static const double _autoScrollEdgeExtent = 72;
+  static const double _autoScrollMaxVelocityPerTick = 28;
+  static const Duration _autoScrollTickDuration = Duration(milliseconds: 16);
+
   bool _isDragging = false;
   final GlobalKey _directoryGridOverlayKey = GlobalKey();
   final Map<String, GlobalKey> _directoryItemKeys = <String, GlobalKey>{};
+  final ScrollController _directoryScrollController = ScrollController();
   Rect? _directorySelectionRect;
   Offset? _directoryDragStart;
   bool _isDirectoryMarqueeActive = false;
@@ -47,6 +52,15 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Set<String> _directoryMarqueeBaseSelection = <String>{};
   Set<String> _directoryLastMarqueeSelection = <String>{};
   Map<String, Rect> _directoryCachedItemRects = <String, Rect>{};
+  Timer? _directoryAutoScrollTimer;
+  double _directoryAutoScrollVelocity = 0;
+
+  @override
+  void dispose() {
+    _stopDirectoryAutoScroll();
+    _directoryScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +79,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.escape):
             _ClearDirectorySelectionIntent(),
+        LogicalKeySet(LogicalKeyboardKey.metaLeft, LogicalKeyboardKey.keyA):
+            const _SelectAllDirectoriesIntent(),
+        LogicalKeySet(LogicalKeyboardKey.metaRight, LogicalKeyboardKey.keyA):
+            const _SelectAllDirectoriesIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -77,6 +95,15 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                         .read(directoryViewModelProvider.notifier)
                         .clearDirectorySelection();
                   }
+                  return null;
+                },
+              ),
+          _SelectAllDirectoriesIntent:
+              CallbackAction<_SelectAllDirectoriesIntent>(
+                onInvoke: (_) {
+                  ref
+                      .read(directoryViewModelProvider.notifier)
+                      .selectAllVisibleDirectories();
                   return null;
                 },
               ),
@@ -248,6 +275,18 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         ),
       ),
       actions: [
+        FilledButton.icon(
+          onPressed: viewModel.selectAllVisibleDirectories,
+          icon: const Icon(Icons.select_all),
+          label: const Text('Select All'),
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+        ),
+        const SizedBox(width: 8),
         FilledButton.icon(
           onPressed: () => unawaited(_assignTagsToSelectedDirectories(viewModel)),
           icon: const Icon(Icons.tag),
@@ -453,6 +492,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     _pruneDirectoryItemKeys(directories);
     final gridView = GridView.builder(
       padding: UiSpacing.gridPadding,
+      controller: _directoryScrollController,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
         crossAxisSpacing: UiGrid.crossAxisSpacing,
@@ -531,6 +571,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             viewModel: viewModel,
             child: GridView.builder(
               padding: UiSpacing.gridPadding,
+              controller: _directoryScrollController,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: UiGrid.crossAxisSpacing,
@@ -619,6 +660,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             viewModel: viewModel,
             child: GridView.builder(
               padding: UiSpacing.gridPadding,
+              controller: _directoryScrollController,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
                 crossAxisSpacing: UiGrid.crossAxisSpacing,
@@ -717,6 +759,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
     _directoryCachedItemRects = _computeDirectoryItemRects();
     final localPosition = overlayBox.globalToLocal(event.position);
+    _stopDirectoryAutoScroll();
     if (_isPointInsideAnyRect(
       localPosition,
       _directoryCachedItemRects.values,
@@ -771,6 +814,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
     _directoryCachedItemRects = _computeDirectoryItemRects();
     _updateDirectoryMarqueeSelection(viewModel);
+    _updateDirectoryAutoScroll(localPosition.dy, overlayBox.size.height, viewModel);
   }
 
   void _endDirectoryMarquee() {
@@ -787,6 +831,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     _directoryMarqueeBaseSelection = <String>{};
     _directoryLastMarqueeSelection = <String>{};
     _directoryCachedItemRects = <String, Rect>{};
+    _stopDirectoryAutoScroll();
   }
 
   void _updateDirectoryMarqueeSelection(DirectoryViewModel viewModel) {
@@ -816,6 +861,69 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
     _directoryLastMarqueeSelection = desiredSelection;
     viewModel.selectDirectoryRange(desiredSelection, append: false);
+  }
+
+  void _updateDirectoryAutoScroll(
+    double pointerDy,
+    double overlayHeight,
+    DirectoryViewModel viewModel,
+  ) {
+    if (!_directoryScrollController.hasClients) {
+      _stopDirectoryAutoScroll();
+      return;
+    }
+
+    double velocity = 0;
+    if (pointerDy < _autoScrollEdgeExtent) {
+      final distance = (_autoScrollEdgeExtent - pointerDy)
+          .clamp(0, _autoScrollEdgeExtent)
+          .toDouble();
+      velocity = -_autoScrollMaxVelocityPerTick *
+          (distance / _autoScrollEdgeExtent);
+    } else if (pointerDy > overlayHeight - _autoScrollEdgeExtent) {
+      final distance = (pointerDy - (overlayHeight - _autoScrollEdgeExtent))
+          .clamp(0, _autoScrollEdgeExtent)
+          .toDouble();
+      velocity = _autoScrollMaxVelocityPerTick *
+          (distance / _autoScrollEdgeExtent);
+    }
+
+    if (velocity == 0) {
+      _stopDirectoryAutoScroll();
+      return;
+    }
+
+    _directoryAutoScrollVelocity = velocity;
+    _directoryAutoScrollTimer ??=
+        Timer.periodic(_autoScrollTickDuration, (_) {
+      _performDirectoryAutoScroll(viewModel);
+    });
+  }
+
+  void _performDirectoryAutoScroll(DirectoryViewModel viewModel) {
+    if (_directoryAutoScrollVelocity == 0 ||
+        !_directoryScrollController.hasClients) {
+      _stopDirectoryAutoScroll();
+      return;
+    }
+
+    final position = _directoryScrollController.position;
+    final target = (position.pixels + _directoryAutoScrollVelocity)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    if (target == position.pixels) {
+      _stopDirectoryAutoScroll();
+      return;
+    }
+
+    _directoryScrollController.jumpTo(target);
+    _directoryCachedItemRects = _computeDirectoryItemRects();
+    _updateDirectoryMarqueeSelection(viewModel);
+  }
+
+  void _stopDirectoryAutoScroll() {
+    _directoryAutoScrollTimer?.cancel();
+    _directoryAutoScrollTimer = null;
+    _directoryAutoScrollVelocity = 0;
   }
 
   Map<String, Rect> _computeDirectoryItemRects() {
@@ -1101,6 +1209,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       rethrow;
     }
   }
+}
+
+class _SelectAllDirectoriesIntent extends Intent {
+  const _SelectAllDirectoriesIntent();
 }
 
 class _ClearDirectorySelectionIntent extends Intent {
