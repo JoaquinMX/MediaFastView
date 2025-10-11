@@ -192,26 +192,37 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       final removals = <String>[];
       final mediaById = {for (final media in mediaItems) media.id: media};
 
+      final favoriteStatuses = <String, bool>{};
       for (final media in mediaItems) {
         final isFavorited = await _favoritesRepository.isFavorite(
           media.id,
           type: FavoriteItemType.media,
         );
-        if (isFavorited) {
-          removals.add(media.id);
-        } else {
-          additions.add(
-            FavoriteEntity(
-              itemId: media.id,
-              itemType: FavoriteItemType.media,
-              addedAt: DateTime.now(),
-              metadata: {
-                'name': media.name,
-                'path': media.path,
-                'type': media.type.name,
-              },
-            ),
-          );
+        favoriteStatuses[media.id] = isFavorited;
+      }
+
+      final allSelectedAreFavorites =
+          favoriteStatuses.values.every((isFavorite) => isFavorite);
+
+      if (allSelectedAreFavorites) {
+        removals.addAll(favoriteStatuses.keys);
+      } else {
+        for (final media in mediaItems) {
+          final isFavorited = favoriteStatuses[media.id] ?? false;
+          if (!isFavorited) {
+            additions.add(
+              FavoriteEntity(
+                itemId: media.id,
+                itemType: FavoriteItemType.media,
+                addedAt: DateTime.now(),
+                metadata: {
+                  'name': media.name,
+                  'path': media.path,
+                  'type': media.type.name,
+                },
+              ),
+            );
+          }
         }
       }
 
