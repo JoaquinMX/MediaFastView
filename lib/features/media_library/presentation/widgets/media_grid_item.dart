@@ -47,6 +47,12 @@ class _MediaGridItemState extends State<MediaGridItem> {
   bool _isHovering = false;
   VideoPlayerController? _videoController;
 
+  void _ensureSelected() {
+    if (!widget.isSelected) {
+      widget.onSelectionToggle();
+    }
+  }
+
   @override
   void dispose() {
     _disposeVideoController();
@@ -91,11 +97,11 @@ class _MediaGridItemState extends State<MediaGridItem> {
             onTap: widget.onTap,
             onDoubleTap: widget.onDoubleTap,
             onLongPress: () {
-              widget.onSelectionToggle();
+              _ensureSelected();
               widget.onLongPress?.call();
             },
             onSecondaryTap: () {
-              widget.onSelectionToggle();
+              _ensureSelected();
               widget.onSecondaryTap?.call();
             },
             child: Card(

@@ -35,6 +35,12 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
   late Animation<double> _scaleAnimation;
   late Animation<double> _elevationAnimation;
 
+  void _ensureSelected() {
+    if (!widget.isSelected) {
+      widget.onSelectionToggle();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -95,7 +101,7 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                 onPointerDown: (event) {
                   if (event.kind == PointerDeviceKind.mouse &&
                       event.buttons == kSecondaryMouseButton) {
-                    widget.onSelectionToggle();
+                    _ensureSelected();
                   }
                 },
                 behavior: HitTestBehavior.opaque,
@@ -110,7 +116,9 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                   ),
                   child: InkWell(
                     onTap: widget.onTap,
-                    onLongPress: widget.onSelectionToggle,
+                    onLongPress: () {
+                      _ensureSelected();
+                    },
                     onHover: _onHover,
                     child: Stack(
                       children: [
