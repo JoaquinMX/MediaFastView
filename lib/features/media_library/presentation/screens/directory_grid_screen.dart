@@ -54,7 +54,6 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     final viewModel = ref.read(directoryViewModelProvider.notifier);
     final selectedDirectoryIds = ref.watch(selectedDirectoryIdsProvider);
     final isSelectionMode = ref.watch(directorySelectionModeProvider);
-    final selectedDirectoryCount = ref.watch(selectedDirectoryCountProvider);
     final currentSortOption = switch (state) {
       DirectoryLoaded(:final sortOption) => sortOption,
       DirectoryPermissionRevoked(:final sortOption) => sortOption,
@@ -64,19 +63,23 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
     return Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
-        LogicalKeySet(LogicalKeyboardKey.escape): _ClearDirectorySelectionIntent(),
+        LogicalKeySet(LogicalKeyboardKey.escape):
+            _ClearDirectorySelectionIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
-          _ClearDirectorySelectionIntent: CallbackAction<_ClearDirectorySelectionIntent>(
-            onInvoke: (_) {
-              final hasSelection = ref.read(directorySelectionModeProvider);
-              if (hasSelection) {
-                ref.read(directoryViewModelProvider.notifier).clearDirectorySelection();
-              }
-              return null;
-            },
-          ),
+          _ClearDirectorySelectionIntent:
+              CallbackAction<_ClearDirectorySelectionIntent>(
+                onInvoke: (_) {
+                  final hasSelection = ref.read(directorySelectionModeProvider);
+                  if (hasSelection) {
+                    ref
+                        .read(directoryViewModelProvider.notifier)
+                        .clearDirectorySelection();
+                  }
+                  return null;
+                },
+              ),
         },
         child: Focus(
           autofocus: true,
@@ -124,44 +127,46 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                       Expanded(
                         child: switch (state) {
                           DirectoryLoading() => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
+                            child: CircularProgressIndicator(),
+                          ),
                           DirectoryLoaded(:final directories, :final columns) =>
-                              _buildGrid(
-                                directories,
-                                columns,
-                                viewModel,
-                                selectedDirectoryIds,
-                                isSelectionMode,
-                              ),
+                            _buildGrid(
+                              directories,
+                              columns,
+                              viewModel,
+                              selectedDirectoryIds,
+                              isSelectionMode,
+                            ),
                           DirectoryPermissionRevoked(
                             :final inaccessibleDirectories,
                             :final accessibleDirectories,
                             :final columns,
                           ) =>
-                              _buildPermissionRevokedGrid(
-                                accessibleDirectories,
-                                inaccessibleDirectories,
-                                columns,
-                                viewModel,
-                                selectedDirectoryIds,
-                                isSelectionMode,
-                              ),
+                            _buildPermissionRevokedGrid(
+                              accessibleDirectories,
+                              inaccessibleDirectories,
+                              columns,
+                              viewModel,
+                              selectedDirectoryIds,
+                              isSelectionMode,
+                            ),
                           DirectoryBookmarkInvalid(
                             :final invalidDirectories,
                             :final accessibleDirectories,
                             :final columns,
                           ) =>
-                              _buildBookmarkInvalidGrid(
-                                accessibleDirectories,
-                                invalidDirectories,
-                                columns,
-                                viewModel,
-                                selectedDirectoryIds,
-                                isSelectionMode,
-                              ),
-                          DirectoryError(:final message) =>
-                              _buildError(message, viewModel),
+                            _buildBookmarkInvalidGrid(
+                              accessibleDirectories,
+                              invalidDirectories,
+                              columns,
+                              viewModel,
+                              selectedDirectoryIds,
+                              isSelectionMode,
+                            ),
+                          DirectoryError(:final message) => _buildError(
+                            message,
+                            viewModel,
+                          ),
                           DirectoryEmpty() => _buildEmpty(viewModel),
                         },
                       ),
@@ -170,36 +175,37 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                   if (isSelectionMode)
                     _buildDirectorySelectionToolbar(
                       viewModel: viewModel,
-                      selectedCount: selectedDirectoryCount,
+                      selectedCount: viewModel.selectedDirectoryCount,
                     ),
                   if (_isDragging)
                     Container(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: UiOpacity.subtle),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: UiOpacity.subtle),
                       child: Center(
                         child: Container(
-                    padding: UiSpacing.dialogPadding,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(UiSizing.borderRadiusMedium),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: UiSizing.borderWidth,
+                          padding: UiSpacing.dialogPadding,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(
+                              UiSizing.borderRadiusMedium,
+                            ),
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: UiSizing.borderWidth,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.folder, size: UiSizing.iconExtraLarge),
+                              SizedBox(height: UiSpacing.verticalGap),
+                              const Text('Drop directories here to add them'),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.folder, size: UiSizing.iconExtraLarge),
-                        SizedBox(height: UiSpacing.verticalGap),
-                        const Text('Drop directories here to add them'),
-                      ],
-                    ),
-                  ),
-                ),
-                  ),
                 ],
               ),
             ),
@@ -232,7 +238,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
           icon: Icons.tag,
           label: 'Assign Tags',
           tooltip: 'Replace tags on selected directories',
-          onPressed: () => unawaited(_assignTagsToSelectedDirectories(viewModel)),
+          onPressed: () =>
+              unawaited(_assignTagsToSelectedDirectories(viewModel)),
         ),
         SelectionToolbarAction(
           icon: Icons.favorite,
@@ -244,7 +251,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     );
   }
 
-  Future<void> _assignTagsToSelectedDirectories(DirectoryViewModel viewModel) async {
+  Future<void> _assignTagsToSelectedDirectories(
+    DirectoryViewModel viewModel,
+  ) async {
     final selectionCount = viewModel.selectedDirectoryCount;
     final initialTags = viewModel.commonTagIdsForSelection();
 
@@ -263,9 +272,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Updated tags for $selectionCount directories'),
-      ),
+      SnackBar(content: Text('Updated tags for $selectionCount directories')),
     );
   }
 
@@ -290,14 +297,18 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     };
 
     // Debug logging for tag filter state
-    debugPrint('DirectoryGridScreen: Building tag filter with selectedTagIds: $selectedTagIds');
+    debugPrint(
+      'DirectoryGridScreen: Building tag filter with selectedTagIds: $selectedTagIds',
+    );
 
     final tags = switch (tagState) {
       TagLoaded(:final tags) => tags,
       _ => <TagEntity>[],
     };
 
-    debugPrint('DirectoryGridScreen: Available tags: ${tags.map((t) => t.name).toList()}');
+    debugPrint(
+      'DirectoryGridScreen: Available tags: ${tags.map((t) => t.name).toList()}',
+    );
 
     return Container(
       height: UiSizing.tagFilterHeight,
@@ -309,7 +320,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             label: const Text('All'),
             selected: selectedTagIds.isEmpty,
             onSelected: (_) {
-              debugPrint('DirectoryGridScreen: "All" filter chip selected, calling filterByTags with empty list');
+              debugPrint(
+                'DirectoryGridScreen: "All" filter chip selected, calling filterByTags with empty list',
+              );
               viewModel.filterByTags(const []);
             },
           ),
@@ -321,15 +334,21 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                 label: Text(tag.name),
                 selected: selectedTagIds.contains(tag.id),
                 onSelected: (selected) {
-                  debugPrint('DirectoryGridScreen: Tag "${tag.name}" (${tag.id}) chip ${selected ? 'selected' : 'deselected'}');
-                  debugPrint('DirectoryGridScreen: Current selectedTagIds before change: $selectedTagIds');
+                  debugPrint(
+                    'DirectoryGridScreen: Tag "${tag.name}" (${tag.id}) chip ${selected ? 'selected' : 'deselected'}',
+                  );
+                  debugPrint(
+                    'DirectoryGridScreen: Current selectedTagIds before change: $selectedTagIds',
+                  );
                   final newSelected = List<String>.from(selectedTagIds);
                   if (selected) {
                     newSelected.add(tag.id);
                   } else {
                     newSelected.remove(tag.id);
                   }
-                  debugPrint('DirectoryGridScreen: New selectedTagIds: $newSelected');
+                  debugPrint(
+                    'DirectoryGridScreen: New selectedTagIds: $newSelected',
+                  );
                   viewModel.filterByTags(newSelected);
                 },
               ),
@@ -360,8 +379,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       itemBuilder: (context, index) {
         final directory = directories[index];
         final isSelected = selectedDirectoryIds.contains(directory.id);
-        final itemKey =
-            _directoryItemKeys.putIfAbsent(directory.id, () => GlobalKey());
+        final itemKey = _directoryItemKeys.putIfAbsent(
+          directory.id,
+          () => GlobalKey(),
+        );
         return DirectoryGridItem(
           key: itemKey,
           directory: directory,
@@ -376,10 +397,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         );
       },
     );
-    return _buildDirectoryMarqueeWrapper(
-      viewModel: viewModel,
-      child: gridView,
-    );
+    return _buildDirectoryMarqueeWrapper(viewModel: viewModel, child: gridView);
   }
 
   Widget _buildPermissionRevokedGrid(
@@ -390,7 +408,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     Set<String> selectedDirectoryIds,
     bool isSelectionMode,
   ) {
-    final allDirectories = [...accessibleDirectories, ...inaccessibleDirectories];
+    final allDirectories = [
+      ...accessibleDirectories,
+      ...inaccessibleDirectories,
+    ];
     _pruneDirectoryItemKeys(allDirectories);
 
     return Column(
@@ -435,12 +456,15 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
               itemCount: allDirectories.length,
               itemBuilder: (context, index) {
                 final directory = allDirectories[index];
-                final isInaccessible =
-                    inaccessibleDirectories.contains(directory);
+                final isInaccessible = inaccessibleDirectories.contains(
+                  directory,
+                );
 
                 final isSelected = selectedDirectoryIds.contains(directory.id);
-                final itemKey = _directoryItemKeys
-                    .putIfAbsent(directory.id, () => GlobalKey());
+                final itemKey = _directoryItemKeys.putIfAbsent(
+                  directory.id,
+                  () => GlobalKey(),
+                );
                 return Opacity(
                   opacity: isInaccessible ? UiOpacity.disabled : 1.0,
                   child: DirectoryGridItem(
@@ -523,8 +547,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                 final isInvalid = invalidDirectories.contains(directory);
 
                 final isSelected = selectedDirectoryIds.contains(directory.id);
-                final itemKey = _directoryItemKeys
-                    .putIfAbsent(directory.id, () => GlobalKey());
+                final itemKey = _directoryItemKeys.putIfAbsent(
+                  directory.id,
+                  () => GlobalKey(),
+                );
                 return Opacity(
                   opacity: isInvalid ? UiOpacity.disabled : 1.0,
                   child: DirectoryGridItem(
@@ -571,10 +597,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
               child: IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withOpacity(0.12),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withOpacity(0.12),
                     border: Border.all(
                       color: Theme.of(context).colorScheme.primary,
                       width: UiSizing.borderWidth,
@@ -608,7 +633,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
     _directoryCachedItemRects = _computeDirectoryItemRects();
     final localPosition = overlayBox.globalToLocal(event.position);
-    if (_isPointInsideAnyRect(localPosition, _directoryCachedItemRects.values)) {
+    if (_isPointInsideAnyRect(
+      localPosition,
+      _directoryCachedItemRects.values,
+    )) {
       return;
     }
 
@@ -651,8 +679,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
     final localPosition = overlayBox.globalToLocal(event.position);
     setState(() {
-      _directorySelectionRect =
-          Rect.fromPoints(_directoryDragStart!, localPosition);
+      _directorySelectionRect = Rect.fromPoints(
+        _directoryDragStart!,
+        localPosition,
+      );
     });
 
     _directoryCachedItemRects = _computeDirectoryItemRects();
@@ -728,8 +758,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         staleKeys.add(id);
         return;
       }
-      final topLeft =
-          renderObject.localToGlobal(Offset.zero, ancestor: overlayBox);
+      final topLeft = renderObject.localToGlobal(
+        Offset.zero,
+        ancestor: overlayBox,
+      );
       rects[id] = Rect.fromLTWH(
         topLeft.dx,
         topLeft.dy,
@@ -776,11 +808,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error,
-            size: UiSizing.iconHuge,
-            color: UiColors.red,
-          ),
+          Icon(Icons.error, size: UiSizing.iconHuge, color: UiColors.red),
           SizedBox(height: UiSpacing.verticalGap),
           Text('Error: $message'),
           SizedBox(height: UiSpacing.verticalGap),
@@ -958,7 +986,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             onPressed: () async {
               Navigator.of(context).pop();
               for (final directory in invalidDirectories) {
-                await viewModel.recoverDirectoryBookmark(directory.id, directory.path);
+                await viewModel.recoverDirectoryBookmark(
+                  directory.id,
+                  directory.path,
+                );
               }
             },
             child: const Text('Recover Bookmarks'),
@@ -979,9 +1010,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       await ref.read(directoryViewModelProvider.notifier).loadDirectories();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to assign tags: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to assign tags: $e')));
       }
       rethrow;
     }

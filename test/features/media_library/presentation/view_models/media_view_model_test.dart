@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/features/media_library/data/data_sources/local_media_data_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../../lib/features/favorites/domain/repositories/favorites_repository.dart';
@@ -28,9 +29,9 @@ class InMemoryMediaRepository implements MediaRepository {
     String directoryPath, {
     String? bookmarkData,
   }) async {
-    return (await filterMediaByTags(tagIds))
-        .where((item) => item.directoryId == directoryPath)
-        .toList();
+    return (await filterMediaByTags(
+      tagIds,
+    )).where((item) => item.directoryId == directoryPath).toList();
   }
 
   @override
@@ -189,7 +190,8 @@ void main() {
     expect(loaded.isSelectionMode, isTrue);
 
     viewModel.toggleMediaSelection('m1');
-    final cleared = container.read(mediaViewModelProvider(params)) as MediaLoaded;
+    final cleared =
+        container.read(mediaViewModelProvider(params)) as MediaLoaded;
     expect(cleared.selectedMediaIds, isEmpty);
     expect(cleared.isSelectionMode, isFalse);
   });
@@ -206,7 +208,8 @@ void main() {
     await viewModel.loadMedia();
 
     viewModel.selectMediaRange(const ['m1', 'm2']);
-    MediaLoaded state = container.read(mediaViewModelProvider(params)) as MediaLoaded;
+    MediaLoaded state =
+        container.read(mediaViewModelProvider(params)) as MediaLoaded;
     expect(state.selectedMediaIds, {'m1', 'm2'});
     expect(state.isSelectionMode, isTrue);
 
@@ -267,28 +270,32 @@ void main() {
     await viewModel.applyTagsToSelection(const ['bulk', 'bulk']);
 
     expect(
-      mediaRepository
-          ._media
-          .firstWhere((media) => media.id == 'm1')
-          .tagIds,
+      mediaRepository._media.firstWhere((media) => media.id == 'm1').tagIds,
       ['bulk'],
     );
     expect(
-      mediaRepository
-          ._media
-          .firstWhere((media) => media.id == 'm3')
-          .tagIds,
+      mediaRepository._media.firstWhere((media) => media.id == 'm3').tagIds,
       ['bulk'],
     );
+    addTearDown(container.dispose);
 
-    final state = container.read(mediaViewModelProvider(params));
+    final state = container.read(mediaViewModelProvider(params).notifier);
     expect(state, isA<MediaLoaded>());
     final loaded = state as MediaLoaded;
     expect(loaded.selectedMediaIds, {'m1', 'm3'});
-    expect(
-      loaded.media.firstWhere((media) => media.id == 'm1').tagIds,
-      ['bulk'],
-    );
+    expect(loaded.media.firstWhere((media) => media.id == 'm1').tagIds, [
+      'bulk',
+    ]);
+    addTearDown(container.dispose);
+
+    await viewModel.loadMedia();
+
+    viewModel.selectMediaRange(const ['m1', 'm2']);
+    expect(state.selectedMediaIds, {'m1', 'm2'});
+    expect(state.isSelectionMode, isTrue);
+
+    viewModel.selectMediaRange(const ['m3'], append: true);
+    expect(state.selectedMediaIds, {'m1', 'm2', 'm3'});
   });
 
   test('addSelectionToFavorites adds only new favorites', () async {

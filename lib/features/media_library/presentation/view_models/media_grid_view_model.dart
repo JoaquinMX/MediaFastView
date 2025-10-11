@@ -25,12 +25,12 @@ enum MediaSortOption {
 
 extension MediaSortOptionX on MediaSortOption {
   String get label => switch (this) {
-        MediaSortOption.nameAscending => 'Name (A-Z)',
-        MediaSortOption.nameDescending => 'Name (Z-A)',
-        MediaSortOption.lastModifiedDescending => 'Last Modified (Newest)',
-        MediaSortOption.lastModifiedAscending => 'Last Modified (Oldest)',
-        MediaSortOption.sizeDescending => 'Size',
-      };
+    MediaSortOption.nameAscending => 'Name (A-Z)',
+    MediaSortOption.nameDescending => 'Name (Z-A)',
+    MediaSortOption.lastModifiedDescending => 'Last Modified (Newest)',
+    MediaSortOption.lastModifiedAscending => 'Last Modified (Oldest)',
+    MediaSortOption.sizeDescending => 'Size',
+  };
 }
 
 /// Sealed class representing the state of the media grid.
@@ -302,17 +302,23 @@ class MediaViewModel extends StateNotifier<MediaState> {
   /// Loads media for the current directory.
   Future<void> loadMedia() async {
     final loadStartTime = DateTime.now();
-    LoggingService.instance.info('Loading media for directory: $_directoryPath, bookmarkData present: ${_bookmarkData != null}');
+    LoggingService.instance.info(
+      'Loading media for directory: $_directoryPath, bookmarkData present: ${_bookmarkData != null}',
+    );
     state = const MediaLoading();
     try {
-      LoggingService.instance.debug('Calling _mediaRepository.getMediaForDirectoryPath');
+      LoggingService.instance.debug(
+        'Calling _mediaRepository.getMediaForDirectoryPath',
+      );
       final scanStartTime = DateTime.now();
       final media = await _mediaRepository.getMediaForDirectoryPath(
         _directoryPath,
         bookmarkData: _bookmarkData,
       );
       final scanTime = DateTime.now().difference(scanStartTime);
-      LoggingService.instance.info('Retrieved ${media.length} media items in ${scanTime.inMilliseconds}ms');
+      LoggingService.instance.info(
+        'Retrieved ${media.length} media items in ${scanTime.inMilliseconds}ms',
+      );
 
       // Get existing persisted media to merge tagIds
       final mergeStartTime = DateTime.now();
@@ -329,7 +335,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
           type: entity.type,
           size: entity.size,
           lastModified: entity.lastModified,
-          tagIds: existing?.tagIds ?? entity.tagIds, // Merge tagIds from persisted data
+          tagIds:
+              existing?.tagIds ??
+              entity.tagIds, // Merge tagIds from persisted data
           directoryId: entity.directoryId,
           bookmarkData: entity.bookmarkData,
         );
@@ -343,7 +351,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final persistTime = DateTime.now().difference(persistStartTime);
 
       final totalTime = DateTime.now().difference(loadStartTime);
-      LoggingService.instance.info('Media loading completed in ${totalTime.inMilliseconds}ms (scan: ${scanTime.inMilliseconds}ms, merge: ${mergeTime.inMilliseconds}ms, persist: ${persistTime.inMilliseconds}ms)');
+      LoggingService.instance.info(
+        'Media loading completed in ${totalTime.inMilliseconds}ms (scan: ${scanTime.inMilliseconds}ms, merge: ${mergeTime.inMilliseconds}ms, persist: ${persistTime.inMilliseconds}ms)',
+      );
 
       _cachedMedia = _sortMedia(media, _currentSortOption);
 
@@ -368,8 +378,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
       }
     } catch (e) {
       final totalTime = DateTime.now().difference(loadStartTime);
-      LoggingService.instance
-          .error('Error loading media after ${totalTime.inMilliseconds}ms: $e');
+      LoggingService.instance.error(
+        'Error loading media after ${totalTime.inMilliseconds}ms: $e',
+      );
       // Check if this is a permission-related error
       final errorMessage = e.toString();
       _cachedMedia = const [];
@@ -444,7 +455,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
           type: entity.type,
           size: entity.size,
           lastModified: entity.lastModified,
-          tagIds: existing?.tagIds ?? entity.tagIds, // Merge tagIds from persisted data
+          tagIds:
+              existing?.tagIds ??
+              entity.tagIds, // Merge tagIds from persisted data
           directoryId: entity.directoryId,
           bookmarkData: entity.bookmarkData,
         );
@@ -487,7 +500,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
   /// Sets the number of columns for the grid.
   void setColumns(int columns) {
     final clampedColumns = columns.clamp(2, 12);
-    final newColumns = clampedColumns is int ? clampedColumns : clampedColumns.toInt();
+    final newColumns = clampedColumns is int
+        ? clampedColumns
+        : clampedColumns.toInt();
     _ref.read(gridColumnsProvider.notifier).setColumns(newColumns);
   }
 
@@ -497,15 +512,25 @@ class MediaViewModel extends StateNotifier<MediaState> {
     String directoryName, {
     String? bookmarkData,
   }) async {
-    _params.navigateToDirectory?.call(directoryPath, directoryName, bookmarkData);
+    _params.navigateToDirectory?.call(
+      directoryPath,
+      directoryName,
+      bookmarkData,
+    );
   }
 
   /// Attempts to recover permissions by prompting user to re-select the directory.
   Future<void> recoverPermissions() async {
-    LoggingService.instance.info('Attempting to recover permissions for directory: $_directoryPath');
+    LoggingService.instance.info(
+      'Attempting to recover permissions for directory: $_directoryPath',
+    );
     if (_params.onPermissionRecoveryNeeded == null) {
-      LoggingService.instance.warning('No permission recovery callback provided');
-      throw Exception('Permission recovery not available - no callback provided');
+      LoggingService.instance.warning(
+        'No permission recovery callback provided',
+      );
+      throw Exception(
+        'Permission recovery not available - no callback provided',
+      );
     }
 
     state = const MediaLoading(); // Show loading state during recovery
@@ -513,33 +538,50 @@ class MediaViewModel extends StateNotifier<MediaState> {
     try {
       final selectedPath = await _params.onPermissionRecoveryNeeded!();
       if (selectedPath != null && selectedPath.isNotEmpty) {
-        LoggingService.instance.info('User selected new path: $selectedPath, updating directory path and reloading');
+        LoggingService.instance.info(
+          'User selected new path: $selectedPath, updating directory path and reloading',
+        );
 
         // Validate the new path before proceeding
         final permissionService = PermissionService();
-        final accessStatus = await permissionService.checkDirectoryAccess(selectedPath);
+        final accessStatus = await permissionService.checkDirectoryAccess(
+          selectedPath,
+        );
 
         if (accessStatus != PermissionStatus.granted) {
-          throw Exception('Selected directory is not accessible: ${accessStatus.name}');
+          throw Exception(
+            'Selected directory is not accessible: ${accessStatus.name}',
+          );
         }
 
         // Update the directory path and reload
         _directoryPath = selectedPath;
-        _directoryName = selectedPath.split('/').lastWhere((element) => element.isNotEmpty, orElse: () => selectedPath);
+        _directoryName = selectedPath
+            .split('/')
+            .lastWhere(
+              (element) => element.isNotEmpty,
+              orElse: () => selectedPath,
+            );
         _bookmarkData = null; // Clear bookmark data since we're re-selecting
 
         // Try to create a new bookmark for the selected directory
         try {
           final bookmarkService = BookmarkService.instance;
           _bookmarkData = await bookmarkService.createBookmark(_directoryPath);
-          LoggingService.instance.info('Created new bookmark for recovered directory');
+          LoggingService.instance.info(
+            'Created new bookmark for recovered directory',
+          );
         } catch (e) {
-          LoggingService.instance.warning('Failed to create bookmark for recovered directory: $e');
+          LoggingService.instance.warning(
+            'Failed to create bookmark for recovered directory: $e',
+          );
           // Continue without bookmark - it's not critical for basic functionality
         }
 
         await loadMedia();
-        LoggingService.instance.info('Permission recovery completed successfully');
+        LoggingService.instance.info(
+          'Permission recovery completed successfully',
+        );
       } else {
         LoggingService.instance.info('User cancelled permission recovery');
         // Revert to permission revoked state
@@ -564,17 +606,25 @@ class MediaViewModel extends StateNotifier<MediaState> {
   Future<bool> validateCurrentPermissions() async {
     try {
       final permissionService = PermissionService();
-      final accessStatus = await permissionService.checkDirectoryAccess(_directoryPath);
+      final accessStatus = await permissionService.checkDirectoryAccess(
+        _directoryPath,
+      );
       final hasAccess = accessStatus == PermissionStatus.granted;
 
-      LoggingService.instance.debug('Permission validation result: $accessStatus for $_directoryPath');
+      LoggingService.instance.debug(
+        'Permission validation result: $accessStatus for $_directoryPath',
+      );
 
       // Also validate bookmark if present
       final bookmarkData = _bookmarkData;
       if (bookmarkData != null && hasAccess) {
-        final bookmarkResult = await permissionService.validateBookmark(bookmarkData);
+        final bookmarkResult = await permissionService.validateBookmark(
+          bookmarkData,
+        );
         if (!bookmarkResult.isValid) {
-          LoggingService.instance.warning('Bookmark validation failed: ${bookmarkResult.reason}');
+          LoggingService.instance.warning(
+            'Bookmark validation failed: ${bookmarkResult.reason}',
+          );
           return false;
         }
       }
@@ -630,13 +680,12 @@ class MediaViewModel extends StateNotifier<MediaState> {
     }
   }
 
-
   /// Helper method to check if an error is permission-related.
   bool _isPermissionError(String errorMessage) {
     return errorMessage.contains('Operation not permitted') ||
-           errorMessage.contains('errno = 1') ||
-           errorMessage.contains('Permission denied') ||
-           errorMessage.contains('FileSystemError');
+        errorMessage.contains('errno = 1') ||
+        errorMessage.contains('Permission denied') ||
+        errorMessage.contains('FileSystemError');
   }
 
   void _applyColumnUpdate(int columns) {
@@ -699,7 +748,10 @@ class MediaViewModel extends StateNotifier<MediaState> {
     }
   }
 
-  List<MediaEntity> _sortMedia(List<MediaEntity> media, MediaSortOption option) {
+  List<MediaEntity> _sortMedia(
+    List<MediaEntity> media,
+    MediaSortOption option,
+  ) {
     final sorted = List<MediaEntity>.from(media);
     switch (option) {
       case MediaSortOption.nameAscending:
@@ -786,7 +838,8 @@ class MediaViewModelParams {
   final String directoryPath;
   final String directoryName;
   final String? bookmarkData;
-  final void Function(String path, String name, String? bookmarkData)? navigateToDirectory;
+  final void Function(String path, String name, String? bookmarkData)?
+  navigateToDirectory;
   final Future<String?> Function()? onPermissionRecoveryNeeded;
 
   @override
@@ -799,5 +852,6 @@ class MediaViewModelParams {
           bookmarkData == other.bookmarkData;
 
   @override
-  int get hashCode => directoryPath.hashCode ^ directoryName.hashCode ^ bookmarkData.hashCode;
+  int get hashCode =>
+      directoryPath.hashCode ^ directoryName.hashCode ^ bookmarkData.hashCode;
 }
