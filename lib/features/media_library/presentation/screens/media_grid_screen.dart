@@ -15,7 +15,7 @@ import '../../../../shared/providers/grid_columns_provider.dart';
 
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
-import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
+import '../../../tagging/presentation/widgets/bulk_tag_assignment_sheet.dart';
 import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
@@ -225,7 +225,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final selectionCount = viewModel.selectedMediaCount;
     final initialTags = viewModel.commonTagIdsForSelection();
 
-    final applied = await BulkTagAssignmentDialog.show(
+    final applied = await BulkTagAssignmentSheet.show(
       context,
       title: 'Assign Tags ($selectionCount selected)',
       description:

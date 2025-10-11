@@ -17,7 +17,7 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
-import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
+import '../../../tagging/presentation/widgets/bulk_tag_assignment_sheet.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../domain/entities/directory_entity.dart';
@@ -267,7 +267,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     final selectionCount = viewModel.selectedDirectoryCount;
     final initialTags = viewModel.commonTagIdsForSelection();
 
-    final applied = await BulkTagAssignmentDialog.show(
+    final applied = await BulkTagAssignmentSheet.show(
       context,
       title: 'Assign Tags ($selectionCount selected)',
       description:
