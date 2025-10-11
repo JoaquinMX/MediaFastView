@@ -129,6 +129,7 @@ class _BulkTagAssignmentDialogState
   }
 
   Widget _buildContent(BuildContext context, List<TagEntity> tags) {
+    final availableHeight = MediaQuery.of(context).size.height;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,20 +141,26 @@ class _BulkTagAssignmentDialogState
               ),
         ),
         const SizedBox(height: 16),
-        Flexible(
-          child: SingleChildScrollView(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: tags
-                  .map(
-                    (tag) => TagChip(
-                      tag: tag,
-                      selected: _tempSelectedTagIds.contains(tag.id),
-                      onTap: () => _toggleTagSelection(tag.id),
-                    ),
-                  )
-                  .toList(),
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: availableHeight * 0.5,
+          ),
+          child: Scrollbar(
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: tags
+                    .map(
+                      (tag) => TagChip(
+                        tag: tag,
+                        selected: _tempSelectedTagIds.contains(tag.id),
+                        onTap: () => _toggleTagSelection(tag.id),
+                      ),
+                    )
+                    .toList(),
+              ),
             ),
           ),
         ),
