@@ -1,13 +1,14 @@
-import '../../domain/entities/media_entity.dart';
-import '../../domain/repositories/media_repository.dart';
-import '../../domain/repositories/directory_repository.dart';
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
+import '../../../../core/utils/batch_update_result.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
+import '../../domain/entities/media_entity.dart';
+import '../../domain/repositories/directory_repository.dart';
+import '../../domain/repositories/media_repository.dart';
 import '../data_sources/filesystem_media_data_source.dart';
 import '../data_sources/local_media_data_source.dart';
 import '../models/media_model.dart';
-import '../../../../shared/utils/directory_id_utils.dart';
 
 /// Implementation of MediaRepository using filesystem scanning.
 class FilesystemMediaRepositoryImpl implements MediaRepository {
@@ -237,6 +238,43 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   @override
   Future<void> updateMediaTags(String mediaId, List<String> tagIds) async {
     await _localMediaDataSource.updateMediaTags(mediaId, tagIds);
+  }
+
+  @override
+  Future<BatchUpdateResult> updateMediaTagsBatch(
+    Map<String, List<String>> mediaTags,
+  ) async {
+    if (mediaTags.isEmpty) {
+      return BatchUpdateResult.empty;
+    }
+
+    final models = await _localMediaDataSource.getMedia();
+    final indexById = {
+      for (var i = 0; i < models.length; i++) models[i].id: i,
+    };
+
+    final successes = <String>[];
+    final failures = <String, String>{};
+
+    for (final entry in mediaTags.entries) {
+      final index = indexById[entry.key];
+      if (index == null) {
+        failures[entry.key] = 'Media not found';
+        continue;
+      }
+
+      models[index] = models[index].copyWith(tagIds: entry.value);
+      successes.add(entry.key);
+    }
+
+    if (successes.isNotEmpty) {
+      await _localMediaDataSource.saveMedia(models);
+    }
+
+    return BatchUpdateResult(
+      successfulIds: successes,
+      failureReasons: failures,
+    );
   }
 
   /// Merges tags from local storage with filesystem-scanned media.

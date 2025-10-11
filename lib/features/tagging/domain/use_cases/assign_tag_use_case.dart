@@ -1,5 +1,6 @@
 import 'dart:collection';
 
+import '../../../../core/utils/batch_update_result.dart';
 import '../../../media_library/domain/repositories/directory_repository.dart';
 import '../../../media_library/domain/repositories/media_repository.dart';
 import '../entities/tag_entity.dart';
@@ -35,6 +36,33 @@ class AssignTagUseCase {
       directoryId,
       sanitizedTagIds,
     );
+  }
+
+  /// Replaces the tags assigned to multiple directories.
+  Future<BatchUpdateResult> setTagsForDirectories(
+    List<String> directoryIds,
+    List<String> tagIds,
+  ) async {
+    if (directoryIds.isEmpty) {
+      return BatchUpdateResult.empty;
+    }
+
+    final sanitizedTagIds =
+        List<String>.unmodifiable(LinkedHashSet<String>.from(tagIds));
+    final sanitizedDirectoryIds = LinkedHashSet<String>.from(
+      directoryIds.where((id) => id.isNotEmpty),
+    );
+
+    if (sanitizedDirectoryIds.isEmpty) {
+      return BatchUpdateResult.empty;
+    }
+
+    final payload = {
+      for (final directoryId in sanitizedDirectoryIds)
+        directoryId: sanitizedTagIds,
+    };
+
+    return directoryRepository.updateDirectoryTagsBatch(payload);
   }
 
   /// Assigns a tag to a directory.
@@ -73,6 +101,32 @@ class AssignTagUseCase {
       final updatedTagIds = media.tagIds.where((id) => id != tag.id).toList();
       await mediaRepository.updateMediaTags(mediaId, updatedTagIds);
     }
+  }
+
+  /// Replaces the tags assigned to multiple media items.
+  Future<BatchUpdateResult> setTagsForMedia(
+    List<String> mediaIds,
+    List<String> tagIds,
+  ) async {
+    if (mediaIds.isEmpty) {
+      return BatchUpdateResult.empty;
+    }
+
+    final sanitizedTagIds =
+        List<String>.unmodifiable(LinkedHashSet<String>.from(tagIds));
+    final sanitizedMediaIds = LinkedHashSet<String>.from(
+      mediaIds.where((id) => id.isNotEmpty),
+    );
+
+    if (sanitizedMediaIds.isEmpty) {
+      return BatchUpdateResult.empty;
+    }
+
+    final payload = {
+      for (final mediaId in sanitizedMediaIds) mediaId: sanitizedTagIds,
+    };
+
+    return mediaRepository.updateMediaTagsBatch(payload);
   }
 
   /// Toggles a tag on a directory (adds if not present, removes if present).

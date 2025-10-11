@@ -230,11 +230,23 @@ class MediaViewModel extends StateNotifier<MediaState> {
       LinkedHashSet<String>.from(tagIds),
     );
 
-    for (final mediaId in _selectedMediaIds) {
-      await _mediaRepository.updateMediaTags(mediaId, sanitizedTags);
+    final assignTagUseCase = _ref.read(assignTagUseCaseProvider);
+    final result = await assignTagUseCase.setTagsForMedia(
+      _selectedMediaIds.toList(),
+      sanitizedTags,
+    );
+
+    if (result.successfulIds.isNotEmpty) {
+      final updatedIds = result.successfulIds.toSet();
+      _cachedMedia = _updateMediaTagsForSelection(sanitizedTags, updatedIds);
     }
 
-    _cachedMedia = _updateMediaTagsForSelection(sanitizedTags);
+    if (result.hasFailures) {
+      LoggingService.instance.warning(
+        'Failed to update tags for media items: ${result.failureReasons}',
+      );
+    }
+
     _emitLoadedStateFromCache();
   }
 
@@ -286,13 +298,16 @@ class MediaViewModel extends StateNotifier<MediaState> {
     _isSelectionMode = _selectedMediaIds.isNotEmpty;
   }
 
-  List<MediaEntity> _updateMediaTagsForSelection(List<String> tagIds) {
-    if (_selectedMediaIds.isEmpty || _cachedMedia.isEmpty) {
+  List<MediaEntity> _updateMediaTagsForSelection(
+    List<String> tagIds,
+    Set<String> targetMediaIds,
+  ) {
+    if (targetMediaIds.isEmpty || _cachedMedia.isEmpty) {
       return List<MediaEntity>.from(_cachedMedia);
     }
     return _cachedMedia
         .map(
-          (media) => _selectedMediaIds.contains(media.id)
+          (media) => targetMediaIds.contains(media.id)
               ? media.copyWith(tagIds: tagIds)
               : media,
         )

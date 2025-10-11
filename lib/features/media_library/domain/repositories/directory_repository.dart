@@ -1,3 +1,4 @@
+import '../../../../core/utils/batch_update_result.dart';
 import '../entities/directory_entity.dart';
 
 /// Repository interface for directory operations.
@@ -24,6 +25,13 @@ abstract class DirectoryRepository {
 
   /// Updates the tags for a directory.
   Future<void> updateDirectoryTags(String directoryId, List<String> tagIds);
+
+  /// Replaces the tag collections for multiple directories in a single
+  /// operation. Implementations should persist the updates atomically when
+  /// possible to avoid partial writes.
+  Future<BatchUpdateResult> updateDirectoryTagsBatch(
+    Map<String, List<String>> directoryTags,
+  );
 
   /// Updates the bookmark data for a directory.
   Future<void> updateDirectoryBookmark(String directoryId, String? bookmarkData);
