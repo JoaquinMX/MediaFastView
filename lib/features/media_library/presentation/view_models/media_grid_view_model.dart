@@ -148,8 +148,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   bool _isSelectionMode = false;
 
   MediaSortOption get currentSortOption => _currentSortOption;
-  Set<String> get selectedMediaIds =>
-      Set<String>.unmodifiable(_selectedMediaIds);
+  Set<String> get selectedMediaIds => Set<String>.unmodifiable(_selectedMediaIds);
   bool get isSelectionMode => _isSelectionMode;
   int get selectedMediaCount => _selectedMediaIds.length;
 
@@ -181,7 +180,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
     Set<String> updated = Set<String>.from(_selectedMediaIds);
     if (append) {
       updated.addAll(mediaIds);
-    } else {
+    }
+    else {
       updated = Set<String>.from(mediaIds);
     }
     _applySelectionUpdate(updated);
@@ -286,9 +286,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         _clearSelectionInternal();
         state = const MediaEmpty();
       } else {
-        LoggingService.instance.info(
-          'Media loaded successfully, setting loaded state',
-        );
+        LoggingService.instance.info('Media loaded successfully, setting loaded state');
         _clearSelectionInternal();
         state = MediaLoaded(
           media: _cachedMedia,
@@ -320,9 +318,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
           directoryName: _directoryName,
         );
       } else {
-        LoggingService.instance.error(
-          'Non-permission error, setting error state',
-        );
+        LoggingService.instance
+            .error('Non-permission error, setting error state');
         _clearSelectionInternal();
         state = MediaError(errorMessage);
       }
@@ -607,6 +604,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     }
   }
 
+
   /// Helper method to check if an error is permission-related.
   bool _isPermissionError(String errorMessage) {
     return errorMessage.contains('Operation not permitted') ||
@@ -616,14 +614,12 @@ class MediaViewModel extends StateNotifier<MediaState> {
   }
 
   void _applyColumnUpdate(int columns) {
-    if (state case MediaLoaded(
-      :final media,
-      :final searchQuery,
-      :final selectedTagIds,
-      :final currentDirectoryPath,
-      :final currentDirectoryName,
-      :final sortOption,
-    )) {
+    if (state case MediaLoaded(:final media,
+        :final searchQuery,
+        :final selectedTagIds,
+        :final currentDirectoryPath,
+        :final currentDirectoryName,
+        :final sortOption)) {
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
@@ -724,35 +720,35 @@ final mediaViewModelProvider = StateNotifierProvider.autoDispose
     );
 
 Set<String> _extractMediaSelection(MediaState state) => switch (state) {
-  MediaLoaded(selectedMediaIds: final ids) => ids,
-  _ => const <String>{},
-};
+      MediaLoaded(selectedMediaIds: final ids) => ids,
+      _ => const <String>{},
+    };
 
 bool _extractMediaSelectionMode(MediaState state) => switch (state) {
-  MediaLoaded(isSelectionMode: final mode) => mode,
-  _ => false,
-};
+      MediaLoaded(isSelectionMode: final mode) => mode,
+      _ => false,
+    };
 
 /// Provider exposing the current set of selected media IDs.
-final selectedMediaIdsProvider = Provider.autoDispose
-    .family<Set<String>, MediaViewModelParams>((ref, params) {
-      final state = ref.watch(mediaViewModelProvider(params));
-      return _extractMediaSelection(state);
-    });
+final selectedMediaIdsProvider =
+    Provider.autoDispose.family<Set<String>, MediaViewModelParams>((ref, params) {
+  final state = ref.watch(mediaViewModelProvider(params));
+  return _extractMediaSelection(state);
+});
 
 /// Provider exposing whether selection mode is active for the current media grid.
-final mediaSelectionModeProvider = Provider.autoDispose
-    .family<bool, MediaViewModelParams>((ref, params) {
-      final state = ref.watch(mediaViewModelProvider(params));
-      return _extractMediaSelectionMode(state);
-    });
+final mediaSelectionModeProvider =
+    Provider.autoDispose.family<bool, MediaViewModelParams>((ref, params) {
+  final state = ref.watch(mediaViewModelProvider(params));
+  return _extractMediaSelectionMode(state);
+});
 
 /// Provider exposing the number of selected media items for the given grid.
-final selectedMediaCountProvider = Provider.autoDispose
-    .family<int, MediaViewModelParams>((ref, params) {
-      final state = ref.watch(mediaViewModelProvider(params));
-      return _extractMediaSelection(state).length;
-    });
+final selectedMediaCountProvider =
+    Provider.autoDispose.family<int, MediaViewModelParams>((ref, params) {
+  final state = ref.watch(mediaViewModelProvider(params));
+  return _extractMediaSelection(state).length;
+});
 
 /// Parameters for the media view model provider.
 class MediaViewModelParams {
