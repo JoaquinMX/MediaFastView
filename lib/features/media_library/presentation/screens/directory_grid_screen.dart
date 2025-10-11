@@ -47,6 +47,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Set<String> _directoryMarqueeBaseSelection = <String>{};
   Set<String> _directoryLastMarqueeSelection = <String>{};
   Map<String, Rect> _directoryCachedItemRects = <String, Rect>{};
+  Offset? _directoryLastPointerPosition;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +66,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.escape):
             _ClearDirectorySelectionIntent(),
+        LogicalKeySet(LogicalKeyboardKey.metaLeft, LogicalKeyboardKey.keyA):
+            const _SelectAllDirectoriesIntent(),
+        LogicalKeySet(LogicalKeyboardKey.metaRight, LogicalKeyboardKey.keyA):
+            const _SelectAllDirectoriesIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -80,6 +85,13 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                   return null;
                 },
               ),
+          _SelectAllDirectoriesIntent:
+              CallbackAction<_SelectAllDirectoriesIntent>(
+            onInvoke: (_) {
+              ref.read(directoryViewModelProvider.notifier).selectAllDirectories();
+              return null;
+            },
+          ),
         },
         child: Focus(
           autofocus: true,
@@ -248,6 +260,12 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         ),
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.select_all),
+          tooltip: 'Select all',
+          onPressed: viewModel.selectAllDirectories,
+        ),
+        const SizedBox(width: 8),
         FilledButton.icon(
           onPressed: () => unawaited(_assignTagsToSelectedDirectories(viewModel)),
           icon: const Icon(Icons.tag),
@@ -665,34 +683,38 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     required Widget child,
     required DirectoryViewModel viewModel,
   }) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (event) => _handleDirectoryPointerDown(event, viewModel),
-      onPointerMove: (event) => _handleDirectoryPointerMove(event, viewModel),
-      onPointerUp: (_) => _endDirectoryMarquee(),
-      onPointerCancel: (_) => _endDirectoryMarquee(),
-      child: Stack(
-        key: _directoryGridOverlayKey,
-        children: [
-          Positioned.fill(child: child),
-          if (_directorySelectionRect != null)
-            Positioned.fromRect(
-              rect: _directorySelectionRect!,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withOpacity(0.12),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: UiSizing.borderWidth,
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) =>
+          _handleDirectoryScrollNotification(notification, viewModel),
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (event) => _handleDirectoryPointerDown(event, viewModel),
+        onPointerMove: (event) => _handleDirectoryPointerMove(event, viewModel),
+        onPointerUp: (_) => _endDirectoryMarquee(),
+        onPointerCancel: (_) => _endDirectoryMarquee(),
+        child: Stack(
+          key: _directoryGridOverlayKey,
+          children: [
+            Positioned.fill(child: child),
+            if (_directorySelectionRect != null)
+              Positioned.fromRect(
+                rect: _directorySelectionRect!,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacity(0.12),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: UiSizing.borderWidth,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -724,6 +746,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       return;
     }
 
+    _directoryLastPointerPosition = event.position;
     final baseSelection = viewModel.selectedDirectoryIds;
     _directoryMarqueeBaseSelection = Set<String>.from(baseSelection);
     _directoryLastMarqueeSelection = Set<String>.from(baseSelection);
@@ -746,6 +769,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       return;
     }
 
+    _directoryLastPointerPosition = event.position;
     if (event.kind == PointerDeviceKind.mouse &&
         (event.buttons & kPrimaryMouseButton) == 0) {
       _endDirectoryMarquee();
@@ -762,12 +786,15 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     }
 
     final localPosition = overlayBox.globalToLocal(event.position);
-    setState(() {
-      _directorySelectionRect = Rect.fromPoints(
-        _directoryDragStart!,
-        localPosition,
-      );
-    });
+    final updatedRect = Rect.fromPoints(
+      _directoryDragStart!,
+      localPosition,
+    );
+    if (_hasSelectionRectChanged(_directorySelectionRect, updatedRect)) {
+      setState(() {
+        _directorySelectionRect = updatedRect;
+      });
+    }
 
     _directoryCachedItemRects = _computeDirectoryItemRects();
     _updateDirectoryMarqueeSelection(viewModel);
@@ -787,6 +814,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     _directoryMarqueeBaseSelection = <String>{};
     _directoryLastMarqueeSelection = <String>{};
     _directoryCachedItemRects = <String, Rect>{};
+    _directoryLastPointerPosition = null;
   }
 
   void _updateDirectoryMarqueeSelection(DirectoryViewModel viewModel) {
@@ -816,6 +844,55 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
     _directoryLastMarqueeSelection = desiredSelection;
     viewModel.selectDirectoryRange(desiredSelection, append: false);
+  }
+
+  bool _handleDirectoryScrollNotification(
+    ScrollNotification notification,
+    DirectoryViewModel viewModel,
+  ) {
+    if (!_isDirectoryMarqueeActive || _directoryDragStart == null) {
+      return false;
+    }
+
+    if (notification is! ScrollUpdateNotification &&
+        notification is! OverscrollNotification &&
+        notification is! ScrollEndNotification) {
+      return false;
+    }
+
+    final overlayContext = _directoryGridOverlayKey.currentContext;
+    if (overlayContext == null) {
+      return false;
+    }
+
+    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
+    if (overlayBox == null || !overlayBox.attached) {
+      return false;
+    }
+
+    final pointerPosition = _directoryLastPointerPosition;
+    if (pointerPosition != null) {
+      final localPosition = overlayBox.globalToLocal(pointerPosition);
+      final updatedRect = Rect.fromPoints(
+        _directoryDragStart!,
+        localPosition,
+      );
+      if (_hasSelectionRectChanged(_directorySelectionRect, updatedRect)) {
+        setState(() {
+          _directorySelectionRect = updatedRect;
+        });
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isDirectoryMarqueeActive) {
+        return;
+      }
+      _directoryCachedItemRects = _computeDirectoryItemRects();
+      _updateDirectoryMarqueeSelection(viewModel);
+    });
+
+    return false;
   }
 
   Map<String, Rect> _computeDirectoryItemRects() {
@@ -885,6 +962,15 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         pressed.contains(LogicalKeyboardKey.metaRight) ||
         pressed.contains(LogicalKeyboardKey.altLeft) ||
         pressed.contains(LogicalKeyboardKey.altRight);
+  }
+
+  bool _hasSelectionRectChanged(Rect? current, Rect next) {
+    if (current == null) {
+      return true;
+    }
+    final topDiff = current.topLeft - next.topLeft;
+    final bottomDiff = current.bottomRight - next.bottomRight;
+    return topDiff.distanceSquared > 0.5 || bottomDiff.distanceSquared > 0.5;
   }
 
   Widget _buildError(String message, DirectoryViewModel viewModel) {
@@ -1105,4 +1191,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
 class _ClearDirectorySelectionIntent extends Intent {
   const _ClearDirectorySelectionIntent();
+}
+
+class _SelectAllDirectoriesIntent extends Intent {
+  const _SelectAllDirectoriesIntent();
 }

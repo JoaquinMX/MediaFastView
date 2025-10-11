@@ -296,11 +296,27 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     Set<String> updated = Set<String>.from(_selectedDirectoryIds);
     if (append) {
       updated.addAll(directoryIds);
-    } 
+    }
     else {
       updated = Set<String>.from(directoryIds);
     }
     _applySelectionUpdate(updated);
+  }
+
+  /// Selects all directories currently cached in the view model.
+  void selectAllDirectories() {
+    final allIds = <String>{
+      for (final directory in _cachedAccessibleDirectories) directory.id,
+      for (final directory in _cachedInaccessibleDirectories) directory.id,
+      for (final directory in _cachedInvalidDirectories) directory.id,
+    };
+
+    if (allIds.isEmpty) {
+      _applySelectionUpdate(<String>{});
+      return;
+    }
+
+    _applySelectionUpdate(allIds);
   }
 
   /// Clears all selected directories and exits selection mode.
