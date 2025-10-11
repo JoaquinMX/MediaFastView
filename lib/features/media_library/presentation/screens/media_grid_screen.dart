@@ -13,6 +13,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 
+import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
 import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
 import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
@@ -186,10 +187,13 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                       ),
                       SelectionToolbarAction(
                         icon: Icons.favorite,
-                        label: 'Add to Favorites',
-                        tooltip: 'Add selected media to favorites',
+                        label: 'Toggle Favorites',
+                        tooltip: 'Toggle favorites for selected media',
                         onPressed: () => unawaited(
-                          _addSelectedMediaToFavorites(_viewModel!),
+                          _toggleSelectedMediaFavorites(
+                            state.media,
+                            selectedMediaIds,
+                          ),
                         ),
                       ),
                     ],
@@ -240,27 +244,46 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
   }
 
-  Future<void> _addSelectedMediaToFavorites(MediaViewModel viewModel) async {
-    final selectionCount = viewModel.selectedMediaCount;
-    try {
-      final newlyAdded = await viewModel.addSelectionToFavorites();
-      if (!mounted) {
-        return;
-      }
-      final message = newlyAdded == 0
-          ? 'Selected media are already in favorites'
-          : 'Added $newlyAdded of $selectionCount media to favorites';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update favorites: $error')),
-      );
+  Future<void> _toggleSelectedMediaFavorites(
+    List<MediaEntity> media,
+    Set<String> selectedMediaIds,
+  ) async {
+    if (selectedMediaIds.isEmpty) {
+      return;
     }
+
+    final favoritesViewModel = ref.read(favoritesViewModelProvider.notifier);
+    final selectedMedia = media
+        .where((item) => selectedMediaIds.contains(item.id))
+        .toList(growable: false);
+
+    final result = await favoritesViewModel.toggleFavoritesForMedia(selectedMedia);
+
+    if (!mounted) {
+      return;
+    }
+
+    final favoritesState = ref.read(favoritesViewModelProvider);
+    if (favoritesState is FavoritesError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(favoritesState.message)),
+      );
+      return;
+    }
+
+    final message = switch ((result.added, result.removed)) {
+      (final added, final removed) when added > 0 && removed > 0 =>
+        'Added $added and removed $removed favorites',
+      (final added, _) when added > 0 =>
+        'Added $added item${added == 1 ? '' : 's'} to favorites',
+      (_, final removed) when removed > 0 =>
+        'Removed $removed item${removed == 1 ? '' : 's'} from favorites',
+      _ => 'No changes to favorites',
+    };
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Widget _buildGrid(

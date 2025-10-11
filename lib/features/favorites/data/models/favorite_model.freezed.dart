@@ -21,8 +21,10 @@ FavoriteModel _$FavoriteModelFromJson(Map<String, dynamic> json) {
 
 /// @nodoc
 mixin _$FavoriteModel {
-  String get mediaId => throw _privateConstructorUsedError;
+  String get itemId => throw _privateConstructorUsedError;
+  FavoriteItemType get itemType => throw _privateConstructorUsedError;
   DateTime get addedAt => throw _privateConstructorUsedError;
+  Map<String, dynamic>? get metadata => throw _privateConstructorUsedError;
 
   /// Serializes this FavoriteModel to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -41,7 +43,12 @@ abstract class $FavoriteModelCopyWith<$Res> {
     $Res Function(FavoriteModel) then,
   ) = _$FavoriteModelCopyWithImpl<$Res, FavoriteModel>;
   @useResult
-  $Res call({String mediaId, DateTime addedAt});
+  $Res call({
+    String itemId,
+    FavoriteItemType itemType,
+    DateTime addedAt,
+    Map<String, dynamic>? metadata,
+  });
 }
 
 /// @nodoc
@@ -58,17 +65,30 @@ class _$FavoriteModelCopyWithImpl<$Res, $Val extends FavoriteModel>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? mediaId = null, Object? addedAt = null}) {
+  $Res call({
+    Object? itemId = null,
+    Object? itemType = null,
+    Object? addedAt = null,
+    Object? metadata = freezed,
+  }) {
     return _then(
       _value.copyWith(
-            mediaId: null == mediaId
-                ? _value.mediaId
-                : mediaId // ignore: cast_nullable_to_non_nullable
-                      as String,
+            itemId: null == itemId
+                ? _value.itemId
+                : itemId // ignore: cast_nullable_to_non_nullable
+                    as String,
+            itemType: null == itemType
+                ? _value.itemType
+                : itemType // ignore: cast_nullable_to_non_nullable
+                    as FavoriteItemType,
             addedAt: null == addedAt
                 ? _value.addedAt
                 : addedAt // ignore: cast_nullable_to_non_nullable
-                      as DateTime,
+                    as DateTime,
+            metadata: freezed == metadata
+                ? _value.metadata
+                : metadata // ignore: cast_nullable_to_non_nullable
+                    as Map<String, dynamic>?,
           )
           as $Val,
     );
@@ -84,7 +104,12 @@ abstract class _$$FavoriteModelImplCopyWith<$Res>
   ) = __$$FavoriteModelImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({String mediaId, DateTime addedAt});
+  $Res call({
+    String itemId,
+    FavoriteItemType itemType,
+    DateTime addedAt,
+    Map<String, dynamic>? metadata,
+  });
 }
 
 /// @nodoc
@@ -100,17 +125,30 @@ class __$$FavoriteModelImplCopyWithImpl<$Res>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? mediaId = null, Object? addedAt = null}) {
+  $Res call({
+    Object? itemId = null,
+    Object? itemType = null,
+    Object? addedAt = null,
+    Object? metadata = freezed,
+  }) {
     return _then(
       _$FavoriteModelImpl(
-        mediaId: null == mediaId
-            ? _value.mediaId
-            : mediaId // ignore: cast_nullable_to_non_nullable
-                  as String,
+        itemId: null == itemId
+            ? _value.itemId
+            : itemId // ignore: cast_nullable_to_non_nullable
+                as String,
+        itemType: null == itemType
+            ? _value.itemType
+            : itemType // ignore: cast_nullable_to_non_nullable
+                as FavoriteItemType,
         addedAt: null == addedAt
             ? _value.addedAt
             : addedAt // ignore: cast_nullable_to_non_nullable
-                  as DateTime,
+                as DateTime,
+        metadata: freezed == metadata
+            ? _value.metadata
+            : metadata // ignore: cast_nullable_to_non_nullable
+                as Map<String, dynamic>?,
       ),
     );
   }
@@ -119,19 +157,28 @@ class __$$FavoriteModelImplCopyWithImpl<$Res>
 /// @nodoc
 @JsonSerializable()
 class _$FavoriteModelImpl implements _FavoriteModel {
-  const _$FavoriteModelImpl({required this.mediaId, required this.addedAt});
+  const _$FavoriteModelImpl({
+    required this.itemId,
+    required this.itemType,
+    required this.addedAt,
+    this.metadata,
+  });
 
   factory _$FavoriteModelImpl.fromJson(Map<String, dynamic> json) =>
       _$$FavoriteModelImplFromJson(json);
 
   @override
-  final String mediaId;
+  final String itemId;
+  @override
+  final FavoriteItemType itemType;
   @override
   final DateTime addedAt;
+  @override
+  final Map<String, dynamic>? metadata;
 
   @override
   String toString() {
-    return 'FavoriteModel(mediaId: $mediaId, addedAt: $addedAt)';
+    return 'FavoriteModel(itemId: $itemId, itemType: $itemType, addedAt: $addedAt, metadata: $metadata)';
   }
 
   @override
@@ -139,13 +186,22 @@ class _$FavoriteModelImpl implements _FavoriteModel {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$FavoriteModelImpl &&
-            (identical(other.mediaId, mediaId) || other.mediaId == mediaId) &&
-            (identical(other.addedAt, addedAt) || other.addedAt == addedAt));
+            (identical(other.itemId, itemId) || other.itemId == itemId) &&
+            (identical(other.itemType, itemType) ||
+                other.itemType == itemType) &&
+            (identical(other.addedAt, addedAt) || other.addedAt == addedAt) &&
+            const DeepCollectionEquality().equals(other.metadata, metadata));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, mediaId, addedAt);
+  int get hashCode => Object.hash(
+        runtimeType,
+        itemId,
+        itemType,
+        addedAt,
+        const DeepCollectionEquality().hash(metadata),
+      );
 
   /// Create a copy of FavoriteModel
   /// with the given fields replaced by the non-null parameter values.
@@ -163,17 +219,23 @@ class _$FavoriteModelImpl implements _FavoriteModel {
 
 abstract class _FavoriteModel implements FavoriteModel {
   const factory _FavoriteModel({
-    required final String mediaId,
+    required final String itemId,
+    required final FavoriteItemType itemType,
     required final DateTime addedAt,
+    final Map<String, dynamic>? metadata,
   }) = _$FavoriteModelImpl;
 
   factory _FavoriteModel.fromJson(Map<String, dynamic> json) =
       _$FavoriteModelImpl.fromJson;
 
   @override
-  String get mediaId;
+  String get itemId;
+  @override
+  FavoriteItemType get itemType;
   @override
   DateTime get addedAt;
+  @override
+  Map<String, dynamic>? get metadata;
 
   /// Create a copy of FavoriteModel
   /// with the given fields replaced by the non-null parameter values.

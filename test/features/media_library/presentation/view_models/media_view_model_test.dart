@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/features/media_library/data/data_sources/local_media_data_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../../lib/features/favorites/domain/entities/favorite_entity.dart';
+import '../../../../../lib/features/favorites/domain/entities/favorite_item_type.dart';
 import '../../../../../lib/features/favorites/domain/repositories/favorites_repository.dart';
 import '../../../../../lib/features/media_library/data/data_sources/shared_preferences_data_source.dart';
 import '../../../../../lib/features/media_library/domain/entities/media_entity.dart';
@@ -71,26 +73,58 @@ class InMemoryMediaRepository implements MediaRepository {
 }
 
 class InMemoryFavoritesRepository implements FavoritesRepository {
-  final Set<String> _favorites = <String>{};
+  final Map<String, FavoriteEntity> _favorites = <String, FavoriteEntity>{};
+
+  String _key(String id, FavoriteItemType type) => '${type.name}::$id';
 
   @override
   Future<void> addFavorite(String mediaId) async {
-    _favorites.add(mediaId);
+    await addFavorites([
+      FavoriteEntity(
+        itemId: mediaId,
+        itemType: FavoriteItemType.media,
+        addedAt: DateTime.now(),
+      ),
+    ]);
+  }
+
+  @override
+  Future<void> addFavorites(List<FavoriteEntity> favorites) async {
+    for (final favorite in favorites) {
+      _favorites[_key(favorite.itemId, favorite.itemType)] = favorite;
+    }
+  }
+
+  @override
+  Future<List<FavoriteEntity>> getFavorites() async {
+    return _favorites.values.toList(growable: false);
   }
 
   @override
   Future<List<String>> getFavoriteMediaIds() async {
-    return _favorites.toList();
+    return _favorites.values
+        .where((fav) => fav.itemType == FavoriteItemType.media)
+        .map((fav) => fav.itemId)
+        .toList();
   }
 
   @override
-  Future<bool> isFavorite(String mediaId) async {
-    return _favorites.contains(mediaId);
+  Future<bool> isFavorite(
+    String itemId, {
+    FavoriteItemType type = FavoriteItemType.media,
+  }) async {
+    return _favorites.containsKey(_key(itemId, type));
   }
 
   @override
-  Future<void> removeFavorite(String mediaId) async {
-    _favorites.remove(mediaId);
+  Future<void> removeFavorite(String itemId) async {
+    await removeFavorites([itemId]);
+  }
+
+  @override
+  Future<void> removeFavorites(List<String> itemIds) async {
+    final ids = itemIds.toSet();
+    _favorites.removeWhere((key, value) => ids.contains(value.itemId));
   }
 }
 
@@ -298,28 +332,4 @@ void main() {
     expect(state.selectedMediaIds, {'m1', 'm2', 'm3'});
   });
 
-  test('addSelectionToFavorites adds only new favorites', () async {
-    final container = _createMediaTestContainer(
-      sharedPreferences: sharedPreferences,
-      mediaRepository: mediaRepository,
-      favoritesRepository: favoritesRepository,
-    );
-    addTearDown(container.dispose);
-
-    final viewModel = container.read(mediaViewModelProvider(params).notifier);
-    await viewModel.loadMedia();
-    viewModel.selectMediaRange(const ['m1', 'm2']);
-
-    final addedFirst = await viewModel.addSelectionToFavorites();
-    expect(addedFirst, 2);
-
-    viewModel.selectMediaRange(const ['m2', 'm3']);
-    final addedSecond = await viewModel.addSelectionToFavorites();
-    expect(addedSecond, 1);
-
-    expect(
-      await favoritesRepository.getFavoriteMediaIds(),
-      containsAll(['m1', 'm2', 'm3']),
-    );
-  });
 }

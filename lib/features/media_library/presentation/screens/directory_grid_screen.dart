@@ -19,6 +19,7 @@ import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
 import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
+import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../view_models/directory_grid_view_model.dart';
 import '../widgets/directory_grid_item.dart';
@@ -176,6 +177,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                     _buildDirectorySelectionToolbar(
                       viewModel: viewModel,
                       selectedCount: viewModel.selectedDirectoryCount,
+                      state: state,
+                      selectedDirectoryIds: selectedDirectoryIds,
                     ),
                   if (_isDragging)
                     Container(
@@ -229,6 +232,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Widget _buildDirectorySelectionToolbar({
     required DirectoryViewModel viewModel,
     required int selectedCount,
+    required DirectoryState state,
+    required Set<String> selectedDirectoryIds,
   }) {
     return SelectionToolbar(
       selectedCount: selectedCount,
@@ -243,9 +248,14 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         ),
         SelectionToolbarAction(
           icon: Icons.favorite,
-          label: 'Add to Favorites',
-          tooltip: 'Directory favorites will be available soon',
-          onPressed: _showDirectoryFavoritesUnavailableMessage,
+          label: 'Toggle Favorites',
+          tooltip: 'Toggle favorites for selected directories',
+          onPressed: () => unawaited(
+            _toggleSelectedDirectoryFavorites(
+              state,
+              selectedDirectoryIds,
+            ),
+          ),
         ),
       ],
     );
@@ -276,14 +286,59 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     );
   }
 
-  void _showDirectoryFavoritesUnavailableMessage() {
+  Future<void> _toggleSelectedDirectoryFavorites(
+    DirectoryState state,
+    Set<String> selectedDirectoryIds,
+  ) async {
+    if (selectedDirectoryIds.isEmpty) {
+      return;
+    }
+
+    final directories = switch (state) {
+      DirectoryLoaded(:final directories) => directories,
+      DirectoryPermissionRevoked(:final accessibleDirectories) =>
+        accessibleDirectories,
+      DirectoryBookmarkInvalid(:final accessibleDirectories) =>
+        accessibleDirectories,
+      _ => const <DirectoryEntity>[],
+    };
+
+    final selectedDirectories = directories
+        .where((directory) => selectedDirectoryIds.contains(directory.id))
+        .toList(growable: false);
+
+    if (selectedDirectories.isEmpty) {
+      return;
+    }
+
+    final favoritesViewModel = ref.read(favoritesViewModelProvider.notifier);
+    final result = await favoritesViewModel
+        .toggleFavoritesForDirectories(selectedDirectories);
+
     if (!mounted) {
       return;
     }
+
+    final favoritesState = ref.read(favoritesViewModelProvider);
+    if (favoritesState is FavoritesError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(favoritesState.message)),
+      );
+      return;
+    }
+
+    final message = switch ((result.added, result.removed)) {
+      (final added, final removed) when added > 0 && removed > 0 =>
+        'Added $added and removed $removed directory favorites',
+      (final added, _) when added > 0 =>
+        'Added $added director${added == 1 ? 'y' : 'ies'} to favorites',
+      (_, final removed) when removed > 0 =>
+        'Removed $removed director${removed == 1 ? 'y' : 'ies'} from favorites',
+      _ => 'No changes to directory favorites',
+    };
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Favorites for directories are coming soon.'),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
