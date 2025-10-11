@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/error/app_error.dart';
@@ -242,6 +244,38 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   bool get isSelectionMode => _isSelectionMode;
   int get selectedDirectoryCount => _selectedDirectoryIds.length;
 
+  /// Returns the collection of tag IDs that are common to every selected
+  /// directory. When no directories are selected the list will be empty.
+  List<String> commonTagIdsForSelection() {
+    if (_selectedDirectoryIds.isEmpty) {
+      return const <String>[];
+    }
+
+    LinkedHashSet<String>? common;
+
+    void intersectWith(List<DirectoryEntity> directories) {
+      for (final directory in directories) {
+        if (!_selectedDirectoryIds.contains(directory.id)) {
+          continue;
+        }
+        final tagSet = LinkedHashSet<String>.from(directory.tagIds);
+        common = common == null
+            ? tagSet
+            : LinkedHashSet<String>.from(
+                common!.where(tagSet.contains),
+              );
+      }
+    }
+
+    intersectWith(_cachedAccessibleDirectories);
+    intersectWith(_cachedInaccessibleDirectories);
+    intersectWith(_cachedInvalidDirectories);
+
+    return common == null
+        ? const <String>[]
+        : List<String>.unmodifiable(common!);
+  }
+
   @override
   void dispose() {
     _gridColumnsSubscription.close();
@@ -277,6 +311,32 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     _emitFilteredState();
   }
 
+  /// Applies the provided [tagIds] to every selected directory. Existing tags
+  /// are replaced with the provided collection.
+  Future<void> applyTagsToSelection(List<String> tagIds) async {
+    if (_selectedDirectoryIds.isEmpty) {
+      return;
+    }
+
+    final assignTagUseCase = _ref.read(assignTagUseCaseProvider);
+    final sanitizedTags = List<String>.unmodifiable(
+      LinkedHashSet<String>.from(tagIds),
+    );
+
+    for (final directoryId in _selectedDirectoryIds) {
+      await assignTagUseCase.setTagsForDirectory(directoryId, sanitizedTags);
+    }
+
+    _cachedAccessibleDirectories =
+        _updateTagsForSelection(_cachedAccessibleDirectories, sanitizedTags);
+    _cachedInaccessibleDirectories =
+        _updateTagsForSelection(_cachedInaccessibleDirectories, sanitizedTags);
+    _cachedInvalidDirectories =
+        _updateTagsForSelection(_cachedInvalidDirectories, sanitizedTags);
+
+    _emitFilteredState();
+  }
+
   void _applySelectionUpdate(Set<String> updatedSelection) {
     final sanitized = updatedSelection..removeWhere((id) => id.isEmpty);
     _selectedDirectoryIds = sanitized;
@@ -287,6 +347,22 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   void _clearSelectionInternal() {
     _selectedDirectoryIds = <String>{};
     _isSelectionMode = false;
+  }
+
+  List<DirectoryEntity> _updateTagsForSelection(
+    List<DirectoryEntity> directories,
+    List<String> tagIds,
+  ) {
+    if (directories.isEmpty || _selectedDirectoryIds.isEmpty) {
+      return List<DirectoryEntity>.from(directories);
+    }
+    return directories
+        .map(
+          (directory) => _selectedDirectoryIds.contains(directory.id)
+              ? directory.copyWith(tagIds: tagIds)
+              : directory,
+        )
+        .toList();
   }
 
   void _synchronizeSelectionWithCaches() {

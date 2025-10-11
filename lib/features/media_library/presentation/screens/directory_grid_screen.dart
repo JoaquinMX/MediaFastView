@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -12,12 +14,14 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
+import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../view_models/directory_grid_view_model.dart';
 import '../widgets/directory_grid_item.dart';
 import '../widgets/directory_search_bar.dart';
 import '../widgets/column_selector_popup.dart';
+import '../widgets/selection_toolbar.dart';
 import 'media_grid_screen.dart';
 
 /// Screen for displaying directories in a customizable grid layout.
@@ -47,6 +51,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     final viewModel = ref.read(directoryViewModelProvider.notifier);
     final selectedDirectoryIds = ref.watch(selectedDirectoryIdsProvider);
     final isSelectionMode = ref.watch(directorySelectionModeProvider);
+    final selectedDirectoryCount = ref.watch(selectedDirectoryCountProvider);
     final currentSortOption = switch (state) {
       DirectoryLoaded(:final sortOption) => sortOption,
       DirectoryPermissionRevoked(:final sortOption) => sortOption,
@@ -54,103 +59,124 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       _ => viewModel.currentSortOption,
     };
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Directories'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showAddDirectoryDialog(context, ref),
+    return Shortcuts(
+      shortcuts: const <LogicalKeySet, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.escape): _ClearDirectorySelectionIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _ClearDirectorySelectionIntent: CallbackAction<_ClearDirectorySelectionIntent>(
+            onInvoke: (_) {
+              final hasSelection = ref.read(directorySelectionModeProvider);
+              if (hasSelection) {
+                ref.read(directoryViewModelProvider.notifier).clearDirectorySelection();
+              }
+              return null;
+            },
           ),
-          IconButton(
-            icon: const Icon(Icons.tag),
-            onPressed: () => TagCreationDialog.show(context),
-          ),
-          PopupMenuButton<DirectorySortOption>(
-            icon: const Icon(Icons.sort),
-            tooltip: 'Sort',
-            onSelected: viewModel.changeSortOption,
-            itemBuilder: (context) => [
-              for (final option in DirectorySortOption.values)
-                CheckedPopupMenuItem<DirectorySortOption>(
-                  value: option,
-                  checked: option == currentSortOption,
-                  child: Text(option.label),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text('Directories'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: () => _showAddDirectoryDialog(context, ref),
                 ),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.view_module),
-            onPressed: () => _showColumnSelector(context, ref),
-          ),
-        ],
-      ),
-      body: DropTarget(
-        onDragDone: (details) => _onDragDone(details, viewModel),
-        onDragEntered: (_) => setState(() => _isDragging = true),
-        onDragExited: (_) => setState(() => _isDragging = false),
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                const DirectorySearchBar(),
-                _buildTagFilter(viewModel),
-                Expanded(
-                  child: switch (state) {
-                    DirectoryLoading() => const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                    DirectoryLoaded(:final directories, :final columns) =>
-                      _buildGrid(
-                        directories,
-                        columns,
-                        viewModel,
-                        selectedDirectoryIds,
-                        isSelectionMode,
+                IconButton(
+                  icon: const Icon(Icons.tag),
+                  onPressed: () => TagCreationDialog.show(context),
+                ),
+                PopupMenuButton<DirectorySortOption>(
+                  icon: const Icon(Icons.sort),
+                  tooltip: 'Sort',
+                  onSelected: viewModel.changeSortOption,
+                  itemBuilder: (context) => [
+                    for (final option in DirectorySortOption.values)
+                      CheckedPopupMenuItem<DirectorySortOption>(
+                        value: option,
+                        checked: option == currentSortOption,
+                        child: Text(option.label),
                       ),
-                    DirectoryPermissionRevoked(
-                      :final inaccessibleDirectories,
-                      :final accessibleDirectories,
-                      :final columns,
-                    ) =>
-                      _buildPermissionRevokedGrid(
-                        accessibleDirectories,
-                        inaccessibleDirectories,
-                        columns,
-                        viewModel,
-                        selectedDirectoryIds,
-                        isSelectionMode,
-                      ),
-                    DirectoryBookmarkInvalid(
-                      :final invalidDirectories,
-                      :final accessibleDirectories,
-                      :final columns,
-                    ) =>
-                      _buildBookmarkInvalidGrid(
-                        accessibleDirectories,
-                        invalidDirectories,
-                        columns,
-                        viewModel,
-                        selectedDirectoryIds,
-                        isSelectionMode,
-                      ),
-                    DirectoryError(:final message) => _buildError(
-                      message,
-                      viewModel,
-                    ),
-                    DirectoryEmpty() => _buildEmpty(viewModel),
-                  },
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.view_module),
+                  onPressed: () => _showColumnSelector(context, ref),
                 ),
               ],
             ),
-            if (_isDragging)
-              Container(
-                color: Theme.of(context)
-                    .colorScheme
-                    .primary
-                    .withValues(alpha: UiOpacity.subtle),
-                child: Center(
-                  child: Container(
+            body: DropTarget(
+              onDragDone: (details) => _onDragDone(details, viewModel),
+              onDragEntered: (_) => setState(() => _isDragging = true),
+              onDragExited: (_) => setState(() => _isDragging = false),
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      const DirectorySearchBar(),
+                      _buildTagFilter(viewModel),
+                      Expanded(
+                        child: switch (state) {
+                          DirectoryLoading() => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          DirectoryLoaded(:final directories, :final columns) =>
+                              _buildGrid(
+                                directories,
+                                columns,
+                                viewModel,
+                                selectedDirectoryIds,
+                                isSelectionMode,
+                              ),
+                          DirectoryPermissionRevoked(
+                            :final inaccessibleDirectories,
+                            :final accessibleDirectories,
+                            :final columns,
+                          ) =>
+                              _buildPermissionRevokedGrid(
+                                accessibleDirectories,
+                                inaccessibleDirectories,
+                                columns,
+                                viewModel,
+                                selectedDirectoryIds,
+                                isSelectionMode,
+                              ),
+                          DirectoryBookmarkInvalid(
+                            :final invalidDirectories,
+                            :final accessibleDirectories,
+                            :final columns,
+                          ) =>
+                              _buildBookmarkInvalidGrid(
+                                accessibleDirectories,
+                                invalidDirectories,
+                                columns,
+                                viewModel,
+                                selectedDirectoryIds,
+                                isSelectionMode,
+                              ),
+                          DirectoryError(:final message) =>
+                              _buildError(message, viewModel),
+                          DirectoryEmpty() => _buildEmpty(viewModel),
+                        },
+                      ),
+                    ],
+                  ),
+                  if (isSelectionMode)
+                    _buildDirectorySelectionToolbar(
+                      viewModel: viewModel,
+                      selectedCount: selectedDirectoryCount,
+                    ),
+                  if (_isDragging)
+                    Container(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: UiOpacity.subtle),
+                      child: Center(
+                        child: Container(
                     padding: UiSpacing.dialogPadding,
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface,
@@ -170,8 +196,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                     ),
                   ),
                 ),
+                  ),
+                ],
               ),
-          ],
+            ),
+          ),
         ),
       ),
     );
@@ -186,6 +215,66 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         viewModel.addDirectory(file.path, silent: true);
       }
     }
+  }
+
+  Widget _buildDirectorySelectionToolbar({
+    required DirectoryViewModel viewModel,
+    required int selectedCount,
+  }) {
+    return SelectionToolbar(
+      selectedCount: selectedCount,
+      onClearSelection: viewModel.clearDirectorySelection,
+      actions: [
+        SelectionToolbarAction(
+          icon: Icons.tag,
+          label: 'Assign Tags',
+          tooltip: 'Replace tags on selected directories',
+          onPressed: () => unawaited(_assignTagsToSelectedDirectories(viewModel)),
+        ),
+        SelectionToolbarAction(
+          icon: Icons.favorite,
+          label: 'Add to Favorites',
+          tooltip: 'Directory favorites will be available soon',
+          onPressed: _showDirectoryFavoritesUnavailableMessage,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _assignTagsToSelectedDirectories(DirectoryViewModel viewModel) async {
+    final selectionCount = viewModel.selectedDirectoryCount;
+    final initialTags = viewModel.commonTagIdsForSelection();
+
+    final applied = await BulkTagAssignmentDialog.show(
+      context,
+      title: 'Assign Tags ($selectionCount selected)',
+      description:
+          'Choose the tags that should be applied to every selected directory. '
+          'Existing tags will be replaced.',
+      initialTagIds: initialTags,
+      onTagsAssigned: viewModel.applyTagsToSelection,
+    );
+
+    if (!mounted || !applied) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Updated tags for $selectionCount directories'),
+      ),
+    );
+  }
+
+  void _showDirectoryFavoritesUnavailableMessage() {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Favorites for directories are coming soon.'),
+      ),
+    );
   }
 
   Widget _buildTagFilter(DirectoryViewModel viewModel) {
@@ -894,4 +983,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       rethrow;
     }
   }
+}
+
+class _ClearDirectorySelectionIntent extends Intent {
+  const _ClearDirectorySelectionIntent();
 }

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../../lib/features/favorites/domain/repositories/favorites_repository.dart';
 import '../../../../../lib/features/media_library/data/data_sources/shared_preferences_data_source.dart';
 import '../../../../../lib/features/media_library/domain/entities/media_entity.dart';
 import '../../../../../lib/features/media_library/domain/repositories/media_repository.dart';
@@ -68,15 +69,43 @@ class InMemoryMediaRepository implements MediaRepository {
   }
 }
 
+class InMemoryFavoritesRepository implements FavoritesRepository {
+  final Set<String> _favorites = <String>{};
+
+  @override
+  Future<void> addFavorite(String mediaId) async {
+    _favorites.add(mediaId);
+  }
+
+  @override
+  Future<List<String>> getFavoriteMediaIds() async {
+    return _favorites.toList();
+  }
+
+  @override
+  Future<bool> isFavorite(String mediaId) async {
+    return _favorites.contains(mediaId);
+  }
+
+  @override
+  Future<void> removeFavorite(String mediaId) async {
+    _favorites.remove(mediaId);
+  }
+}
+
 ProviderContainer _createMediaTestContainer({
   required SharedPreferences sharedPreferences,
   required InMemoryMediaRepository mediaRepository,
+  required InMemoryFavoritesRepository favoritesRepository,
 }) {
   final mediaDataSource = SharedPreferencesMediaDataSource(sharedPreferences);
 
   return ProviderContainer(
     overrides: [
       sharedPreferencesProvider.overrideWithValue(sharedPreferences),
+      favoritesRepositoryProvider.overrideWith((ref) {
+        return FavoritesRepositoryNotifier(favoritesRepository);
+      }),
       mediaViewModelProvider.overrideWithProvider((params) {
         return StateNotifierProvider.autoDispose<MediaViewModel, MediaState>(
           (ref) => MediaViewModel(
@@ -96,6 +125,7 @@ void main() {
 
   late SharedPreferences sharedPreferences;
   late InMemoryMediaRepository mediaRepository;
+  late InMemoryFavoritesRepository favoritesRepository;
   const params = MediaViewModelParams(
     directoryPath: '/dir1',
     directoryName: 'Directory 1',
@@ -104,6 +134,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     sharedPreferences = await SharedPreferences.getInstance();
+    favoritesRepository = InMemoryFavoritesRepository();
     mediaRepository = InMemoryMediaRepository([
       MediaEntity(
         id: 'm1',
@@ -112,7 +143,7 @@ void main() {
         type: MediaType.image,
         size: 1000,
         lastModified: DateTime(2024, 1, 1),
-        tagIds: const [],
+        tagIds: const ['shared', 'blue'],
         directoryId: '/dir1',
       ),
       MediaEntity(
@@ -122,7 +153,7 @@ void main() {
         type: MediaType.image,
         size: 2000,
         lastModified: DateTime(2024, 1, 2),
-        tagIds: const [],
+        tagIds: const ['shared', 'green'],
         directoryId: '/dir1',
       ),
       MediaEntity(
@@ -132,7 +163,7 @@ void main() {
         type: MediaType.image,
         size: 3000,
         lastModified: DateTime(2024, 1, 3),
-        tagIds: const [],
+        tagIds: const ['other'],
         directoryId: '/dir1',
       ),
     ]);
@@ -142,6 +173,7 @@ void main() {
     final container = _createMediaTestContainer(
       sharedPreferences: sharedPreferences,
       mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
     );
     addTearDown(container.dispose);
 
@@ -166,6 +198,7 @@ void main() {
     final container = _createMediaTestContainer(
       sharedPreferences: sharedPreferences,
       mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
     );
     addTearDown(container.dispose);
 
@@ -186,6 +219,7 @@ void main() {
     final container = _createMediaTestContainer(
       sharedPreferences: sharedPreferences,
       mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
     );
     addTearDown(container.dispose);
 
@@ -201,5 +235,84 @@ void main() {
     expect(container.read(selectedMediaIdsProvider(params)), isEmpty);
     expect(container.read(mediaSelectionModeProvider(params)), isFalse);
     expect(container.read(selectedMediaCountProvider(params)), 0);
+  });
+
+  test('commonTagIdsForSelection returns shared tags', () async {
+    final container = _createMediaTestContainer(
+      sharedPreferences: sharedPreferences,
+      mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(mediaViewModelProvider(params).notifier);
+    await viewModel.loadMedia();
+    viewModel.selectMediaRange(const ['m1', 'm2']);
+
+    expect(viewModel.commonTagIdsForSelection(), ['shared']);
+  });
+
+  test('applyTagsToSelection replaces tags across selected media', () async {
+    final container = _createMediaTestContainer(
+      sharedPreferences: sharedPreferences,
+      mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(mediaViewModelProvider(params).notifier);
+    await viewModel.loadMedia();
+    viewModel.selectMediaRange(const ['m1', 'm3']);
+
+    await viewModel.applyTagsToSelection(const ['bulk', 'bulk']);
+
+    expect(
+      mediaRepository
+          ._media
+          .firstWhere((media) => media.id == 'm1')
+          .tagIds,
+      ['bulk'],
+    );
+    expect(
+      mediaRepository
+          ._media
+          .firstWhere((media) => media.id == 'm3')
+          .tagIds,
+      ['bulk'],
+    );
+
+    final state = container.read(mediaViewModelProvider(params));
+    expect(state, isA<MediaLoaded>());
+    final loaded = state as MediaLoaded;
+    expect(loaded.selectedMediaIds, {'m1', 'm3'});
+    expect(
+      loaded.media.firstWhere((media) => media.id == 'm1').tagIds,
+      ['bulk'],
+    );
+  });
+
+  test('addSelectionToFavorites adds only new favorites', () async {
+    final container = _createMediaTestContainer(
+      sharedPreferences: sharedPreferences,
+      mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(mediaViewModelProvider(params).notifier);
+    await viewModel.loadMedia();
+    viewModel.selectMediaRange(const ['m1', 'm2']);
+
+    final addedFirst = await viewModel.addSelectionToFavorites();
+    expect(addedFirst, 2);
+
+    viewModel.selectMediaRange(const ['m2', 'm3']);
+    final addedSecond = await viewModel.addSelectionToFavorites();
+    expect(addedSecond, 1);
+
+    expect(
+      await favoritesRepository.getFavoriteMediaIds(),
+      containsAll(['m1', 'm2', 'm3']),
+    );
   });
 }

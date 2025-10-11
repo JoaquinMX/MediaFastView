@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,12 +11,14 @@ import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
+import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
 import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
 import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
+import '../widgets/selection_toolbar.dart';
 
 /// Screen for displaying media in a customizable grid layout.
 class MediaGridScreen extends ConsumerStatefulWidget {
@@ -72,60 +76,113 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     _viewModel = ref.read(mediaViewModelProvider(_params!).notifier);
     final selectedMediaIds = ref.watch(selectedMediaIdsProvider(_params!));
     final isSelectionMode = ref.watch(mediaSelectionModeProvider(_params!));
+    final selectedMediaCount = ref.watch(selectedMediaCountProvider(_params!));
     final sortOption = state is MediaLoaded
         ? state.sortOption
         : _viewModel?.currentSortOption ?? MediaSortOption.nameAscending;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.directoryName),
-        actions: [
-             IconButton(
-               icon: const Icon(Icons.tag),
-               tooltip: 'Manage Tags',
-               onPressed: () => TagManagementDialog.show(context),
-             ),
-             PopupMenuButton<MediaSortOption>(
-               icon: const Icon(Icons.sort),
-               tooltip: 'Sort',
-               onSelected: _viewModel!.changeSortOption,
-               itemBuilder: (context) => [
-                 for (final option in MediaSortOption.values)
-                   CheckedPopupMenuItem<MediaSortOption>(
-                     value: option,
-                     checked: option == sortOption,
-                     child: Text(option.label),
-                   ),
-               ],
-             ),
-             IconButton(
-               icon: const Icon(Icons.view_module),
-               onPressed: () => _showColumnSelector(context),
-             ),
-           ],
-      ),
-      body: Column(
-        children: [
-          _buildTagFilter(_viewModel!, state),
-          Expanded(
-            child: switch (state) {
-              MediaLoading() => const Center(
-                child: CircularProgressIndicator(),
-              ),
-              MediaLoaded(:final media, :final columns) => _buildGrid(
-                media,
-                columns,
-                _viewModel!,
-                selectedMediaIds,
-                isSelectionMode,
-              ),
-              MediaPermissionRevoked(:final directoryPath, :final directoryName) =>
-                _buildPermissionRevoked(directoryPath, directoryName, _viewModel!),
-              MediaError(:final message) => _buildError(message, _viewModel!),
-              MediaEmpty() => _buildEmpty(_viewModel!),
+    return Shortcuts(
+      shortcuts: const <LogicalKeySet, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.escape): _ClearMediaSelectionIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _ClearMediaSelectionIntent: CallbackAction<_ClearMediaSelectionIntent>(
+            onInvoke: (_) {
+              final selectionActive =
+                  ref.read(mediaSelectionModeProvider(_params!));
+              if (selectionActive) {
+                ref.read(mediaViewModelProvider(_params!).notifier)
+                    .clearMediaSelection();
+              }
+              return null;
             },
           ),
-        ],
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(widget.directoryName),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.tag),
+                  tooltip: 'Manage Tags',
+                  onPressed: () => TagManagementDialog.show(context),
+                ),
+                PopupMenuButton<MediaSortOption>(
+                  icon: const Icon(Icons.sort),
+                  tooltip: 'Sort',
+                  onSelected: _viewModel!.changeSortOption,
+                  itemBuilder: (context) => [
+                    for (final option in MediaSortOption.values)
+                      CheckedPopupMenuItem<MediaSortOption>(
+                        value: option,
+                        checked: option == sortOption,
+                        child: Text(option.label),
+                      ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.view_module),
+                  onPressed: () => _showColumnSelector(context),
+                ),
+              ],
+            ),
+            body: Stack(
+              children: [
+                Column(
+                  children: [
+                    _buildTagFilter(_viewModel!, state),
+                    Expanded(
+                      child: switch (state) {
+                        MediaLoading() => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        MediaLoaded(:final media, :final columns) => _buildGrid(
+                            media,
+                            columns,
+                            _viewModel!,
+                            selectedMediaIds,
+                            isSelectionMode,
+                          ),
+                        MediaPermissionRevoked(:final directoryPath, :final directoryName) =>
+                            _buildPermissionRevoked(
+                              directoryPath,
+                              directoryName,
+                              _viewModel!,
+                            ),
+                        MediaError(:final message) => _buildError(message, _viewModel!),
+                        MediaEmpty() => _buildEmpty(_viewModel!),
+                      },
+                    ),
+                  ],
+                ),
+                if (isSelectionMode && state is MediaLoaded)
+                  SelectionToolbar(
+                    selectedCount: selectedMediaCount,
+                    onClearSelection: _viewModel!.clearMediaSelection,
+                    actions: [
+                      SelectionToolbarAction(
+                        icon: Icons.tag,
+                        label: 'Assign Tags',
+                        tooltip: 'Replace tags on selected media',
+                        onPressed: () =>
+                            unawaited(_assignTagsToSelectedMedia(_viewModel!)),
+                      ),
+                      SelectionToolbarAction(
+                        icon: Icons.favorite,
+                        label: 'Add to Favorites',
+                        tooltip: 'Add selected media to favorites',
+                        onPressed: () =>
+                            unawaited(_addSelectedMediaToFavorites(_viewModel!)),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -143,6 +200,54 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         maxChipsToShow: UiGrid.maxFilterChips, // Limit to prevent overflow
       ),
     );
+  }
+
+  Future<void> _assignTagsToSelectedMedia(MediaViewModel viewModel) async {
+    final selectionCount = viewModel.selectedMediaCount;
+    final initialTags = viewModel.commonTagIdsForSelection();
+
+    final applied = await BulkTagAssignmentDialog.show(
+      context,
+      title: 'Assign Tags ($selectionCount selected)',
+      description:
+          'Choose the tags that should be applied to every selected media item. '
+          'Existing tags will be replaced.',
+      initialTagIds: initialTags,
+      onTagsAssigned: viewModel.applyTagsToSelection,
+    );
+
+    if (!mounted || !applied) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Updated tags for $selectionCount media items'),
+      ),
+    );
+  }
+
+  Future<void> _addSelectedMediaToFavorites(MediaViewModel viewModel) async {
+    final selectionCount = viewModel.selectedMediaCount;
+    try {
+      final newlyAdded = await viewModel.addSelectionToFavorites();
+      if (!mounted) {
+        return;
+      }
+      final message = newlyAdded == 0
+          ? 'Selected media are already in favorites'
+          : 'Added $newlyAdded of $selectionCount media to favorites';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update favorites: $error')),
+      );
+    }
   }
 
   Widget _buildGrid(
@@ -643,4 +748,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
+}
+
+class _ClearMediaSelectionIntent extends Intent {
+  const _ClearMediaSelectionIntent();
 }

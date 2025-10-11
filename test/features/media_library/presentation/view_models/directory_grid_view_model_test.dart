@@ -220,7 +220,7 @@ void main() {
         path: '/dir1',
         name: 'Directory 1',
         thumbnailPath: null,
-        tagIds: const ['tag1'],
+        tagIds: const ['shared', 'tag1'],
         lastModified: DateTime(2024, 1, 1),
       ),
       DirectoryEntity(
@@ -228,7 +228,7 @@ void main() {
         path: '/dir2',
         name: 'Directory 2',
         thumbnailPath: null,
-        tagIds: const ['tag2'],
+        tagIds: const ['shared', 'tag2'],
         lastModified: DateTime(2024, 1, 2),
       ),
       DirectoryEntity(
@@ -313,5 +313,58 @@ void main() {
     expect(container.read(selectedDirectoryIdsProvider), isEmpty);
     expect(container.read(directorySelectionModeProvider), isFalse);
     expect(container.read(selectedDirectoryCountProvider), 0);
+  });
+
+  test('commonTagIdsForSelection returns tags shared across selected directories',
+      () async {
+    final container = await _createDirectoryTestContainer(
+      directoryRepository: directoryRepository,
+      mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
+      sharedPreferences: sharedPreferences,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(directoryViewModelProvider.notifier);
+    await viewModel.loadDirectories();
+    viewModel.selectDirectoryRange(const ['1', '2']);
+
+    final commonTags = viewModel.commonTagIdsForSelection();
+    expect(commonTags, ['shared']);
+  });
+
+  test('applyTagsToSelection updates repositories and state for selection', () async {
+    final container = await _createDirectoryTestContainer(
+      directoryRepository: directoryRepository,
+      mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
+      sharedPreferences: sharedPreferences,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(directoryViewModelProvider.notifier);
+    await viewModel.loadDirectories();
+    viewModel.selectDirectoryRange(const ['1', '3']);
+
+    await viewModel.applyTagsToSelection(const ['bulk', 'bulk']);
+
+    final repoDirectories = await directoryRepository.getDirectories();
+    expect(
+      repoDirectories.firstWhere((dir) => dir.id == '1').tagIds,
+      ['bulk'],
+    );
+    expect(
+      repoDirectories.firstWhere((dir) => dir.id == '3').tagIds,
+      ['bulk'],
+    );
+
+    final state = container.read(directoryViewModelProvider);
+    expect(state, isA<DirectoryLoaded>());
+    final loaded = state as DirectoryLoaded;
+    expect(loaded.selectedDirectoryIds, {'1', '3'});
+    expect(
+      loaded.directories.firstWhere((dir) => dir.id == '1').tagIds,
+      ['bulk'],
+    );
   });
 }

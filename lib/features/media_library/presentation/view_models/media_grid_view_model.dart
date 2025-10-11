@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -152,6 +153,28 @@ class MediaViewModel extends StateNotifier<MediaState> {
   bool get isSelectionMode => _isSelectionMode;
   int get selectedMediaCount => _selectedMediaIds.length;
 
+  /// Returns tags shared by every selected media item.
+  List<String> commonTagIdsForSelection() {
+    if (_selectedMediaIds.isEmpty) {
+      return const <String>[];
+    }
+
+    LinkedHashSet<String>? common;
+    for (final media in _cachedMedia) {
+      if (!_selectedMediaIds.contains(media.id)) {
+        continue;
+      }
+      final tagSet = LinkedHashSet<String>.from(media.tagIds);
+      common = common == null
+          ? tagSet
+          : LinkedHashSet<String>.from(common!.where(tagSet.contains));
+    }
+
+    return common == null
+        ? const <String>[]
+        : List<String>.unmodifiable(common!);
+  }
+
   /// Gets the directory ID generated from the directory path.
   String get directoryId {
     final bytes = utf8.encode(_directoryPath);
@@ -193,6 +216,46 @@ class MediaViewModel extends StateNotifier<MediaState> {
     _emitLoadedStateFromCache();
   }
 
+  /// Applies [tagIds] to every selected media item, replacing existing tags.
+  Future<void> applyTagsToSelection(List<String> tagIds) async {
+    if (_selectedMediaIds.isEmpty) {
+      return;
+    }
+
+    final sanitizedTags = List<String>.unmodifiable(
+      LinkedHashSet<String>.from(tagIds),
+    );
+
+    for (final mediaId in _selectedMediaIds) {
+      await _mediaRepository.updateMediaTags(mediaId, sanitizedTags);
+    }
+
+    _cachedMedia = _updateMediaTagsForSelection(sanitizedTags);
+    _emitLoadedStateFromCache();
+  }
+
+  /// Marks all selected media items as favorites.
+  ///
+  /// Returns the number of media that were newly added to the favorites list.
+  Future<int> addSelectionToFavorites() async {
+    if (_selectedMediaIds.isEmpty) {
+      return 0;
+    }
+
+    final favoritesRepository = _ref.read(favoritesRepositoryProvider);
+    var newlyAdded = 0;
+
+    for (final mediaId in _selectedMediaIds) {
+      final alreadyFavorite = await favoritesRepository.isFavorite(mediaId);
+      await favoritesRepository.addFavorite(mediaId);
+      if (!alreadyFavorite) {
+        newlyAdded += 1;
+      }
+    }
+
+    return newlyAdded;
+  }
+
   void _applySelectionUpdate(Set<String> selection) {
     final sanitized = selection..removeWhere((id) => id.isEmpty);
     _selectedMediaIds = sanitized;
@@ -217,6 +280,19 @@ class MediaViewModel extends StateNotifier<MediaState> {
       _selectedMediaIds = sanitized;
     }
     _isSelectionMode = _selectedMediaIds.isNotEmpty;
+  }
+
+  List<MediaEntity> _updateMediaTagsForSelection(List<String> tagIds) {
+    if (_selectedMediaIds.isEmpty || _cachedMedia.isEmpty) {
+      return List<MediaEntity>.from(_cachedMedia);
+    }
+    return _cachedMedia
+        .map(
+          (media) => _selectedMediaIds.contains(media.id)
+              ? media.copyWith(tagIds: tagIds)
+              : media,
+        )
+        .toList();
   }
 
   /// Loads media for the current directory.
