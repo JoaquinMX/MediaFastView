@@ -199,6 +199,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final favoritesState = ref.watch(favoritesViewModelProvider);
+    final favoriteActionLabel =
+        _favoriteBulkActionLabel(favoritesState, selectedMediaIds);
 
     return AppBar(
       leading: IconButton(
@@ -231,7 +234,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
             _toggleSelectedMediaFavorites(state.media, selectedMediaIds),
           ),
           icon: const Icon(Icons.favorite),
-          label: const Text('Toggle Favorites'),
+          label: Text(favoriteActionLabel),
           style: FilledButton.styleFrom(
             backgroundColor: colorScheme.primary,
             foregroundColor: colorScheme.onPrimary,
@@ -242,6 +245,31 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         const SizedBox(width: 8),
       ],
     );
+  }
+
+  String _favoriteBulkActionLabel(
+    FavoritesState favoritesState,
+    Set<String> selectedMediaIds,
+  ) {
+    if (selectedMediaIds.isEmpty) {
+      return 'Favorite All';
+    }
+
+    if (favoritesState is FavoritesLoaded) {
+      final favoritesSet = favoritesState.favorites.toSet();
+      final allSelectedAreFavorites =
+          selectedMediaIds.every((id) => favoritesSet.contains(id));
+      if (allSelectedAreFavorites) {
+        return 'Unfavorite All';
+      }
+      return 'Favorite All';
+    }
+
+    if (favoritesState is FavoritesEmpty) {
+      return 'Favorite All';
+    }
+
+    return 'Toggle Favorites';
   }
 
   Widget _buildTagFilter(MediaViewModel viewModel, MediaState state) {
