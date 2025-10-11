@@ -1,6 +1,8 @@
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/ui_constants.dart';
@@ -29,11 +31,22 @@ class DirectoryGridScreen extends ConsumerStatefulWidget {
 
 class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   bool _isDragging = false;
+  final GlobalKey _directoryGridOverlayKey = GlobalKey();
+  final Map<String, GlobalKey> _directoryItemKeys = <String, GlobalKey>{};
+  Rect? _directorySelectionRect;
+  Offset? _directoryDragStart;
+  bool _isDirectoryMarqueeActive = false;
+  bool _directoryAppendMode = false;
+  Set<String> _directoryMarqueeBaseSelection = <String>{};
+  Set<String> _directoryLastMarqueeSelection = <String>{};
+  Map<String, Rect> _directoryCachedItemRects = <String, Rect>{};
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
+    final selectedDirectoryIds = ref.watch(selectedDirectoryIdsProvider);
+    final isSelectionMode = ref.watch(directorySelectionModeProvider);
     final currentSortOption = switch (state) {
       DirectoryLoaded(:final sortOption) => sortOption,
       DirectoryPermissionRevoked(:final sortOption) => sortOption,
@@ -88,7 +101,13 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                       child: CircularProgressIndicator(),
                     ),
                     DirectoryLoaded(:final directories, :final columns) =>
-                      _buildGrid(directories, columns, viewModel),
+                      _buildGrid(
+                        directories,
+                        columns,
+                        viewModel,
+                        selectedDirectoryIds,
+                        isSelectionMode,
+                      ),
                     DirectoryPermissionRevoked(
                       :final inaccessibleDirectories,
                       :final accessibleDirectories,
@@ -99,6 +118,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                         inaccessibleDirectories,
                         columns,
                         viewModel,
+                        selectedDirectoryIds,
+                        isSelectionMode,
                       ),
                     DirectoryBookmarkInvalid(
                       :final invalidDirectories,
@@ -110,6 +131,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                         invalidDirectories,
                         columns,
                         viewModel,
+                        selectedDirectoryIds,
+                        isSelectionMode,
                       ),
                     DirectoryError(:final message) => _buildError(
                       message,
@@ -229,8 +252,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     List<DirectoryEntity> directories,
     int columns,
     DirectoryViewModel viewModel,
+    Set<String> selectedDirectoryIds,
+    bool isSelectionMode,
   ) {
-    return GridView.builder(
+    _pruneDirectoryItemKeys(directories);
+    final gridView = GridView.builder(
       padding: UiSpacing.gridPadding,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
@@ -241,14 +267,26 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       itemCount: directories.length,
       itemBuilder: (context, index) {
         final directory = directories[index];
+        final isSelected = selectedDirectoryIds.contains(directory.id);
+        final itemKey =
+            _directoryItemKeys.putIfAbsent(directory.id, () => GlobalKey());
         return DirectoryGridItem(
+          key: itemKey,
           directory: directory,
           onTap: () => _navigateToMediaGrid(context, directory),
           onDelete: () =>
               _showDeleteConfirmation(context, directory, viewModel),
           onAssignTags: (tagIds) => _assignTagsToDirectory(directory, tagIds),
+          onSelectionToggle: () =>
+              viewModel.toggleDirectorySelection(directory.id),
+          isSelected: isSelected,
+          isSelectionMode: isSelectionMode,
         );
       },
+    );
+    return _buildDirectoryMarqueeWrapper(
+      viewModel: viewModel,
+      child: gridView,
     );
   }
 
@@ -257,8 +295,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     List<DirectoryEntity> inaccessibleDirectories,
     int columns,
     DirectoryViewModel viewModel,
+    Set<String> selectedDirectoryIds,
+    bool isSelectionMode,
   ) {
     final allDirectories = [...accessibleDirectories, ...inaccessibleDirectories];
+    _pruneDirectoryItemKeys(allDirectories);
 
     return Column(
       children: [
@@ -289,32 +330,45 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             ),
           ),
         Expanded(
-          child: GridView.builder(
-            padding: UiSpacing.gridPadding,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              crossAxisSpacing: UiGrid.crossAxisSpacing,
-              mainAxisSpacing: UiGrid.mainAxisSpacing,
-              childAspectRatio: UiGrid.childAspectRatio,
-            ),
-            itemCount: allDirectories.length,
-            itemBuilder: (context, index) {
-              final directory = allDirectories[index];
-              final isInaccessible = inaccessibleDirectories.contains(directory);
+          child: _buildDirectoryMarqueeWrapper(
+            viewModel: viewModel,
+            child: GridView.builder(
+              padding: UiSpacing.gridPadding,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: UiGrid.crossAxisSpacing,
+                mainAxisSpacing: UiGrid.mainAxisSpacing,
+                childAspectRatio: UiGrid.childAspectRatio,
+              ),
+              itemCount: allDirectories.length,
+              itemBuilder: (context, index) {
+                final directory = allDirectories[index];
+                final isInaccessible =
+                    inaccessibleDirectories.contains(directory);
 
-              return Opacity(
-                opacity: isInaccessible ? UiOpacity.disabled : 1.0,
-                child: DirectoryGridItem(
-                  directory: directory,
-                  onTap: isInaccessible
-                      ? () {}
-                      : () => _navigateToMediaGrid(context, directory),
-                  onDelete: () =>
-                      _showDeleteConfirmation(context, directory, viewModel),
-                  onAssignTags: (tagIds) => _assignTagsToDirectory(directory, tagIds),
-                ),
-              );
-            },
+                final isSelected = selectedDirectoryIds.contains(directory.id);
+                final itemKey = _directoryItemKeys
+                    .putIfAbsent(directory.id, () => GlobalKey());
+                return Opacity(
+                  opacity: isInaccessible ? UiOpacity.disabled : 1.0,
+                  child: DirectoryGridItem(
+                    key: itemKey,
+                    directory: directory,
+                    onTap: isInaccessible
+                        ? () {}
+                        : () => _navigateToMediaGrid(context, directory),
+                    onDelete: () =>
+                        _showDeleteConfirmation(context, directory, viewModel),
+                    onAssignTags: (tagIds) =>
+                        _assignTagsToDirectory(directory, tagIds),
+                    onSelectionToggle: () =>
+                        viewModel.toggleDirectorySelection(directory.id),
+                    isSelected: isSelected,
+                    isSelectionMode: isSelectionMode,
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -326,8 +380,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     List<DirectoryEntity> invalidDirectories,
     int columns,
     DirectoryViewModel viewModel,
+    Set<String> selectedDirectoryIds,
+    bool isSelectionMode,
   ) {
     final allDirectories = [...accessibleDirectories, ...invalidDirectories];
+    _pruneDirectoryItemKeys(allDirectories);
 
     return Column(
       children: [
@@ -358,36 +415,268 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             ),
           ),
         Expanded(
-          child: GridView.builder(
-            padding: UiSpacing.gridPadding,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              crossAxisSpacing: UiGrid.crossAxisSpacing,
-              mainAxisSpacing: UiGrid.mainAxisSpacing,
-              childAspectRatio: UiGrid.childAspectRatio,
-            ),
-            itemCount: allDirectories.length,
-            itemBuilder: (context, index) {
-              final directory = allDirectories[index];
-              final isInvalid = invalidDirectories.contains(directory);
+          child: _buildDirectoryMarqueeWrapper(
+            viewModel: viewModel,
+            child: GridView.builder(
+              padding: UiSpacing.gridPadding,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: UiGrid.crossAxisSpacing,
+                mainAxisSpacing: UiGrid.mainAxisSpacing,
+                childAspectRatio: UiGrid.childAspectRatio,
+              ),
+              itemCount: allDirectories.length,
+              itemBuilder: (context, index) {
+                final directory = allDirectories[index];
+                final isInvalid = invalidDirectories.contains(directory);
 
-              return Opacity(
-                opacity: isInvalid ? UiOpacity.disabled : 1.0,
-                child: DirectoryGridItem(
-                  directory: directory,
-                  onTap: isInvalid
-                      ? () {}
-                      : () => _navigateToMediaGrid(context, directory),
-                  onDelete: () =>
-                      _showDeleteConfirmation(context, directory, viewModel),
-                  onAssignTags: (tagIds) => _assignTagsToDirectory(directory, tagIds),
-                ),
-              );
-            },
+                final isSelected = selectedDirectoryIds.contains(directory.id);
+                final itemKey = _directoryItemKeys
+                    .putIfAbsent(directory.id, () => GlobalKey());
+                return Opacity(
+                  opacity: isInvalid ? UiOpacity.disabled : 1.0,
+                  child: DirectoryGridItem(
+                    key: itemKey,
+                    directory: directory,
+                    onTap: isInvalid
+                        ? () {}
+                        : () => _navigateToMediaGrid(context, directory),
+                    onDelete: () =>
+                        _showDeleteConfirmation(context, directory, viewModel),
+                    onAssignTags: (tagIds) =>
+                        _assignTagsToDirectory(directory, tagIds),
+                    onSelectionToggle: () =>
+                        viewModel.toggleDirectorySelection(directory.id),
+                    isSelected: isSelected,
+                    isSelectionMode: isSelectionMode,
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildDirectoryMarqueeWrapper({
+    required Widget child,
+    required DirectoryViewModel viewModel,
+  }) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) => _handleDirectoryPointerDown(event, viewModel),
+      onPointerMove: (event) => _handleDirectoryPointerMove(event, viewModel),
+      onPointerUp: (_) => _endDirectoryMarquee(),
+      onPointerCancel: (_) => _endDirectoryMarquee(),
+      child: Stack(
+        key: _directoryGridOverlayKey,
+        children: [
+          Positioned.fill(child: child),
+          if (_directorySelectionRect != null)
+            Positioned.fromRect(
+              rect: _directorySelectionRect!,
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withOpacity(0.12),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: UiSizing.borderWidth,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _handleDirectoryPointerDown(
+    PointerDownEvent event,
+    DirectoryViewModel viewModel,
+  ) {
+    if (event.kind != PointerDeviceKind.mouse ||
+        (event.buttons & kPrimaryMouseButton) == 0) {
+      return;
+    }
+
+    final overlayContext = _directoryGridOverlayKey.currentContext;
+    if (overlayContext == null) {
+      return;
+    }
+    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
+    if (overlayBox == null || !overlayBox.attached) {
+      return;
+    }
+
+    _directoryCachedItemRects = _computeDirectoryItemRects();
+    final localPosition = overlayBox.globalToLocal(event.position);
+    if (_isPointInsideAnyRect(localPosition, _directoryCachedItemRects.values)) {
+      return;
+    }
+
+    final baseSelection = viewModel.selectedDirectoryIds;
+    _directoryMarqueeBaseSelection = Set<String>.from(baseSelection);
+    _directoryLastMarqueeSelection = Set<String>.from(baseSelection);
+    _directoryAppendMode = _isMultiSelectModifierPressed();
+    _isDirectoryMarqueeActive = true;
+    _directoryDragStart = localPosition;
+
+    setState(() {
+      _directorySelectionRect = Rect.fromPoints(localPosition, localPosition);
+    });
+
+    _updateDirectoryMarqueeSelection(viewModel);
+  }
+
+  void _handleDirectoryPointerMove(
+    PointerMoveEvent event,
+    DirectoryViewModel viewModel,
+  ) {
+    if (!_isDirectoryMarqueeActive || _directoryDragStart == null) {
+      return;
+    }
+
+    if (event.kind == PointerDeviceKind.mouse &&
+        (event.buttons & kPrimaryMouseButton) == 0) {
+      _endDirectoryMarquee();
+      return;
+    }
+
+    final overlayContext = _directoryGridOverlayKey.currentContext;
+    if (overlayContext == null) {
+      return;
+    }
+    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
+    if (overlayBox == null || !overlayBox.attached) {
+      return;
+    }
+
+    final localPosition = overlayBox.globalToLocal(event.position);
+    setState(() {
+      _directorySelectionRect =
+          Rect.fromPoints(_directoryDragStart!, localPosition);
+    });
+
+    _directoryCachedItemRects = _computeDirectoryItemRects();
+    _updateDirectoryMarqueeSelection(viewModel);
+  }
+
+  void _endDirectoryMarquee() {
+    if (!_isDirectoryMarqueeActive && _directorySelectionRect == null) {
+      return;
+    }
+
+    setState(() {
+      _directorySelectionRect = null;
+    });
+    _isDirectoryMarqueeActive = false;
+    _directoryDragStart = null;
+    _directoryAppendMode = false;
+    _directoryMarqueeBaseSelection = <String>{};
+    _directoryLastMarqueeSelection = <String>{};
+    _directoryCachedItemRects = <String, Rect>{};
+  }
+
+  void _updateDirectoryMarqueeSelection(DirectoryViewModel viewModel) {
+    if (!_isDirectoryMarqueeActive) {
+      return;
+    }
+
+    final selectionRect = _directorySelectionRect;
+    final rects = _directoryCachedItemRects;
+    final intersectingIds = <String>{};
+
+    if (selectionRect != null) {
+      for (final entry in rects.entries) {
+        if (entry.value.overlaps(selectionRect)) {
+          intersectingIds.add(entry.key);
+        }
+      }
+    }
+
+    final desiredSelection = _directoryAppendMode
+        ? {..._directoryMarqueeBaseSelection, ...intersectingIds}
+        : intersectingIds;
+
+    if (setEquals(desiredSelection, _directoryLastMarqueeSelection)) {
+      return;
+    }
+
+    _directoryLastMarqueeSelection = desiredSelection;
+    viewModel.selectDirectoryRange(desiredSelection, append: false);
+  }
+
+  Map<String, Rect> _computeDirectoryItemRects() {
+    final overlayContext = _directoryGridOverlayKey.currentContext;
+    if (overlayContext == null) {
+      return <String, Rect>{};
+    }
+
+    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
+    if (overlayBox == null || !overlayBox.attached) {
+      return <String, Rect>{};
+    }
+
+    final rects = <String, Rect>{};
+    final staleKeys = <String>[];
+    _directoryItemKeys.forEach((id, key) {
+      final context = key.currentContext;
+      if (context == null) {
+        staleKeys.add(id);
+        return;
+      }
+      final renderObject = context.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.attached) {
+        staleKeys.add(id);
+        return;
+      }
+      final topLeft =
+          renderObject.localToGlobal(Offset.zero, ancestor: overlayBox);
+      rects[id] = Rect.fromLTWH(
+        topLeft.dx,
+        topLeft.dy,
+        renderObject.size.width,
+        renderObject.size.height,
+      );
+    });
+
+    for (final id in staleKeys) {
+      _directoryItemKeys.remove(id);
+    }
+
+    return rects;
+  }
+
+  void _pruneDirectoryItemKeys(Iterable<DirectoryEntity> directories) {
+    final validIds = directories.map((directory) => directory.id).toSet();
+    _directoryItemKeys.removeWhere((id, _) => !validIds.contains(id));
+  }
+
+  bool _isPointInsideAnyRect(Offset point, Iterable<Rect> rects) {
+    for (final rect in rects) {
+      if (rect.contains(point)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _isMultiSelectModifierPressed() {
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        pressed.contains(LogicalKeyboardKey.shiftRight) ||
+        pressed.contains(LogicalKeyboardKey.controlLeft) ||
+        pressed.contains(LogicalKeyboardKey.controlRight) ||
+        pressed.contains(LogicalKeyboardKey.metaLeft) ||
+        pressed.contains(LogicalKeyboardKey.metaRight) ||
+        pressed.contains(LogicalKeyboardKey.altLeft) ||
+        pressed.contains(LogicalKeyboardKey.altRight);
   }
 
   Widget _buildError(String message, DirectoryViewModel viewModel) {

@@ -23,6 +23,9 @@ class MediaGridItem extends StatefulWidget {
     this.onSecondaryTap,
     this.onOperationComplete,
     this.onFavoriteToggle,
+    required this.onSelectionToggle,
+    required this.isSelected,
+    required this.isSelectionMode,
   });
 
   final MediaEntity media;
@@ -32,6 +35,9 @@ class MediaGridItem extends StatefulWidget {
   final VoidCallback? onSecondaryTap;
   final VoidCallback? onOperationComplete;
   final ValueChanged<bool>? onFavoriteToggle;
+  final VoidCallback onSelectionToggle;
+  final bool isSelected;
+  final bool isSelectionMode;
 
   @override
   State<MediaGridItem> createState() => _MediaGridItemState();
@@ -40,6 +46,12 @@ class MediaGridItem extends StatefulWidget {
 class _MediaGridItemState extends State<MediaGridItem> {
   bool _isHovering = false;
   VideoPlayerController? _videoController;
+
+  void _ensureSelected() {
+    if (!widget.isSelected) {
+      widget.onSelectionToggle();
+    }
+  }
 
   @override
   void dispose() {
@@ -84,8 +96,14 @@ class _MediaGridItemState extends State<MediaGridItem> {
           child: GestureDetector(
             onTap: widget.onTap,
             onDoubleTap: widget.onDoubleTap,
-            onLongPress: widget.onLongPress,
-            onSecondaryTap: widget.onSecondaryTap,
+            onLongPress: () {
+              _ensureSelected();
+              widget.onLongPress?.call();
+            },
+            onSecondaryTap: () {
+              _ensureSelected();
+              widget.onSecondaryTap?.call();
+            },
             child: Card(
               elevation: _isHovering
                   ? UiSizing.elevationHigh
@@ -94,6 +112,12 @@ class _MediaGridItemState extends State<MediaGridItem> {
                 borderRadius: BorderRadius.circular(
                   UiSizing.borderRadiusMedium,
                 ),
+                side: widget.isSelected
+                    ? BorderSide(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: UiSizing.borderWidth,
+                      )
+                    : BorderSide.none,
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -101,6 +125,56 @@ class _MediaGridItemState extends State<MediaGridItem> {
                   children: [
                     _buildMediaContent(ref),
                     if (_isHovering) _buildHoverOverlay(),
+                    if (widget.isSelectionMode || widget.isSelected)
+                      Positioned(
+                        top: UiSpacing.extraSmallGap,
+                        left: UiSpacing.extraSmallGap,
+                        child: Semantics(
+                          selected: widget.isSelected,
+                          button: true,
+                          label: widget.isSelected
+                              ? 'Deselect media ${widget.media.name}'
+                              : 'Select media ${widget.media.name}',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: widget.onSelectionToggle,
+                              borderRadius: BorderRadius.circular(
+                                UiSizing.borderRadiusSmall,
+                              ),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: widget.isSelected
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(
+                                    UiSizing.borderRadiusSmall,
+                                  ),
+                                  border: Border.all(
+                                    color: widget.isSelected
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context).colorScheme.outline,
+                                    width: UiSizing.borderWidth / 1.5,
+                                  ),
+                                ),
+                                padding:
+                                    EdgeInsets.all(UiSpacing.extraSmallGap / 2),
+                                child: Icon(
+                                  widget.isSelected
+                                      ? Icons.check
+                                      : Icons.circle_outlined,
+                                  size: UiSizing.iconExtraSmall,
+                                  color: widget.isSelected
+                                      ? Theme.of(context).colorScheme.onPrimary
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

@@ -1,5 +1,7 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_config.dart';
@@ -34,6 +36,15 @@ class MediaGridScreen extends ConsumerStatefulWidget {
 class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   MediaViewModelParams? _params;
   MediaViewModel? _viewModel;
+  final GlobalKey _mediaGridOverlayKey = GlobalKey();
+  final Map<String, GlobalKey> _mediaItemKeys = <String, GlobalKey>{};
+  Rect? _mediaSelectionRect;
+  Offset? _mediaDragStart;
+  bool _isMediaMarqueeActive = false;
+  bool _mediaAppendMode = false;
+  Set<String> _mediaMarqueeBaseSelection = <String>{};
+  Set<String> _mediaLastMarqueeSelection = <String>{};
+  Map<String, Rect> _mediaCachedItemRects = <String, Rect>{};
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +70,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
     final state = ref.watch(mediaViewModelProvider(_params!));
     _viewModel = ref.read(mediaViewModelProvider(_params!).notifier);
+    final selectedMediaIds = ref.watch(selectedMediaIdsProvider(_params!));
+    final isSelectionMode = ref.watch(mediaSelectionModeProvider(_params!));
     final sortOption = state is MediaLoaded
         ? state.sortOption
         : _viewModel?.currentSortOption ?? MediaSortOption.nameAscending;
@@ -103,6 +116,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                 media,
                 columns,
                 _viewModel!,
+                selectedMediaIds,
+                isSelectionMode,
               ),
               MediaPermissionRevoked(:final directoryPath, :final directoryName) =>
                 _buildPermissionRevoked(directoryPath, directoryName, _viewModel!),
@@ -134,9 +149,12 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     List<MediaEntity> media,
     int columns,
     MediaViewModel viewModel,
+    Set<String> selectedMediaIds,
+    bool isSelectionMode,
   ) {
     debugPrint('MediaGridScreen: Building grid with ${media.length} items, $columns columns, screen size: ${MediaQuery.of(context).size}');
-    return GridView.builder(
+    _pruneMediaItemKeys(media);
+    final gridView = GridView.builder(
       padding: UiSpacing.gridPadding,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
@@ -147,7 +165,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       itemCount: media.length,
       itemBuilder: (context, index) {
         final mediaItem = media[index];
+        final isSelected = selectedMediaIds.contains(mediaItem.id);
+        final itemKey =
+            _mediaItemKeys.putIfAbsent(mediaItem.id, () => GlobalKey());
         return MediaGridItem(
+          key: itemKey,
           media: mediaItem,
           onTap: () => _onMediaTap(context, mediaItem),
           onDoubleTap: () => _onMediaDoubleTap(context, mediaItem),
@@ -155,9 +177,235 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           onSecondaryTap: () => _onMediaSecondaryTap(context, mediaItem),
           onOperationComplete: () =>
               viewModel.loadMedia(), // Refresh after delete
+          onSelectionToggle: () => viewModel.toggleMediaSelection(mediaItem.id),
+          isSelected: isSelected,
+          isSelectionMode: isSelectionMode,
         );
       },
     );
+    return _buildMediaMarqueeWrapper(
+      viewModel: viewModel,
+      child: gridView,
+    );
+  }
+
+  Widget _buildMediaMarqueeWrapper({
+    required Widget child,
+    required MediaViewModel viewModel,
+  }) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) => _handleMediaPointerDown(event, viewModel),
+      onPointerMove: (event) => _handleMediaPointerMove(event, viewModel),
+      onPointerUp: (_) => _endMediaMarquee(),
+      onPointerCancel: (_) => _endMediaMarquee(),
+      child: Stack(
+        key: _mediaGridOverlayKey,
+        children: [
+          Positioned.fill(child: child),
+          if (_mediaSelectionRect != null)
+            Positioned.fromRect(
+              rect: _mediaSelectionRect!,
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withOpacity(0.12),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: UiSizing.borderWidth,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _handleMediaPointerDown(
+    PointerDownEvent event,
+    MediaViewModel viewModel,
+  ) {
+    if (event.kind != PointerDeviceKind.mouse ||
+        (event.buttons & kPrimaryMouseButton) == 0) {
+      return;
+    }
+
+    final overlayContext = _mediaGridOverlayKey.currentContext;
+    if (overlayContext == null) {
+      return;
+    }
+    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
+    if (overlayBox == null || !overlayBox.attached) {
+      return;
+    }
+
+    _mediaCachedItemRects = _computeMediaItemRects();
+    final localPosition = overlayBox.globalToLocal(event.position);
+    if (_isPointInsideAnyRect(localPosition, _mediaCachedItemRects.values)) {
+      return;
+    }
+
+    final baseSelection = viewModel.selectedMediaIds;
+    _mediaMarqueeBaseSelection = Set<String>.from(baseSelection);
+    _mediaLastMarqueeSelection = Set<String>.from(baseSelection);
+    _mediaAppendMode = _isMultiSelectModifierPressed();
+    _isMediaMarqueeActive = true;
+    _mediaDragStart = localPosition;
+
+    setState(() {
+      _mediaSelectionRect = Rect.fromPoints(localPosition, localPosition);
+    });
+
+    _updateMediaMarqueeSelection(viewModel);
+  }
+
+  void _handleMediaPointerMove(
+    PointerMoveEvent event,
+    MediaViewModel viewModel,
+  ) {
+    if (!_isMediaMarqueeActive || _mediaDragStart == null) {
+      return;
+    }
+
+    if (event.kind == PointerDeviceKind.mouse &&
+        (event.buttons & kPrimaryMouseButton) == 0) {
+      _endMediaMarquee();
+      return;
+    }
+
+    final overlayContext = _mediaGridOverlayKey.currentContext;
+    if (overlayContext == null) {
+      return;
+    }
+    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
+    if (overlayBox == null || !overlayBox.attached) {
+      return;
+    }
+
+    final localPosition = overlayBox.globalToLocal(event.position);
+    setState(() {
+      _mediaSelectionRect = Rect.fromPoints(_mediaDragStart!, localPosition);
+    });
+
+    _mediaCachedItemRects = _computeMediaItemRects();
+    _updateMediaMarqueeSelection(viewModel);
+  }
+
+  void _endMediaMarquee() {
+    if (!_isMediaMarqueeActive && _mediaSelectionRect == null) {
+      return;
+    }
+
+    setState(() {
+      _mediaSelectionRect = null;
+    });
+    _isMediaMarqueeActive = false;
+    _mediaDragStart = null;
+    _mediaAppendMode = false;
+    _mediaMarqueeBaseSelection = <String>{};
+    _mediaLastMarqueeSelection = <String>{};
+    _mediaCachedItemRects = <String, Rect>{};
+  }
+
+  void _updateMediaMarqueeSelection(MediaViewModel viewModel) {
+    if (!_isMediaMarqueeActive) {
+      return;
+    }
+
+    final selectionRect = _mediaSelectionRect;
+    final rects = _mediaCachedItemRects;
+    final intersectingIds = <String>{};
+
+    if (selectionRect != null) {
+      for (final entry in rects.entries) {
+        if (entry.value.overlaps(selectionRect)) {
+          intersectingIds.add(entry.key);
+        }
+      }
+    }
+
+    final desiredSelection = _mediaAppendMode
+        ? {..._mediaMarqueeBaseSelection, ...intersectingIds}
+        : intersectingIds;
+
+    if (setEquals(desiredSelection, _mediaLastMarqueeSelection)) {
+      return;
+    }
+
+    _mediaLastMarqueeSelection = desiredSelection;
+    viewModel.selectMediaRange(desiredSelection, append: false);
+  }
+
+  Map<String, Rect> _computeMediaItemRects() {
+    final overlayContext = _mediaGridOverlayKey.currentContext;
+    if (overlayContext == null) {
+      return <String, Rect>{};
+    }
+
+    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
+    if (overlayBox == null || !overlayBox.attached) {
+      return <String, Rect>{};
+    }
+
+    final rects = <String, Rect>{};
+    final staleKeys = <String>[];
+    _mediaItemKeys.forEach((id, key) {
+      final context = key.currentContext;
+      if (context == null) {
+        staleKeys.add(id);
+        return;
+      }
+      final renderObject = context.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.attached) {
+        staleKeys.add(id);
+        return;
+      }
+      final topLeft =
+          renderObject.localToGlobal(Offset.zero, ancestor: overlayBox);
+      rects[id] = Rect.fromLTWH(
+        topLeft.dx,
+        topLeft.dy,
+        renderObject.size.width,
+        renderObject.size.height,
+      );
+    });
+
+    for (final id in staleKeys) {
+      _mediaItemKeys.remove(id);
+    }
+
+    return rects;
+  }
+
+  void _pruneMediaItemKeys(Iterable<MediaEntity> media) {
+    final validIds = media.map((item) => item.id).toSet();
+    _mediaItemKeys.removeWhere((id, _) => !validIds.contains(id));
+  }
+
+  bool _isPointInsideAnyRect(Offset point, Iterable<Rect> rects) {
+    for (final rect in rects) {
+      if (rect.contains(point)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _isMultiSelectModifierPressed() {
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        pressed.contains(LogicalKeyboardKey.shiftRight) ||
+        pressed.contains(LogicalKeyboardKey.controlLeft) ||
+        pressed.contains(LogicalKeyboardKey.controlRight) ||
+        pressed.contains(LogicalKeyboardKey.metaLeft) ||
+        pressed.contains(LogicalKeyboardKey.metaRight) ||
+        pressed.contains(LogicalKeyboardKey.altLeft) ||
+        pressed.contains(LogicalKeyboardKey.altRight);
   }
 
   Widget _buildError(String message, MediaViewModel viewModel) {
