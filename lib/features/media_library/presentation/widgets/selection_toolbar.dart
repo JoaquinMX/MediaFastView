@@ -71,10 +71,7 @@ class SelectionToolbar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.check_box_outlined,
-                  color: colorScheme.primary,
-                ),
+                Icon(Icons.check_box_outlined, color: colorScheme.primary),
                 SizedBox(width: UiSpacing.smallGap),
                 Text(
                   '$selectedCount selected',
@@ -83,7 +80,7 @@ class SelectionToolbar extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                SizedBox(width: UiSpacing.largeGap),
+                SizedBox(width: UiSpacing.smallGap),
                 for (final action in actions) ...[
                   Tooltip(
                     message: action.tooltip ?? action.label,
@@ -100,8 +97,7 @@ class SelectionToolbar extends StatelessWidget {
                             : colorScheme.onSurfaceVariant,
                         disabledBackgroundColor:
                             colorScheme.surfaceContainerHighest,
-                        disabledForegroundColor:
-                            colorScheme.onSurfaceVariant,
+                        disabledForegroundColor: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),

@@ -295,9 +295,13 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   /// are merged with the existing selection, otherwise the selection is
   /// replaced entirely.
   void selectDirectoryRange(Iterable<String> directoryIds, {bool append = false}) {
-    final updated = append
-        ? Set<String>.from(_selectedDirectoryIds)..addAll(directoryIds)
-        : Set<String>.from(directoryIds);
+    Set<String> updated = Set<String>.from(_selectedDirectoryIds);
+    if (append) {
+      updated.addAll(directoryIds);
+    } 
+    else {
+      updated = Set<String>.from(directoryIds);
+    }
     _applySelectionUpdate(updated);
   }
 

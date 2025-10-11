@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'dart:ui';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,7 +55,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('MediaGridScreen: Building for ${widget.directoryName}, screen size: ${MediaQuery.of(context).size}');
+    debugPrint(
+      'MediaGridScreen: Building for ${widget.directoryName}, screen size: ${MediaQuery.of(context).size}',
+    );
     _params = MediaViewModelParams(
       directoryPath: widget.directoryPath,
       directoryName: widget.directoryName,
@@ -82,22 +87,25 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         : _viewModel?.currentSortOption ?? MediaSortOption.nameAscending;
 
     return Shortcuts(
-      shortcuts: const <LogicalKeySet, Intent>{
+      shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.escape): _ClearMediaSelectionIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
-          _ClearMediaSelectionIntent: CallbackAction<_ClearMediaSelectionIntent>(
-            onInvoke: (_) {
-              final selectionActive =
-                  ref.read(mediaSelectionModeProvider(_params!));
-              if (selectionActive) {
-                ref.read(mediaViewModelProvider(_params!).notifier)
-                    .clearMediaSelection();
-              }
-              return null;
-            },
-          ),
+          _ClearMediaSelectionIntent:
+              CallbackAction<_ClearMediaSelectionIntent>(
+                onInvoke: (_) {
+                  final selectionActive = ref.read(
+                    mediaSelectionModeProvider(_params!),
+                  );
+                  if (selectionActive) {
+                    ref
+                        .read(mediaViewModelProvider(_params!).notifier)
+                        .clearMediaSelection();
+                  }
+                  return null;
+                },
+              ),
         },
         child: Focus(
           autofocus: true,
@@ -137,22 +145,28 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     Expanded(
                       child: switch (state) {
                         MediaLoading() => const Center(
-                            child: CircularProgressIndicator(),
-                          ),
+                          child: CircularProgressIndicator(),
+                        ),
                         MediaLoaded(:final media, :final columns) => _buildGrid(
-                            media,
-                            columns,
+                          media,
+                          columns,
+                          _viewModel!,
+                          selectedMediaIds,
+                          isSelectionMode,
+                        ),
+                        MediaPermissionRevoked(
+                          :final directoryPath,
+                          :final directoryName,
+                        ) =>
+                          _buildPermissionRevoked(
+                            directoryPath,
+                            directoryName,
                             _viewModel!,
-                            selectedMediaIds,
-                            isSelectionMode,
                           ),
-                        MediaPermissionRevoked(:final directoryPath, :final directoryName) =>
-                            _buildPermissionRevoked(
-                              directoryPath,
-                              directoryName,
-                              _viewModel!,
-                            ),
-                        MediaError(:final message) => _buildError(message, _viewModel!),
+                        MediaError(:final message) => _buildError(
+                          message,
+                          _viewModel!,
+                        ),
                         MediaEmpty() => _buildEmpty(_viewModel!),
                       },
                     ),
@@ -174,8 +188,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                         icon: Icons.favorite,
                         label: 'Add to Favorites',
                         tooltip: 'Add selected media to favorites',
-                        onPressed: () =>
-                            unawaited(_addSelectedMediaToFavorites(_viewModel!)),
+                        onPressed: () => unawaited(
+                          _addSelectedMediaToFavorites(_viewModel!),
+                        ),
                       ),
                     ],
                   ),
@@ -221,9 +236,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Updated tags for $selectionCount media items'),
-      ),
+      SnackBar(content: Text('Updated tags for $selectionCount media items')),
     );
   }
 
@@ -237,9 +250,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       final message = newlyAdded == 0
           ? 'Selected media are already in favorites'
           : 'Added $newlyAdded of $selectionCount media to favorites';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (error) {
       if (!mounted) {
         return;
@@ -257,7 +270,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     Set<String> selectedMediaIds,
     bool isSelectionMode,
   ) {
-    debugPrint('MediaGridScreen: Building grid with ${media.length} items, $columns columns, screen size: ${MediaQuery.of(context).size}');
+    debugPrint(
+      'MediaGridScreen: Building grid with ${media.length} items, $columns columns, screen size: ${MediaQuery.of(context).size}',
+    );
     _pruneMediaItemKeys(media);
     final gridView = GridView.builder(
       padding: UiSpacing.gridPadding,
@@ -271,8 +286,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       itemBuilder: (context, index) {
         final mediaItem = media[index];
         final isSelected = selectedMediaIds.contains(mediaItem.id);
-        final itemKey =
-            _mediaItemKeys.putIfAbsent(mediaItem.id, () => GlobalKey());
+        final itemKey = _mediaItemKeys.putIfAbsent(
+          mediaItem.id,
+          () => GlobalKey(),
+        );
         return MediaGridItem(
           key: itemKey,
           media: mediaItem,
@@ -288,10 +305,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         );
       },
     );
-    return _buildMediaMarqueeWrapper(
-      viewModel: viewModel,
-      child: gridView,
-    );
+    return _buildMediaMarqueeWrapper(viewModel: viewModel, child: gridView);
   }
 
   Widget _buildMediaMarqueeWrapper({
@@ -314,10 +328,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
               child: IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withOpacity(0.12),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withOpacity(0.12),
                     border: Border.all(
                       color: Theme.of(context).colorScheme.primary,
                       width: UiSizing.borderWidth,
@@ -470,8 +483,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         staleKeys.add(id);
         return;
       }
-      final topLeft =
-          renderObject.localToGlobal(Offset.zero, ancestor: overlayBox);
+      final topLeft = renderObject.localToGlobal(
+        Offset.zero,
+        ancestor: overlayBox,
+      );
       rects[id] = Rect.fromLTWH(
         topLeft.dx,
         topLeft.dy,
@@ -518,11 +533,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error,
-            size: UiSizing.iconHuge,
-            color: UiColors.red,
-          ),
+          Icon(Icons.error, size: UiSizing.iconHuge, color: UiColors.red),
           SizedBox(height: UiSpacing.verticalGap),
           Text('Error: $message'),
           SizedBox(height: UiSpacing.verticalGap),
@@ -569,17 +580,16 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         decoration: BoxDecoration(
           color: UiColors.white,
           borderRadius: BorderRadius.circular(UiSizing.borderRadiusMedium),
-          border: Border.all(color: UiColors.orange, width: UiSizing.borderWidth),
+          border: Border.all(
+            color: UiColors.orange,
+            width: UiSizing.borderWidth,
+          ),
           boxShadow: [UiShadows.standard],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.lock,
-              size: UiSizing.iconHuge,
-              color: UiColors.orange,
-            ),
+            Icon(Icons.lock, size: UiSizing.iconHuge, color: UiColors.orange),
             SizedBox(height: UiSpacing.verticalGap),
             const Text(
               'Access to this directory has been revoked',
@@ -634,7 +644,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
-              onPressed: () => viewModel.loadMedia(), // Try refreshing without recovery
+              onPressed: () =>
+                  viewModel.loadMedia(), // Try refreshing without recovery
               icon: const Icon(Icons.refresh),
               label: const Text('Try Again'),
             ),
@@ -665,7 +676,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
   void _onMediaTap(BuildContext context, MediaEntity media) {
     if (media.type == MediaType.directory) {
-      _viewModel!.navigateToDirectory(media.path, media.name, bookmarkData: media.bookmarkData);
+      _viewModel!.navigateToDirectory(
+        media.path,
+        media.name,
+        bookmarkData: media.bookmarkData,
+      );
     } else {
       // Open full-screen viewer
       Navigator.of(context).push(
@@ -747,7 +762,6 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
-
 }
 
 class _ClearMediaSelectionIntent extends Intent {
