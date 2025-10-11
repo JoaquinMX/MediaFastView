@@ -4,6 +4,8 @@ import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../../lib/core/services/permission_service.dart';
+import '../../../../../lib/features/favorites/domain/entities/favorite_entity.dart';
+import '../../../../../lib/features/favorites/domain/entities/favorite_item_type.dart';
 import '../../../../../lib/features/favorites/domain/repositories/favorites_repository.dart';
 import '../../../../../lib/features/media_library/data/data_sources/local_directory_data_source.dart';
 import '../../../../../lib/features/media_library/domain/entities/directory_entity.dart';
@@ -159,26 +161,58 @@ class InMemoryMediaRepository implements MediaRepository {
 }
 
 class InMemoryFavoritesRepository implements FavoritesRepository {
-  final Set<String> _favorites = <String>{};
+  final Map<String, FavoriteEntity> _favorites = <String, FavoriteEntity>{};
+
+  String _key(String id, FavoriteItemType type) => '${type.name}::$id';
 
   @override
   Future<void> addFavorite(String mediaId) async {
-    _favorites.add(mediaId);
+    await addFavorites([
+      FavoriteEntity(
+        itemId: mediaId,
+        itemType: FavoriteItemType.media,
+        addedAt: DateTime.now(),
+      ),
+    ]);
+  }
+
+  @override
+  Future<void> addFavorites(List<FavoriteEntity> favorites) async {
+    for (final favorite in favorites) {
+      _favorites[_key(favorite.itemId, favorite.itemType)] = favorite;
+    }
+  }
+
+  @override
+  Future<List<FavoriteEntity>> getFavorites() async {
+    return _favorites.values.toList(growable: false);
   }
 
   @override
   Future<List<String>> getFavoriteMediaIds() async {
-    return _favorites.toList();
+    return _favorites.values
+        .where((fav) => fav.itemType == FavoriteItemType.media)
+        .map((fav) => fav.itemId)
+        .toList();
   }
 
   @override
-  Future<bool> isFavorite(String mediaId) async {
-    return _favorites.contains(mediaId);
+  Future<bool> isFavorite(
+    String itemId, {
+    FavoriteItemType type = FavoriteItemType.media,
+  }) async {
+    return _favorites.containsKey(_key(itemId, type));
   }
 
   @override
-  Future<void> removeFavorite(String mediaId) async {
-    _favorites.remove(mediaId);
+  Future<void> removeFavorite(String itemId) async {
+    await removeFavorites([itemId]);
+  }
+
+  @override
+  Future<void> removeFavorites(List<String> itemIds) async {
+    final ids = itemIds.toSet();
+    _favorites.removeWhere((key, value) => ids.contains(value.itemId));
   }
 }
 

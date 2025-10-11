@@ -14,6 +14,10 @@ import 'package:media_fast_view/features/favorites/data/data_sources/shared_pref
     as _i17;
 import 'package:media_fast_view/features/favorites/data/models/favorite_model.dart'
     as _i18;
+import 'package:media_fast_view/features/favorites/domain/entities/favorite_entity.dart'
+    as _i24;
+import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart'
+    as _i25;
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart'
     as _i10;
 import 'package:media_fast_view/features/media_library/data/data_sources/filesystem_media_data_source.dart'
@@ -234,6 +238,16 @@ class MockFavoritesRepository extends _i1.Mock
   }
 
   @override
+  _i6.Future<List<_i24.FavoriteEntity>> getFavorites() =>
+      (super.noSuchMethod(
+            Invocation.method(#getFavorites, []),
+            returnValue: _i6.Future<List<_i24.FavoriteEntity>>.value(
+              <_i24.FavoriteEntity>[],
+            ),
+          )
+          as _i6.Future<List<_i24.FavoriteEntity>>);
+
+  @override
   _i6.Future<List<String>> getFavoriteMediaIds() =>
       (super.noSuchMethod(
             Invocation.method(#getFavoriteMediaIds, []),
@@ -251,18 +265,43 @@ class MockFavoritesRepository extends _i1.Mock
           as _i6.Future<void>);
 
   @override
-  _i6.Future<void> removeFavorite(String? mediaId) =>
+  _i6.Future<void> addFavorites(List<_i24.FavoriteEntity>? favorites) =>
       (super.noSuchMethod(
-            Invocation.method(#removeFavorite, [mediaId]),
+            Invocation.method(#addFavorites, [favorites]),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
           as _i6.Future<void>);
 
   @override
-  _i6.Future<bool> isFavorite(String? mediaId) =>
+  _i6.Future<void> removeFavorite(String? itemId) =>
       (super.noSuchMethod(
-            Invocation.method(#isFavorite, [mediaId]),
+            Invocation.method(#removeFavorite, [itemId]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> removeFavorites(List<String>? itemIds) =>
+      (super.noSuchMethod(
+            Invocation.method(#removeFavorites, [itemIds]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<bool> isFavorite(
+    String? itemId, {
+    _i25.FavoriteItemType type = _i25.FavoriteItemType.media,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isFavorite,
+              [itemId],
+              {#type: type},
+            ),
             returnValue: _i6.Future<bool>.value(false),
           )
           as _i6.Future<bool>);
@@ -617,18 +656,43 @@ class MockSharedPreferencesFavoritesDataSource extends _i1.Mock
           as _i6.Future<void>);
 
   @override
-  _i6.Future<void> removeFavorite(String? mediaId) =>
+  _i6.Future<void> addFavorites(List<_i18.FavoriteModel>? favorites) =>
       (super.noSuchMethod(
-            Invocation.method(#removeFavorite, [mediaId]),
+            Invocation.method(#addFavorites, [favorites]),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
           as _i6.Future<void>);
 
   @override
-  _i6.Future<bool> isFavorite(String? mediaId) =>
+  _i6.Future<void> removeFavorite(String? itemId) =>
       (super.noSuchMethod(
-            Invocation.method(#isFavorite, [mediaId]),
+            Invocation.method(#removeFavorite, [itemId]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> removeFavorites(List<String>? itemIds) =>
+      (super.noSuchMethod(
+            Invocation.method(#removeFavorites, [itemIds]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<bool> isFavorite(
+    String? itemId, {
+    _i25.FavoriteItemType? type,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isFavorite,
+              [itemId],
+              {#type: type},
+            ),
             returnValue: _i6.Future<bool>.value(false),
           )
           as _i6.Future<bool>);

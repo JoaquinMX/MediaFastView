@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 
+import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/favorites/presentation/view_models/favorites_view_model.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 
@@ -15,6 +17,7 @@ void main() {
   const mediaId = 'media-1';
   final now = DateTime(2024, 1, 1);
   const directoryId = 'directory-1';
+  const directoryPath = '/path/to/directory';
 
   final mediaModel = MediaModel(
     id: mediaId,
@@ -40,6 +43,16 @@ void main() {
     bookmarkData: null,
   );
 
+  final directoryEntity = DirectoryEntity(
+    id: directoryId,
+    path: directoryPath,
+    name: 'Sample Directory',
+    thumbnailPath: null,
+    tagIds: const [],
+    lastModified: now,
+    bookmarkData: null,
+  );
+
   setUp(() {
     favoritesRepository = MockFavoritesRepository();
     mediaDataSource = MockSharedPreferencesMediaDataSource();
@@ -51,6 +64,8 @@ void main() {
       when(
         favoritesRepository.getFavoriteMediaIds(),
       ).thenAnswer((_) async => []);
+      when(favoritesRepository.getFavorites())
+          .thenAnswer((_) async => const []);
 
       await viewModel.loadFavorites();
 
@@ -64,6 +79,8 @@ void main() {
         favoritesRepository.getFavoriteMediaIds(),
       ).thenAnswer((_) async => [mediaId]);
       when(mediaDataSource.getMedia()).thenAnswer((_) async => []);
+      when(favoritesRepository.getFavorites())
+          .thenAnswer((_) async => const []);
 
       await viewModel.loadFavorites();
 
@@ -79,6 +96,8 @@ void main() {
           favoritesRepository.getFavoriteMediaIds(),
         ).thenAnswer((_) async => [mediaId]);
         when(mediaDataSource.getMedia()).thenAnswer((_) async => [mediaModel]);
+        when(favoritesRepository.getFavorites())
+            .thenAnswer((_) async => const []);
 
         await viewModel.loadFavorites();
 
@@ -90,43 +109,101 @@ void main() {
     );
   });
 
-  group('toggleFavorite', () {
-    test('adds favorite when not already favorited', () async {
+  group('toggleFavoritesForMedia', () {
+    test('adds favorites and persists media when not previously favorited', () async {
       when(
-        favoritesRepository.isFavorite(mediaId),
+        favoritesRepository.isFavorite(
+          mediaId,
+          type: FavoriteItemType.media,
+        ),
       ).thenAnswer((_) async => false);
-      when(favoritesRepository.addFavorite(mediaId)).thenAnswer((_) async {});
+      when(favoritesRepository.addFavorites(any)).thenAnswer((_) async {});
+      when(favoritesRepository.removeFavorites(any)).thenAnswer((_) async {});
       when(mediaDataSource.upsertMedia(any)).thenAnswer((_) async {});
-      when(
-        favoritesRepository.getFavoriteMediaIds(),
-      ).thenAnswer((_) async => [mediaId]);
+      when(favoritesRepository.getFavoriteMediaIds())
+          .thenAnswer((_) async => [mediaId]);
       when(mediaDataSource.getMedia()).thenAnswer((_) async => [mediaModel]);
+      when(favoritesRepository.getFavorites()).thenAnswer((_) async => const []);
 
-      await viewModel.toggleFavorite(mediaEntity);
+      final result = await viewModel.toggleFavoritesForMedia([mediaEntity]);
 
+      expect(result.added, 1);
+      expect(result.removed, 0);
       expect(viewModel.state, isA<FavoritesLoaded>());
-      final loaded = viewModel.state as FavoritesLoaded;
-      expect(loaded.favorites, [mediaId]);
-      verify(favoritesRepository.addFavorite(mediaId)).called(1);
+      verify(favoritesRepository.addFavorites(any)).called(1);
       verify(mediaDataSource.upsertMedia(any)).called(1);
+      verifyNever(favoritesRepository.removeFavorites(any));
     });
 
-    test('removes favorite when already favorited', () async {
+    test('removes favorites when already favorited', () async {
       when(
-        favoritesRepository.isFavorite(mediaId),
+        favoritesRepository.isFavorite(
+          mediaId,
+          type: FavoriteItemType.media,
+        ),
       ).thenAnswer((_) async => true);
-      when(
-        favoritesRepository.removeFavorite(mediaId),
-      ).thenAnswer((_) async {});
-      when(
-        favoritesRepository.getFavoriteMediaIds(),
-      ).thenAnswer((_) async => []);
+      when(favoritesRepository.addFavorites(any)).thenAnswer((_) async {});
+      when(favoritesRepository.removeFavorites(any)).thenAnswer((_) async {});
+      when(favoritesRepository.getFavoriteMediaIds())
+          .thenAnswer((_) async => <String>[]);
       when(mediaDataSource.getMedia()).thenAnswer((_) async => [mediaModel]);
+      when(favoritesRepository.getFavorites()).thenAnswer((_) async => const []);
 
-      await viewModel.toggleFavorite(mediaEntity);
+      final result = await viewModel.toggleFavoritesForMedia([mediaEntity]);
 
+      expect(result.added, 0);
+      expect(result.removed, 1);
       expect(viewModel.state, isA<FavoritesEmpty>());
-      verify(favoritesRepository.removeFavorite(mediaId)).called(1);
+      verify(favoritesRepository.removeFavorites(any)).called(1);
+      verifyNever(favoritesRepository.addFavorites(any));
+    });
+  });
+
+  group('toggleFavoritesForDirectories', () {
+    test('adds directories when not favorited', () async {
+      when(
+        favoritesRepository.isFavorite(
+          directoryId,
+          type: FavoriteItemType.directory,
+        ),
+      ).thenAnswer((_) async => false);
+      when(favoritesRepository.addFavorites(any)).thenAnswer((_) async {});
+      when(favoritesRepository.removeFavorites(any)).thenAnswer((_) async {});
+      when(favoritesRepository.getFavoriteMediaIds())
+          .thenAnswer((_) async => <String>[]);
+      when(mediaDataSource.getMedia()).thenAnswer((_) async => [mediaModel]);
+      when(favoritesRepository.getFavorites()).thenAnswer((_) async => const []);
+
+      final result =
+          await viewModel.toggleFavoritesForDirectories([directoryEntity]);
+
+      expect(result.added, 1);
+      expect(result.removed, 0);
+      verify(favoritesRepository.addFavorites(any)).called(1);
+      verifyNever(mediaDataSource.upsertMedia(any));
+    });
+
+    test('removes directories when already favorited', () async {
+      when(
+        favoritesRepository.isFavorite(
+          directoryId,
+          type: FavoriteItemType.directory,
+        ),
+      ).thenAnswer((_) async => true);
+      when(favoritesRepository.addFavorites(any)).thenAnswer((_) async {});
+      when(favoritesRepository.removeFavorites(any)).thenAnswer((_) async {});
+      when(favoritesRepository.getFavoriteMediaIds())
+          .thenAnswer((_) async => <String>[]);
+      when(mediaDataSource.getMedia()).thenAnswer((_) async => [mediaModel]);
+      when(favoritesRepository.getFavorites()).thenAnswer((_) async => const []);
+
+      final result =
+          await viewModel.toggleFavoritesForDirectories([directoryEntity]);
+
+      expect(result.added, 0);
+      expect(result.removed, 1);
+      verify(favoritesRepository.removeFavorites(any)).called(1);
+      verifyNever(favoritesRepository.addFavorites(any));
     });
   });
 
@@ -136,6 +213,7 @@ void main() {
         favoritesRepository.getFavoriteMediaIds(),
       ).thenAnswer((_) async => [mediaId]);
       when(mediaDataSource.getMedia()).thenAnswer((_) async => [mediaModel]);
+      when(favoritesRepository.getFavorites()).thenAnswer((_) async => const []);
 
       await viewModel.loadFavorites();
 

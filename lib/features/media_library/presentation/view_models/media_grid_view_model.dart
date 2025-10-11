@@ -250,28 +250,6 @@ class MediaViewModel extends StateNotifier<MediaState> {
     _emitLoadedStateFromCache();
   }
 
-  /// Marks all selected media items as favorites.
-  ///
-  /// Returns the number of media that were newly added to the favorites list.
-  Future<int> addSelectionToFavorites() async {
-    if (_selectedMediaIds.isEmpty) {
-      return 0;
-    }
-
-    final favoritesRepository = _ref.read(favoritesRepositoryProvider);
-    var newlyAdded = 0;
-
-    for (final mediaId in _selectedMediaIds) {
-      final alreadyFavorite = await favoritesRepository.isFavorite(mediaId);
-      await favoritesRepository.addFavorite(mediaId);
-      if (!alreadyFavorite) {
-        newlyAdded += 1;
-      }
-    }
-
-    return newlyAdded;
-  }
-
   void _applySelectionUpdate(Set<String> selection) {
     final sanitized = selection..removeWhere((id) => id.isEmpty);
     _selectedMediaIds = sanitized;

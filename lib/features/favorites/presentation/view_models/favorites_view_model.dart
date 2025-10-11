@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/entities/favorite_entity.dart';
+import '../../domain/entities/favorite_item_type.dart';
 import '../../domain/repositories/favorites_repository.dart';
+import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/data/data_sources/local_media_data_source.dart';
 import '../../../media_library/data/models/media_model.dart';
@@ -173,50 +176,174 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
 
   /// Toggles favorite status for a media item.
   Future<void> toggleFavorite(MediaEntity media) async {
+    await toggleFavoritesForMedia([media]);
+  }
+
+  /// Toggles favorites for a collection of media items.
+  Future<FavoritesBatchResult> toggleFavoritesForMedia(
+    List<MediaEntity> mediaItems,
+  ) async {
+    if (mediaItems.isEmpty) {
+      return const FavoritesBatchResult.empty();
+    }
+
     try {
-      final isCurrentlyFavorite = await _favoritesRepository.isFavorite(
-        media.id,
+      final additions = <FavoriteEntity>[];
+      final removals = <String>[];
+      final mediaById = {for (final media in mediaItems) media.id: media};
+
+      for (final media in mediaItems) {
+        final isFavorited = await _favoritesRepository.isFavorite(
+          media.id,
+          type: FavoriteItemType.media,
+        );
+        if (isFavorited) {
+          removals.add(media.id);
+        } else {
+          additions.add(
+            FavoriteEntity(
+              itemId: media.id,
+              itemType: FavoriteItemType.media,
+              addedAt: DateTime.now(),
+              metadata: {
+                'name': media.name,
+                'path': media.path,
+                'type': media.type.name,
+              },
+            ),
+          );
+        }
+      }
+
+      if (additions.isNotEmpty) {
+        await _favoritesRepository.addFavorites(additions);
+        await Future.wait(
+          additions.map(
+            (favorite) async {
+              final media = mediaById[favorite.itemId];
+              if (media != null) {
+                await _persistMedia(media);
+              }
+            },
+          ),
+        );
+      }
+
+      if (removals.isNotEmpty) {
+        await _favoritesRepository.removeFavorites(removals);
+      }
+
+      if (!mounted) {
+        return FavoritesBatchResult(
+          added: additions.length,
+          removed: removals.length,
+        );
+      }
+
+      if (additions.isNotEmpty || removals.isNotEmpty) {
+        await loadFavorites();
+      }
+
+      return FavoritesBatchResult(
+        added: additions.length,
+        removed: removals.length,
       );
-      if (!mounted) {
-        return;
-      }
-
-      if (isCurrentlyFavorite) {
-        await _favoritesRepository.removeFavorite(media.id);
-      } else {
-        await _favoritesRepository.addFavorite(media.id);
-        // Ensure media is persisted when adding to favorites
-        await _persistMedia(media);
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      // Reload favorites after toggle
-      await loadFavorites();
     } catch (e) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        state = FavoritesError(e.toString());
       }
-      state = FavoritesError(e.toString());
+      return const FavoritesBatchResult.empty();
+    }
+  }
+
+  /// Toggles favorites for directory entities.
+  Future<FavoritesBatchResult> toggleFavoritesForDirectories(
+    List<DirectoryEntity> directories,
+  ) async {
+    if (directories.isEmpty) {
+      return const FavoritesBatchResult.empty();
+    }
+
+    try {
+      final additions = <FavoriteEntity>[];
+      final removals = <String>[];
+
+      for (final directory in directories) {
+        final isFavorited = await _favoritesRepository.isFavorite(
+          directory.id,
+          type: FavoriteItemType.directory,
+        );
+        if (isFavorited) {
+          removals.add(directory.id);
+        } else {
+          additions.add(
+            FavoriteEntity(
+              itemId: directory.id,
+              itemType: FavoriteItemType.directory,
+              addedAt: DateTime.now(),
+              metadata: {
+                'name': directory.name,
+                'path': directory.path,
+              },
+            ),
+          );
+        }
+      }
+
+      if (additions.isNotEmpty) {
+        await _favoritesRepository.addFavorites(additions);
+      }
+
+      if (removals.isNotEmpty) {
+        await _favoritesRepository.removeFavorites(removals);
+      }
+
+      if (!mounted) {
+        return FavoritesBatchResult(
+          added: additions.length,
+          removed: removals.length,
+        );
+      }
+
+      if (additions.isNotEmpty || removals.isNotEmpty) {
+        await loadFavorites();
+      }
+
+      return FavoritesBatchResult(
+        added: additions.length,
+        removed: removals.length,
+      );
+    } catch (e) {
+      if (mounted) {
+        state = FavoritesError(e.toString());
+      }
+      return const FavoritesBatchResult.empty();
     }
   }
 
   /// Checks if a media item is favorited.
-  Future<bool> isFavorite(String mediaId) async {
+  Future<bool> isFavorite(
+    String itemId, {
+    FavoriteItemType type = FavoriteItemType.media,
+  }) async {
     try {
-      return await _favoritesRepository.isFavorite(mediaId);
+      return await _favoritesRepository.isFavorite(itemId, type: type);
     } catch (e) {
       return false;
     }
   }
 
   /// Checks the in-memory state for a favorite.
-  bool isFavoriteInState(String mediaId) {
+  bool isFavoriteInState(
+    String itemId, {
+    FavoriteItemType type = FavoriteItemType.media,
+  }) {
     final currentState = state;
     if (currentState is FavoritesLoaded) {
-      return currentState.favorites.contains(mediaId);
+      if (type != FavoriteItemType.media) {
+        return false;
+      }
+      return currentState.favorites.contains(itemId);
     }
     return false;
   }
@@ -224,14 +351,24 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
   /// Clears all favorites.
   Future<void> clearAllFavorites() async {
     try {
-      final favoriteIds = await _favoritesRepository.getFavoriteMediaIds();
-      for (final favoriteId in favoriteIds) {
-        await _favoritesRepository.removeFavorite(favoriteId);
+      final favorites = await _favoritesRepository.getFavorites();
+      if (favorites.isEmpty) {
+        if (mounted) {
+          state = const FavoritesEmpty();
+        }
+        return;
       }
+
+      await _favoritesRepository
+          .removeFavorites(favorites.map((fav) => fav.itemId).toList());
       // Reload favorites to update the state
-      await loadFavorites();
+      if (mounted) {
+        await loadFavorites();
+      }
     } catch (e) {
-      state = FavoritesError('Failed to clear favorites: $e');
+      if (mounted) {
+        state = FavoritesError('Failed to clear favorites: $e');
+      }
     }
   }
 
@@ -301,6 +438,20 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
     );
     return validMedia;
   }
+}
+
+/// Result describing the outcome of a batch favorites toggle.
+class FavoritesBatchResult {
+  const FavoritesBatchResult({required this.added, required this.removed});
+
+  const FavoritesBatchResult.empty()
+    : added = 0,
+      removed = 0;
+
+  final int added;
+  final int removed;
+
+  bool get hasChanges => added > 0 || removed > 0;
 }
 
 /// Provider for FavoritesViewModel with auto-dispose.

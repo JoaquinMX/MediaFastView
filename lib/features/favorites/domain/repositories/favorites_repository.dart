@@ -1,15 +1,30 @@
+import '../entities/favorite_entity.dart';
+import '../entities/favorite_item_type.dart';
+
 /// Repository interface for favorites operations.
-/// Provides methods for managing favorite media items.
+/// Provides methods for managing favorite items across item types.
 abstract class FavoritesRepository {
+  /// Retrieves every persisted favorite.
+  Future<List<FavoriteEntity>> getFavorites();
+
   /// Retrieves all favorite media IDs.
   Future<List<String>> getFavoriteMediaIds();
 
   /// Adds a media item to favorites.
   Future<void> addFavorite(String mediaId);
 
-  /// Removes a media item from favorites.
-  Future<void> removeFavorite(String mediaId);
+  /// Adds multiple favorites in a single batch.
+  Future<void> addFavorites(List<FavoriteEntity> favorites);
 
-  /// Checks if a media item is favorited.
-  Future<bool> isFavorite(String mediaId);
+  /// Removes a media item from favorites.
+  Future<void> removeFavorite(String itemId);
+
+  /// Removes multiple favorites by their identifiers.
+  Future<void> removeFavorites(List<String> itemIds);
+
+  /// Checks if an item is favorited.
+  Future<bool> isFavorite(
+    String itemId, {
+    FavoriteItemType type = FavoriteItemType.media,
+  });
 }
