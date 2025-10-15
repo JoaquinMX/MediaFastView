@@ -546,6 +546,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
   /// Searches directories by query.
   void searchDirectories(String query) {
+    if (query == _currentSearchQuery) {
+      return;
+    }
     final previousColumns = switch (state) {
       DirectoryLoaded(columns: final columns) => columns,
       DirectoryPermissionRevoked(columns: final columns) => columns,
