@@ -13,6 +13,8 @@ class DirectorySearchBar extends ConsumerStatefulWidget {
 
 class _DirectorySearchBarState extends ConsumerState<DirectorySearchBar> {
   late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+  late final ProviderSubscription<DirectoryState> _directorySubscription;
 
   @override
   void initState() {
@@ -22,10 +24,30 @@ class _DirectorySearchBarState extends ConsumerState<DirectorySearchBar> {
     );
     _controller.selection =
         TextSelection.collapsed(offset: _controller.text.length);
+    _focusNode = FocusNode();
+
+    _directorySubscription =
+        ref.listen<DirectoryState>(directoryViewModelProvider, (previous, next) {
+      final nextQuery = _extractSearchQuery(next);
+      if (nextQuery == _controller.text) {
+        return;
+      }
+
+      if (_focusNode.hasPrimaryFocus) {
+        return;
+      }
+
+      _controller.value = TextEditingValue(
+        text: nextQuery,
+        selection: TextSelection.collapsed(offset: nextQuery.length),
+      );
+    });
   }
 
   @override
   void dispose() {
+    _directorySubscription.close();
+    _focusNode.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -46,16 +68,8 @@ class _DirectorySearchBarState extends ConsumerState<DirectorySearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(directoryViewModelProvider);
+    ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
-
-    final searchQuery = _extractSearchQuery(state);
-    if (_controller.text != searchQuery) {
-      _controller.value = TextEditingValue(
-        text: searchQuery,
-        selection: TextSelection.collapsed(offset: searchQuery.length),
-      );
-    }
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -65,17 +79,29 @@ class _DirectorySearchBarState extends ConsumerState<DirectorySearchBar> {
           final hasQuery = value.text.isNotEmpty;
           return TextField(
             controller: _controller,
+            focusNode: _focusNode,
             decoration: InputDecoration(
               hintText: 'Search directories...',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: hasQuery
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _controller.clear();
-                        viewModel.searchDirectories('');
-                        _refocusGrid(context);
-                      },
+                  ? Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 4),
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () {
+                            _controller.clear();
+                            viewModel.searchDirectories('');
+                            _refocusGrid(context);
+                          },
+                          child: const SizedBox(
+                            height: 40,
+                            width: 40,
+                            child: Icon(Icons.clear),
+                          ),
+                        ),
+                      ),
                     )
                   : null,
               border:
