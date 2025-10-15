@@ -90,25 +90,21 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
   }
 
   Widget _buildMediaContent(MediaEntity media) {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Image.file(
-          File(media.path),
-          fit: BoxFit.contain,
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[800],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Center(
-                child: Icon(Icons.image, size: 64, color: Colors.white),
-              ),
-            );
-          },
-        ),
+    return SizedBox.expand(
+      child: Image.file(
+        File(media.path),
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[800],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Center(
+              child: Icon(Icons.image, size: 64, color: Colors.white),
+            ),
+          );
+        },
       ),
     );
   }

@@ -27,7 +27,7 @@ class _DirectorySearchBarState extends ConsumerState<DirectorySearchBar> {
     _focusNode = FocusNode();
 
     _directorySubscription =
-        ref.listen<DirectoryState>(directoryViewModelProvider, (previous, next) {
+        ref.listenManual<DirectoryState>(directoryViewModelProvider, (previous, next) {
       final nextQuery = _extractSearchQuery(next);
       if (nextQuery == _controller.text) {
         return;
