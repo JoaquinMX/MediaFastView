@@ -19,8 +19,9 @@ Based on the requirements analysis, the application implements the following cor
 9. **Database Migration Prep**: Centralised Isar database service ready to host
    persistent collections as part of the SharedPreferences replacement
    roadmap, with schemas defined for directories, media, tags, and favorites,
-   plus concrete Isar data sources for directories and media that mirror the
-   legacy SharedPreferences behaviours while operating on the shared database
+   plus concrete Isar data sources for directories, media, tags, and favorites
+   that mirror the legacy SharedPreferences behaviours while operating on the
+   shared database and enabling richer tag/favorite queries
 10. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
 
 ## Architectural Principles

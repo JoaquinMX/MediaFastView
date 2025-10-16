@@ -226,7 +226,7 @@ class IsarMediaDataSource {
   static MediaCollectionStore _defaultMediaStoreBuilder(
     IsarDatabase database,
   ) {
-    return _IsarMediaCollectionStore(database);
+    return IsarMediaCollectionStore(database);
   }
 }
 
@@ -249,8 +249,8 @@ abstract interface class MediaCollectionStore {
   Future<T> writeTxn<T>(Future<T> Function() action);
 }
 
-class _IsarMediaCollectionStore implements MediaCollectionStore {
-  _IsarMediaCollectionStore(this._database);
+class IsarMediaCollectionStore implements MediaCollectionStore {
+  IsarMediaCollectionStore(this._database);
 
   final IsarDatabase _database;
 
