@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
 import '../../domain/entities/media_entity.dart';
@@ -16,13 +19,16 @@ class MediaCollection {
     required this.type,
     required this.size,
     required this.lastModified,
-    List<String>? tagIds,
+    required this.tagIds,
     required this.directoryId,
     this.bookmarkData,
-  }) : tagIds = tagIds != null ? List<String>.from(tagIds) : <String>[];
+  });
 
   /// Unique hash-based identifier used by Isar for this record.
-  Id get id => Isar.fastHash(mediaId);
+  Id get id {
+    final hash = sha256.convert(utf8.encode(mediaId)).bytes;
+    return hash.fold<int>(0, (prev, element) => prev + element);
+  }
   set id(Id value) {}
 
   /// Stable media identifier used throughout the app.
@@ -47,6 +53,7 @@ class MediaCollection {
   DateTime lastModified;
 
   /// Tags assigned to the media item.
+  @Index(type: IndexType.hashElements)
   List<String> tagIds;
 
   /// Identifier of the parent directory.

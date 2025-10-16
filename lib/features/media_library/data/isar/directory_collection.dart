@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
 import '../models/directory_model.dart';
@@ -12,13 +15,16 @@ class DirectoryCollection {
     required this.path,
     required this.name,
     this.thumbnailPath,
-    List<String>? tagIds,
+    required this.tagIds,
     required this.lastModified,
     this.bookmarkData,
-  }) : tagIds = tagIds != null ? List<String>.from(tagIds) : <String>[];
+  });
 
   /// Unique hash-based identifier used by Isar for this record.
-  Id get id => Isar.fastHash(directoryId);
+  Id get id {
+    final hash = sha256.convert(utf8.encode(directoryId)).bytes;
+    return hash.fold<int>(0, (prev, element) => prev + element);
+  }
   set id(Id value) {}
 
   /// Stable directory identifier used by higher layers in the app.
@@ -36,6 +42,7 @@ class DirectoryCollection {
   String? thumbnailPath;
 
   /// Tags assigned to the directory.
+  @Index(type: IndexType.hashElements)
   List<String> tagIds;
 
   /// Timestamp of the last modification to the directory metadata.

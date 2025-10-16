@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
 import '../../../media_library/data/isar/directory_collection.dart';
@@ -20,7 +21,10 @@ class FavoriteCollection {
   });
 
   /// Unique hash-based identifier derived from item type and ID.
-  Id get id => Isar.fastHash('${itemType.name}::$itemId');
+  Id get id {
+    final hash = sha256.convert(utf8.encode('${itemType.name}::$itemId')).bytes;
+    return hash.fold<int>(0, (prev, element) => prev + element);
+  }
   set id(Id value) {}
 
   /// Stable identifier for the favorited item.

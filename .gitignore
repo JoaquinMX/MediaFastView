@@ -18,6 +18,10 @@
 build/
 coverage/
 pubspec.lock
+**/*.g.dart
+**/*.freezed.dart
+**/**/**/**/**/*.g.dart
+**/**/**/**/**/*.freezed.dart
 
 # iOS build artifacts
 ios/Pods
