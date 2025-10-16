@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -10,12 +11,16 @@ import '../../features/favorites/domain/repositories/favorites_repository.dart';
 import '../../core/services/bookmark_service.dart';
 import '../../core/services/file_service.dart';
 import '../../core/services/permission_service.dart';
+import '../../core/services/isar_database.dart';
+import '../../core/services/isar_schemas.dart';
 import '../../features/media_library/data/data_sources/local_directory_data_source.dart';
 import '../../features/media_library/data/data_sources/local_media_data_source.dart';
 import '../../features/media_library/data/data_sources/shared_preferences_data_source.dart';
 import '../../features/media_library/data/repositories/directory_repository_impl.dart';
 import '../../features/media_library/data/repositories/file_operations_repository_impl.dart';
 import '../../features/media_library/data/repositories/filesystem_media_repository_impl.dart';
+import '../../features/media_library/data/isar/isar_directory_data_source.dart';
+import '../../features/media_library/data/isar/isar_media_data_source.dart';
 import '../../features/media_library/domain/repositories/directory_repository.dart';
 import '../../features/media_library/domain/repositories/file_operations_repository.dart';
 import '../../features/media_library/domain/repositories/media_repository.dart';
@@ -39,11 +44,21 @@ import '../../features/full_screen/domain/repositories/media_viewer_repository.d
 import '../../features/full_screen/domain/use_cases/load_media_for_viewing_use_case.dart';
 import '../../features/tagging/data/data_sources/shared_preferences_data_source.dart';
 import '../../features/tagging/data/repositories/tag_repository_impl.dart';
+import '../../features/tagging/data/isar/isar_tag_data_source.dart';
 import '../../features/tagging/domain/repositories/tag_repository.dart';
+import '../../features/favorites/data/isar/isar_favorites_data_source.dart';
 
 // SharedPreferences provider
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('SharedPreferences must be initialized in main');
+});
+
+// Isar database provider
+final isarDatabaseProvider = Provider<IsarDatabase>((ref) {
+  final database = IsarDatabase(schemas: isarCollectionSchemas);
+  ref.onDispose(database.close);
+  unawaited(database.open());
+  return database;
 });
 
 // Directory data source provider
@@ -54,10 +69,19 @@ final directoryDataSourceProvider =
       ),
     );
 
+final isarDirectoryDataSourceProvider =
+    Provider<IsarDirectoryDataSource>(
+      (ref) => IsarDirectoryDataSource(ref.watch(isarDatabaseProvider)),
+    );
+
 // Media data source provider
 final mediaDataSourceProvider = Provider<SharedPreferencesMediaDataSource>(
   (ref) =>
       SharedPreferencesMediaDataSource(ref.watch(sharedPreferencesProvider)),
+);
+
+final isarMediaDataSourceProvider = Provider<IsarMediaDataSource>(
+  (ref) => IsarMediaDataSource(ref.watch(isarDatabaseProvider)),
 );
 
 // Local directory data source provider
@@ -72,6 +96,10 @@ final tagDataSourceProvider = Provider<SharedPreferencesTagDataSource>(
   (ref) => SharedPreferencesTagDataSource(ref.watch(sharedPreferencesProvider)),
 );
 
+final isarTagDataSourceProvider = Provider<IsarTagDataSource>(
+  (ref) => IsarTagDataSource(ref.watch(isarDatabaseProvider)),
+);
+
 // Favorites data source provider
 final favoritesDataSourceProvider =
     Provider<SharedPreferencesFavoritesDataSource>(
@@ -79,6 +107,10 @@ final favoritesDataSourceProvider =
         ref.watch(sharedPreferencesProvider),
       ),
     );
+
+final isarFavoritesDataSourceProvider = Provider<IsarFavoritesDataSource>(
+  (ref) => IsarFavoritesDataSource(ref.watch(isarDatabaseProvider)),
+);
 
 // Service providers
 final bookmarkServiceProvider = Provider<BookmarkService>(
@@ -99,10 +131,12 @@ final directoryRepositoryProvider =
     >(
       (ref) => DirectoryRepositoryNotifier(
         DirectoryRepositoryImpl(
+          ref.watch(isarDirectoryDataSourceProvider),
           ref.watch(directoryDataSourceProvider),
           ref.watch(localDirectoryDataSourceProvider),
           ref.watch(bookmarkServiceProvider),
           ref.watch(permissionServiceProvider),
+          ref.watch(isarMediaDataSourceProvider),
           ref.watch(mediaDataSourceProvider),
         ),
       ),
@@ -114,6 +148,7 @@ final mediaRepositoryProvider =
         FilesystemMediaRepositoryImpl(
           ref.watch(bookmarkServiceProvider),
           ref.watch(directoryRepositoryProvider),
+          ref.watch(isarMediaDataSourceProvider),
           ref.watch(mediaDataSourceProvider),
           permissionService: ref.watch(permissionServiceProvider),
         ),
@@ -123,7 +158,10 @@ final mediaRepositoryProvider =
 final tagRepositoryProvider =
     StateNotifierProvider.autoDispose<TagRepositoryNotifier, TagRepository>(
       (ref) => TagRepositoryNotifier(
-        TagRepositoryImpl(ref.watch(tagDataSourceProvider)),
+        TagRepositoryImpl(
+          ref.watch(isarTagDataSourceProvider),
+          ref.watch(tagDataSourceProvider),
+        ),
       ),
     );
 
@@ -133,7 +171,10 @@ final favoritesRepositoryProvider =
       FavoritesRepository
     >(
       (ref) => FavoritesRepositoryNotifier(
-        FavoritesRepositoryImpl(ref.watch(favoritesDataSourceProvider)),
+        FavoritesRepositoryImpl(
+          ref.watch(isarFavoritesDataSourceProvider),
+          ref.watch(favoritesDataSourceProvider),
+        ),
       ),
     );
 

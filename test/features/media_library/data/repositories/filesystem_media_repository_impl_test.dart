@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
+import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/repositories/filesystem_media_repository_impl.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart' show MediaType;
@@ -10,6 +11,7 @@ import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
 import '../../../../mocks.mocks.dart';
 
 class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
+class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
 
 void main() {
   late FilesystemMediaRepositoryImpl repository;
@@ -18,6 +20,7 @@ void main() {
   late MockSharedPreferencesMediaDataSource localMediaDataSource;
   late MockFilesystemMediaDataSource filesystemDataSource;
   late MockPermissionService permissionService;
+  late _MockIsarMediaDataSource isarMediaDataSource;
 
   setUp(() {
     bookmarkService = MockBookmarkService();
@@ -25,10 +28,20 @@ void main() {
     localMediaDataSource = MockSharedPreferencesMediaDataSource();
     filesystemDataSource = MockFilesystemMediaDataSource();
     permissionService = MockPermissionService();
+    isarMediaDataSource = _MockIsarMediaDataSource();
+
+    when(isarMediaDataSource.getMedia()).thenAnswer((_) async => <MediaModel>[]);
+    when(isarMediaDataSource.getMediaForDirectory(any)).thenAnswer((_) async => <MediaModel>[]);
+    when(isarMediaDataSource.saveMedia(any)).thenAnswer((_) async {});
+    when(isarMediaDataSource.upsertMedia(any)).thenAnswer((_) async {});
+    when(isarMediaDataSource.updateMediaTags(any, any)).thenAnswer((_) async {});
+    when(isarMediaDataSource.removeMediaForDirectory(any)).thenAnswer((_) async {});
+    when(isarMediaDataSource.migrateDirectoryId(any, any)).thenAnswer((_) async {});
 
     repository = FilesystemMediaRepositoryImpl(
       bookmarkService,
       directoryRepository,
+      isarMediaDataSource,
       localMediaDataSource,
       permissionService: permissionService,
       filesystemDataSource: filesystemDataSource,

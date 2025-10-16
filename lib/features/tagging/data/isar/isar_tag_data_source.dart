@@ -39,6 +39,7 @@ class IsarTagDataSource {
 
   /// Retrieves every persisted tag.
   Future<List<TagModel>> getTags() async {
+    await _ensureReady();
     try {
       final collections = await _tagStore.getAll();
       collections.sort((a, b) => a.name.compareTo(b.name));
@@ -95,6 +96,7 @@ class IsarTagDataSource {
 
   /// Resolves the tags assigned to the media entry identified by [mediaId].
   Future<List<TagModel>> getTagsForMedia(String mediaId) async {
+    await _ensureReady();
     try {
       final media = await _mediaStore.getById(Isar.fastHash(mediaId));
       if (media == null || media.tagIds.isEmpty) {
@@ -111,6 +113,7 @@ class IsarTagDataSource {
 
   /// Resolves the tags assigned to the directory identified by [directoryId].
   Future<List<TagModel>> getTagsForDirectory(String directoryId) async {
+    await _ensureReady();
     try {
       final directory = await _directoryStore.getByDirectoryId(directoryId);
       if (directory == null || directory.tagIds.isEmpty) {
@@ -147,12 +150,19 @@ class IsarTagDataSource {
     String errorMessage,
   ) async {
     try {
+      await _ensureReady();
       await action();
     } catch (error, stackTrace) {
       Error.throwWithStackTrace(
         PersistenceError('$errorMessage: $error'),
         stackTrace,
       );
+    }
+  }
+
+  Future<void> _ensureReady() async {
+    if (!_database.isOpen) {
+      await _database.open();
     }
   }
 

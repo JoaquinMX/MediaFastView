@@ -32,6 +32,7 @@ class IsarDirectoryDataSource {
 
   /// Retrieves every persisted directory.
   Future<List<DirectoryModel>> getDirectories() async {
+    await _ensureReady();
     try {
       final collections = await _store.getAll();
       return collections.map((collection) => collection.toModel()).toList(
@@ -100,12 +101,19 @@ class IsarDirectoryDataSource {
     String errorMessage,
   ) async {
     try {
+      await _ensureReady();
       await action();
     } catch (error, stackTrace) {
       Error.throwWithStackTrace(
         PersistenceError('$errorMessage: $error'),
         stackTrace,
       );
+    }
+  }
+
+  Future<void> _ensureReady() async {
+    if (!_database.isOpen) {
+      await _database.open();
     }
   }
 

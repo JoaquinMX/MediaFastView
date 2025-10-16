@@ -21,7 +21,9 @@ Based on the requirements analysis, the application implements the following cor
    roadmap, with schemas defined for directories, media, tags, and favorites,
    plus concrete Isar data sources for directories, media, tags, and favorites
    that mirror the legacy SharedPreferences behaviours while operating on the
-   shared database and enabling richer tag/favorite queries
+   shared database and enabling richer tag/favorite queries, alongside hybrid
+   repository bridges that keep both storage layers in sync while seeding Isar
+   from existing SharedPreferences payloads during the migration window
 10. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
 
 ## Architectural Principles
