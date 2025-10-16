@@ -11,8 +11,8 @@ typedef IsarDirectoryResolver = Future<Directory> Function();
 /// [Isar.open], but tests can inject a fake to avoid touching the filesystem.
 typedef IsarOpenCallback = Future<Isar> Function(
   List<CollectionSchema<dynamic>> schemas, {
-  String? directory,
-  String? name,
+  required String directory,
+  String name,
 });
 
 /// Handles lifecycle management for the shared [Isar] instance used across the

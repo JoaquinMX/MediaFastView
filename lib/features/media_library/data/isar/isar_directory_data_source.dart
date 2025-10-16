@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
 import '../../../../core/error/app_error.dart';
@@ -73,7 +76,9 @@ class IsarDirectoryDataSource {
   Future<void> removeDirectory(String id) async {
     await _executeSafely(() async {
       await _store.writeTxn(() async {
-        await _store.deleteById(Isar.fastHash(id));
+        final hash = sha256.convert(utf8.encode(id)).bytes;
+        final hashedId = hash.fold<int>(0, (prev, element) => prev + element);
+        await _store.deleteById(hashedId);
       });
     }, 'Failed to remove directory');
   }
@@ -157,10 +162,7 @@ class IsarDirectoryCollectionStore implements DirectoryCollectionStore {
 
   @override
   Future<List<DirectoryCollection>> getAll() {
-    return _collection
-        .where()
-        .addWhereClause(const IdWhereClause.any())
-        .findAll();
+    return _collection.where().findAll();
   }
 
   @override
@@ -185,7 +187,9 @@ class IsarDirectoryCollectionStore implements DirectoryCollectionStore {
 
   @override
   Future<DirectoryCollection?> getByDirectoryId(String directoryId) {
-    return _collection.get(Isar.fastHash(directoryId));
+    final hash = sha256.convert(utf8.encode(directoryId)).bytes;
+    final id = hash.fold<int>(0, (prev, element) => prev + element);
+    return _collection.get(id);
   }
 
   @override

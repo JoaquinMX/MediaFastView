@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
 import '../../../../core/error/app_error.dart';
@@ -89,7 +92,9 @@ class IsarTagDataSource {
   Future<void> removeTag(String id) async {
     await _executeSafely(() async {
       await _tagStore.writeTxn(() async {
-        await _tagStore.deleteById(Isar.fastHash(id));
+        final hash = sha256.convert(utf8.encode(id)).bytes;
+        final hashedId = hash.fold<int>(0, (prev, element) => prev + element);
+        await _tagStore.deleteById(hashedId);
       });
     }, 'Failed to remove tag');
   }
@@ -98,7 +103,7 @@ class IsarTagDataSource {
   Future<List<TagModel>> getTagsForMedia(String mediaId) async {
     await _ensureReady();
     try {
-      final media = await _mediaStore.getById(Isar.fastHash(mediaId));
+      final media = await _mediaStore.getByMediaId(mediaId);
       if (media == null || media.tagIds.isEmpty) {
         return const <TagModel>[];
       }
@@ -212,10 +217,7 @@ class IsarTagCollectionStore implements TagCollectionStore {
 
   @override
   Future<List<TagCollection>> getAll() {
-    return _collection
-        .where()
-        .addWhereClause(const IdWhereClause.any())
-        .findAll();
+    return _collection.where().findAll();
   }
 
   @override
@@ -240,7 +242,7 @@ class IsarTagCollectionStore implements TagCollectionStore {
 
   @override
   Future<TagCollection?> getByTagId(String tagId) {
-    return _collection.getByIndex(r'tagId', tagId);
+    return _collection.filter().tagIdEqualTo(tagId).findFirst();
   }
 
   @override

@@ -1,10 +1,12 @@
+import 'dart:convert';
+
 import 'package:isar/isar.dart';
+import 'package:crypto/crypto.dart';
 
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/isar_database.dart';
 import '../../../../core/services/logging_service.dart';
 import '../models/media_model.dart';
-import 'directory_collection.dart';
 import 'isar_directory_data_source.dart';
 import 'media_collection.dart';
 
@@ -133,13 +135,11 @@ class IsarMediaDataSource {
   Future<void> updateMediaTags(String mediaId, List<String> tagIds) async {
     await _executeSafely(() async {
       await _mediaStore.writeTxn(() async {
-        final existing = await _mediaStore.getById(Isar.fastHash(mediaId));
+        final existing = await _mediaStore.getByMediaId(mediaId);
         if (existing == null) {
           return;
         }
-        existing.tagIds
-          ..clear()
-          ..addAll(tagIds);
+        existing.tagIds = List<String>.from(tagIds);
         await _mediaStore.put(existing);
       });
     }, 'Failed to update media tags');
@@ -251,6 +251,8 @@ abstract interface class MediaCollectionStore {
 
   Future<MediaCollection?> getById(Id id);
 
+  Future<MediaCollection?> getByMediaId(String mediaId);
+
   Future<List<MediaCollection>> getByDirectoryId(String directoryId);
 
   Future<void> deleteByIds(List<Id> ids);
@@ -270,10 +272,7 @@ class IsarMediaCollectionStore implements MediaCollectionStore {
 
   @override
   Future<List<MediaCollection>> getAll() {
-    return _collection
-        .where()
-        .addWhereClause(const IdWhereClause.any())
-        .findAll();
+    return _collection.where().findAll();
   }
 
   @override
@@ -297,15 +296,17 @@ class IsarMediaCollectionStore implements MediaCollectionStore {
   }
 
   @override
+  Future<MediaCollection?> getByMediaId(String mediaId) {
+    final hash = sha256.convert(utf8.encode(mediaId)).bytes;
+    final id = hash.fold<int>(0, (prev, element) => prev + element);
+    return _collection.get(id);
+  }
+
+  @override
   Future<List<MediaCollection>> getByDirectoryId(String directoryId) {
     return _collection
         .filter()
-        .addFilterCondition(
-          FilterCondition.equalTo(
-            property: r'directoryId',
-            value: directoryId,
-          ),
-        )
+        .directoryIdEqualTo(directoryId)
         .findAll();
   }
 

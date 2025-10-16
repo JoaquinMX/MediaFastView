@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
 import '../../../../core/error/app_error.dart';
@@ -111,7 +114,11 @@ class IsarFavoritesDataSource {
       await _favoriteStore.writeTxn(() async {
         if (type != null) {
           final ids = itemIds
-              .map((itemId) => Isar.fastHash(_favoriteKey(itemId, type)))
+              .map((itemId) {
+                final key = _favoriteKey(itemId, type);
+                final hash = sha256.convert(utf8.encode(key)).bytes;
+                return hash.fold<int>(0, (prev, element) => prev + element);
+              })
               .toList(growable: false);
           await _favoriteStore.deleteByIds(ids);
           return;
@@ -240,7 +247,7 @@ class IsarFavoritesDataSource {
     switch (favorite.itemType) {
       case FavoriteItemType.media:
         collection.media.value =
-            await _mediaStore.getById(Isar.fastHash(favorite.itemId));
+            await _mediaStore.getByMediaId(favorite.itemId);
         break;
       case FavoriteItemType.directory:
         collection.directory.value =
@@ -334,10 +341,7 @@ class IsarFavoriteCollectionStore implements FavoriteCollectionStore {
 
   @override
   Future<List<FavoriteCollection>> getAll() {
-    return _collection
-        .where()
-        .addWhereClause(const IdWhereClause.any())
-        .findAll();
+    return _collection.where().findAll();
   }
 
   @override
@@ -373,7 +377,10 @@ class IsarFavoriteCollectionStore implements FavoriteCollectionStore {
     String itemId,
     FavoriteItemType type,
   ) {
-    return _collection.get(Isar.fastHash('${type.name}::$itemId'));
+    final key = '${type.name}::$itemId';
+    final hash = sha256.convert(utf8.encode(key)).bytes;
+    final id = hash.fold<int>(0, (prev, element) => prev + element);
+    return _collection.get(id);
   }
 
   @override

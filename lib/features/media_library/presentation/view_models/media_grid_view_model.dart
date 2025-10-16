@@ -780,6 +780,7 @@ final mediaViewModelProvider = StateNotifierProvider.autoDispose
         mediaRepository: FilesystemMediaRepositoryImpl(
           ref.watch(bookmarkServiceProvider),
           ref.watch(directoryRepositoryProvider),
+          ref.watch(isarMediaDataSourceProvider),
           ref.watch(mediaDataSourceProvider),
           permissionService: ref.watch(permissionServiceProvider),
         ),
