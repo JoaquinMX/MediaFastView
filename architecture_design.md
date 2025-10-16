@@ -16,7 +16,10 @@ Based on the requirements analysis, the application implements the following cor
 6. **UI Interactions**: Responsive grids, animations, drag-and-drop, gestures, and keyboard shortcuts
 7. **File Operations**: Safe file deletion and permission handling
 8. **Data Persistence**: SharedPreferences-based storage for all app data
-9. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
+9. **Database Migration Prep**: Centralised Isar database service ready to host
+   persistent collections as part of the SharedPreferences replacement
+   roadmap
+10. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
 
 ## Architectural Principles
 
