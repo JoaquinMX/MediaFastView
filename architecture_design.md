@@ -23,7 +23,9 @@ Based on the requirements analysis, the application implements the following cor
    that mirror the legacy SharedPreferences behaviours while operating on the
    shared database and enabling richer tag/favorite queries, alongside hybrid
    repository bridges that keep both storage layers in sync while seeding Isar
-   from existing SharedPreferences payloads during the migration window
+   from existing SharedPreferences payloads during the migration window and a
+   dedicated migration service that promotes the Isar-backed providers once the
+   legacy payloads have been copied across
 10. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
 
 ## Architectural Principles

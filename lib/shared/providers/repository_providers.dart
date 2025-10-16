@@ -13,6 +13,7 @@ import '../../core/services/file_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../core/services/isar_database.dart';
 import '../../core/services/isar_schemas.dart';
+import '../../core/services/persistence_migration_service.dart';
 import '../../features/media_library/data/data_sources/local_directory_data_source.dart';
 import '../../features/media_library/data/data_sources/local_media_data_source.dart';
 import '../../features/media_library/data/data_sources/shared_preferences_data_source.dart';
@@ -112,6 +113,26 @@ final isarFavoritesDataSourceProvider = Provider<IsarFavoritesDataSource>(
   (ref) => IsarFavoritesDataSource(ref.watch(isarDatabaseProvider)),
 );
 
+final persistenceMigrationServiceProvider =
+    Provider<PersistenceMigrationService>((ref) {
+  return PersistenceMigrationService(
+    sharedPreferences: ref.watch(sharedPreferencesProvider),
+    legacyDirectoryDataSource: ref.watch(directoryDataSourceProvider),
+    legacyMediaDataSource: ref.watch(mediaDataSourceProvider),
+    legacyTagDataSource: ref.watch(tagDataSourceProvider),
+    legacyFavoritesDataSource: ref.watch(favoritesDataSourceProvider),
+    isarDirectoryDataSource: ref.watch(isarDirectoryDataSourceProvider),
+    isarMediaDataSource: ref.watch(isarMediaDataSourceProvider),
+    isarTagDataSource: ref.watch(isarTagDataSourceProvider),
+    isarFavoritesDataSource: ref.watch(isarFavoritesDataSourceProvider),
+  );
+});
+
+final persistenceMigrationProvider = FutureProvider<void>((ref) async {
+  final migrationService = ref.watch(persistenceMigrationServiceProvider);
+  await migrationService.migrateToIsar();
+});
+
 // Service providers
 final bookmarkServiceProvider = Provider<BookmarkService>(
   (ref) => BookmarkService.instance,
@@ -129,40 +150,49 @@ final directoryRepositoryProvider =
       DirectoryRepositoryNotifier,
       DirectoryRepository
     >(
-      (ref) => DirectoryRepositoryNotifier(
-        DirectoryRepositoryImpl(
-          ref.watch(isarDirectoryDataSourceProvider),
-          ref.watch(directoryDataSourceProvider),
-          ref.watch(localDirectoryDataSourceProvider),
-          ref.watch(bookmarkServiceProvider),
-          ref.watch(permissionServiceProvider),
-          ref.watch(isarMediaDataSourceProvider),
-          ref.watch(mediaDataSourceProvider),
-        ),
-      ),
+      (ref) {
+        final _ = ref.watch(persistenceMigrationProvider);
+        return DirectoryRepositoryNotifier(
+          DirectoryRepositoryImpl(
+            ref.watch(isarDirectoryDataSourceProvider),
+            ref.watch(directoryDataSourceProvider),
+            ref.watch(localDirectoryDataSourceProvider),
+            ref.watch(bookmarkServiceProvider),
+            ref.watch(permissionServiceProvider),
+            ref.watch(isarMediaDataSourceProvider),
+            ref.watch(mediaDataSourceProvider),
+          ),
+        );
+      },
     );
 
 final mediaRepositoryProvider =
     StateNotifierProvider.autoDispose<MediaRepositoryNotifier, MediaRepository>(
-      (ref) => MediaRepositoryNotifier(
-        FilesystemMediaRepositoryImpl(
-          ref.watch(bookmarkServiceProvider),
-          ref.watch(directoryRepositoryProvider),
-          ref.watch(isarMediaDataSourceProvider),
-          ref.watch(mediaDataSourceProvider),
-          permissionService: ref.watch(permissionServiceProvider),
-        ),
-      ),
+      (ref) {
+        final _ = ref.watch(persistenceMigrationProvider);
+        return MediaRepositoryNotifier(
+          FilesystemMediaRepositoryImpl(
+            ref.watch(bookmarkServiceProvider),
+            ref.watch(directoryRepositoryProvider),
+            ref.watch(isarMediaDataSourceProvider),
+            ref.watch(mediaDataSourceProvider),
+            permissionService: ref.watch(permissionServiceProvider),
+          ),
+        );
+      },
     );
 
 final tagRepositoryProvider =
     StateNotifierProvider.autoDispose<TagRepositoryNotifier, TagRepository>(
-      (ref) => TagRepositoryNotifier(
-        TagRepositoryImpl(
-          ref.watch(isarTagDataSourceProvider),
-          ref.watch(tagDataSourceProvider),
-        ),
-      ),
+      (ref) {
+        final _ = ref.watch(persistenceMigrationProvider);
+        return TagRepositoryNotifier(
+          TagRepositoryImpl(
+            ref.watch(isarTagDataSourceProvider),
+            ref.watch(tagDataSourceProvider),
+          ),
+        );
+      },
     );
 
 final favoritesRepositoryProvider =
@@ -170,12 +200,15 @@ final favoritesRepositoryProvider =
       FavoritesRepositoryNotifier,
       FavoritesRepository
     >(
-      (ref) => FavoritesRepositoryNotifier(
-        FavoritesRepositoryImpl(
-          ref.watch(isarFavoritesDataSourceProvider),
-          ref.watch(favoritesDataSourceProvider),
-        ),
-      ),
+      (ref) {
+        final _ = ref.watch(persistenceMigrationProvider);
+        return FavoritesRepositoryNotifier(
+          FavoritesRepositoryImpl(
+            ref.watch(isarFavoritesDataSourceProvider),
+            ref.watch(favoritesDataSourceProvider),
+          ),
+        );
+      },
     );
 
 final fileOperationsRepositoryProvider = Provider<FileOperationsRepository>((
@@ -299,6 +332,7 @@ class MediaViewerRepositoryNotifier
 
 final loadMediaForViewingUseCaseProvider = Provider<LoadMediaForViewingUseCase>(
   (ref) {
+    final _ = ref.watch(persistenceMigrationProvider);
     return LoadMediaForViewingUseCase(ref.watch(mediaDataSourceProvider));
   },
 );
