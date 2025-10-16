@@ -28,6 +28,9 @@ class _FakeIsarDatabase extends IsarDatabase {
   }
 
   @override
+  bool get isOpen => true;
+
+  @override
   Isar get instance => throw UnimplementedError();
 }
 

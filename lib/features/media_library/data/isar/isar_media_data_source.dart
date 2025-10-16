@@ -40,6 +40,7 @@ class IsarMediaDataSource {
 
   /// Loads all persisted media entries.
   Future<List<MediaModel>> getMedia() async {
+    await _ensureReady();
     final startTime = DateTime.now();
     try {
       final collections = await _mediaStore.getAll();
@@ -94,6 +95,7 @@ class IsarMediaDataSource {
 
   /// Retrieves media belonging to [directoryId].
   Future<List<MediaModel>> getMediaForDirectory(String directoryId) async {
+    await _ensureReady();
     LoggingService.instance.debug(
       'getMediaForDirectory called with directoryId: $directoryId',
     );
@@ -193,12 +195,19 @@ class IsarMediaDataSource {
     String errorMessage,
   ) async {
     try {
+      await _ensureReady();
       await action();
     } catch (error, stackTrace) {
       Error.throwWithStackTrace(
         PersistenceError('$errorMessage: $error'),
         stackTrace,
       );
+    }
+  }
+
+  Future<void> _ensureReady() async {
+    if (!_database.isOpen) {
+      await _database.open();
     }
   }
 

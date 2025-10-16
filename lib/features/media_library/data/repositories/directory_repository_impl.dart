@@ -9,27 +9,41 @@ import '../../domain/repositories/directory_repository.dart';
 import '../data_sources/local_directory_data_source.dart';
 import '../data_sources/local_media_data_source.dart';
 import '../data_sources/shared_preferences_data_source.dart';
+import '../isar/isar_directory_data_source.dart';
+import '../isar/isar_media_data_source.dart';
+import '../persistence/hybrid_persistence_bridge.dart';
 import '../models/directory_model.dart';
 
 /// Implementation of DirectoryRepository using SharedPreferences and local file system.
 class DirectoryRepositoryImpl implements DirectoryRepository {
-  const DirectoryRepositoryImpl(
-    this._directoryDataSource,
+  DirectoryRepositoryImpl(
+    IsarDirectoryDataSource isarDirectoryDataSource,
+    SharedPreferencesDirectoryDataSource legacyDirectoryDataSource,
     this._localDirectoryDataSource,
     this._bookmarkService,
     this._permissionService,
-    this._mediaDataSource,
-  );
+    IsarMediaDataSource isarMediaDataSource,
+    SharedPreferencesMediaDataSource legacyMediaDataSource,
+  )   : _directories = DirectoryPersistenceBridge(
+          isarDirectoryDataSource: isarDirectoryDataSource,
+          legacyDirectoryDataSource: legacyDirectoryDataSource,
+          isarMediaDataSource: isarMediaDataSource,
+          legacyMediaDataSource: legacyMediaDataSource,
+        ),
+        _media = MediaPersistenceBridge(
+          isarMediaDataSource: isarMediaDataSource,
+          legacyMediaDataSource: legacyMediaDataSource,
+        );
 
-  final SharedPreferencesDirectoryDataSource _directoryDataSource;
+  final DirectoryPersistenceBridge _directories;
+  final MediaPersistenceBridge _media;
   final LocalDirectoryDataSource _localDirectoryDataSource;
   final BookmarkService _bookmarkService;
   final PermissionService _permissionService;
-  final SharedPreferencesMediaDataSource _mediaDataSource;
 
   @override
   Future<List<DirectoryEntity>> getDirectories() async {
-    final models = await _directoryDataSource.getDirectories();
+    final models = await _directories.loadDirectories();
     final entities = <DirectoryEntity>[];
 
     for (final model in models) {
@@ -178,17 +192,16 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
 
     final model = _entityToModel(directoryToPersist);
     if (existing != null) {
-      // Update existing directory
-      await _directoryDataSource.updateDirectory(model);
+      await _directories.updateDirectory(model);
     } else {
-      await _directoryDataSource.addDirectory(model);
+      await _directories.addDirectory(model);
     }
   }
 
   @override
   Future<void> removeDirectory(String id) async {
     // Remove the directory itself
-    await _directoryDataSource.removeDirectory(id);
+    await _directories.removeDirectory(id);
   }
 
   @override
@@ -227,7 +240,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     if (directory != null) {
       final updatedDirectory = directory.copyWith(tagIds: tagIds);
       final model = _entityToModel(updatedDirectory);
-      await _directoryDataSource.updateDirectory(model);
+      await _directories.updateDirectory(model);
     }
   }
 
@@ -239,7 +252,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       return BatchUpdateResult.empty;
     }
 
-    final models = await _directoryDataSource.getDirectories();
+    final models = await _directories.loadDirectories();
     final indexById = {
       for (var i = 0; i < models.length; i++) models[i].id: i,
     };
@@ -259,7 +272,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     }
 
     if (successes.isNotEmpty) {
-      await _directoryDataSource.saveDirectories(models);
+      await _directories.saveDirectories(models);
       LoggingService.instance.info(
         'Updated tags for ${successes.length} directories in a single batch.',
       );
@@ -283,7 +296,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     if (directory != null) {
       final updatedDirectory = directory.copyWith(bookmarkData: bookmarkData);
       final model = _entityToModel(updatedDirectory);
-      await _directoryDataSource.updateDirectory(model);
+      await _directories.updateDirectory(model);
     }
   }
 
@@ -300,11 +313,8 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
 
     final updatedModel = model.copyWith(id: expectedId);
 
-    await _mediaDataSource.migrateDirectoryId(model.id, expectedId);
-
-    // Replace the legacy entry with the updated ID to keep storage consistent.
-    await _directoryDataSource.removeDirectory(model.id);
-    await _directoryDataSource.addDirectory(updatedModel);
+    await _media.migrateDirectoryId(model.id, expectedId);
+    await _directories.replaceDirectoryId(model.id, updatedModel);
 
     return updatedModel;
   }
@@ -338,7 +348,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
   @override
   Future<void> clearAllDirectories() async {
     try {
-      await _directoryDataSource.clearDirectories();
+      await _directories.clear();
       LoggingService.instance.info('Successfully cleared all directory data from cache');
     } catch (e) {
       LoggingService.instance.error('Failed to clear directory cache: $e');

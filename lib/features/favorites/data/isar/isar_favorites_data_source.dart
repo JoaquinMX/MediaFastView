@@ -41,6 +41,7 @@ class IsarFavoritesDataSource {
 
   /// Retrieves all persisted favorites sorted by creation time.
   Future<List<FavoriteModel>> getFavorites() async {
+    await _ensureReady();
     try {
       final collections = await _favoriteStore.getAll();
       collections.sort((a, b) => a.addedAt.compareTo(b.addedAt));
@@ -155,6 +156,7 @@ class IsarFavoritesDataSource {
     String itemId, {
     FavoriteItemType? type,
   }) async {
+    await _ensureReady();
     if (type != null) {
       final existing = await _favoriteStore.getByCompositeId(itemId, type);
       return existing != null;
@@ -168,6 +170,7 @@ class IsarFavoritesDataSource {
     FavoriteItemType type, {
     bool newestFirst = true,
   }) async {
+    await _ensureReady();
     try {
       final collections = await _favoriteStore.getByType(type);
       collections.sort(
@@ -191,6 +194,7 @@ class IsarFavoritesDataSource {
     DateTime threshold, {
     FavoriteItemType? type,
   }) async {
+    await _ensureReady();
     try {
       final collections =
           await _favoriteStore.getAddedAfter(threshold, type: type);
@@ -208,6 +212,7 @@ class IsarFavoritesDataSource {
 
   /// Convenience accessor returning IDs for all favorited media items.
   Future<List<String>> getFavoriteMediaIds() async {
+    await _ensureReady();
     final mediaFavorites =
         await getFavoritesByType(FavoriteItemType.media, newestFirst: false);
     return mediaFavorites
@@ -221,6 +226,7 @@ class IsarFavoritesDataSource {
     if (favorites.isEmpty) {
       return const <FavoriteCollection>[];
     }
+    await _ensureReady();
     final mapped = <FavoriteCollection>[];
     for (final favorite in favorites) {
       mapped.add(await _mapModel(favorite));
@@ -229,6 +235,7 @@ class IsarFavoritesDataSource {
   }
 
   Future<FavoriteCollection> _mapModel(FavoriteModel favorite) async {
+    await _ensureReady();
     final collection = favorite.toCollection();
     switch (favorite.itemType) {
       case FavoriteItemType.media:
@@ -248,12 +255,19 @@ class IsarFavoritesDataSource {
     String errorMessage,
   ) async {
     try {
+      await _ensureReady();
       await action();
     } catch (error, stackTrace) {
       Error.throwWithStackTrace(
         PersistenceError('$errorMessage: $error'),
         stackTrace,
       );
+    }
+  }
+
+  Future<void> _ensureReady() async {
+    if (!_database.isOpen) {
+      await _database.open();
     }
   }
 
