@@ -18,7 +18,7 @@ Based on the requirements analysis, the application implements the following cor
 8. **Data Persistence**: SharedPreferences-based storage for all app data
 9. **Database Migration Prep**: Centralised Isar database service ready to host
    persistent collections as part of the SharedPreferences replacement
-   roadmap
+   roadmap, with schemas defined for directories, media, tags, and favorites
 10. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
 
 ## Architectural Principles
