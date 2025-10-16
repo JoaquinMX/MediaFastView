@@ -4,7 +4,7 @@ part 'directory_model.freezed.dart';
 part 'directory_model.g.dart';
 
 /// Data model for directory information.
-/// Used for JSON serialization/deserialization with SharedPreferences.
+/// Used for JSON serialization/deserialization when persisting directories.
 @freezed
 class DirectoryModel with _$DirectoryModel {
   const factory DirectoryModel({

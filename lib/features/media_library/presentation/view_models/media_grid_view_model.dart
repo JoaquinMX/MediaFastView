@@ -10,7 +10,7 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/repositories/media_repository.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../data/repositories/filesystem_media_repository_impl.dart';
-import '../../data/data_sources/local_media_data_source.dart';
+import '../../data/isar/isar_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
 
@@ -121,13 +121,13 @@ class MediaViewModel extends StateNotifier<MediaState> {
     this._ref,
     this._params, {
     required MediaRepository mediaRepository,
-    required SharedPreferencesMediaDataSource sharedPreferencesDataSource,
+    required IsarMediaDataSource mediaDataSource,
   }) : super(const MediaLoading()) {
     _directoryPath = _params.directoryPath;
     _directoryName = _params.directoryName;
     _bookmarkData = _params.bookmarkData;
     _mediaRepository = mediaRepository;
-    _sharedPreferencesDataSource = sharedPreferencesDataSource;
+    _mediaDataSource = mediaDataSource;
     _gridColumnsSubscription = _ref.listen<int>(
       gridColumnsProvider,
       (_, next) => _applyColumnUpdate(next),
@@ -137,7 +137,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   final Ref _ref;
   late final MediaRepository _mediaRepository;
-  late final SharedPreferencesMediaDataSource _sharedPreferencesDataSource;
+  late final IsarMediaDataSource _mediaDataSource;
   final MediaViewModelParams _params;
   late final String _directoryPath;
   late final String _directoryName;
@@ -315,7 +315,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
       // Get existing persisted media to merge tagIds
       final mergeStartTime = DateTime.now();
-      final existingMedia = await _sharedPreferencesDataSource.getMedia();
+      final existingMedia = await _mediaDataSource.getMedia();
       final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
       // Convert entities back to models for persistence, merging tagIds from persisted data
@@ -339,8 +339,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
       // Replace persisted entries for this directory with the freshly scanned data
       final persistStartTime = DateTime.now();
-      await _sharedPreferencesDataSource.removeMediaForDirectory(directoryId);
-      await _sharedPreferencesDataSource.upsertMedia(mediaModels);
+      await _mediaDataSource.removeMediaForDirectory(directoryId);
+      await _mediaDataSource.upsertMedia(mediaModels);
       final persistTime = DateTime.now().difference(persistStartTime);
 
       final totalTime = DateTime.now().difference(loadStartTime);
@@ -435,7 +435,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       );
 
       // Get existing persisted media to merge tagIds
-      final existingMedia = await _sharedPreferencesDataSource.getMedia();
+      final existingMedia = await _mediaDataSource.getMedia();
       final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
       // Convert entities back to models for persistence, merging tagIds from persisted data
@@ -458,7 +458,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
       // Merge filtered results to ensure tag updates are persisted without
       // discarding media from other directories or filters
-      await _sharedPreferencesDataSource.upsertMedia(mediaModels);
+      await _mediaDataSource.upsertMedia(mediaModels);
 
       _cachedMedia = _sortMedia(media, _currentSortOption);
 
@@ -780,10 +780,10 @@ final mediaViewModelProvider = StateNotifierProvider.autoDispose
         mediaRepository: FilesystemMediaRepositoryImpl(
           ref.watch(bookmarkServiceProvider),
           ref.watch(directoryRepositoryProvider),
-          ref.watch(mediaDataSourceProvider),
+          ref.watch(isarMediaDataSourceProvider),
           permissionService: ref.watch(permissionServiceProvider),
         ),
-        sharedPreferencesDataSource: ref.watch(mediaDataSourceProvider),
+        mediaDataSource: ref.watch(isarMediaDataSourceProvider),
       ),
     );
 

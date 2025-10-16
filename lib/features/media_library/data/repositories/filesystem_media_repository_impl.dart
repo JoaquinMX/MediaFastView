@@ -7,7 +7,7 @@ import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
 import '../../domain/repositories/media_repository.dart';
 import '../data_sources/filesystem_media_data_source.dart';
-import '../data_sources/local_media_data_source.dart';
+import '../isar/isar_media_data_source.dart';
 import '../models/media_model.dart';
 
 /// Implementation of MediaRepository using filesystem scanning.
@@ -15,14 +15,14 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   FilesystemMediaRepositoryImpl(
     BookmarkService bookmarkService,
     this._directoryRepository,
-    this._localMediaDataSource, {
+    this._mediaPersistence, {
     PermissionService? permissionService,
     FilesystemMediaDataSource? filesystemDataSource,
   })  : _filesystemDataSource =
             filesystemDataSource ?? FilesystemMediaDataSource(bookmarkService, permissionService),
         _permissionService = permissionService ?? PermissionService();
   final DirectoryRepository _directoryRepository;
-  final SharedPreferencesMediaDataSource _localMediaDataSource;
+  final IsarMediaDataSource _mediaPersistence;
   final FilesystemMediaDataSource _filesystemDataSource;
   final PermissionService _permissionService;
 
@@ -100,7 +100,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<MediaEntity?> getMediaById(String id) async {
-    final allMedia = await _localMediaDataSource.getMedia();
+    final allMedia = await _mediaPersistence.getMedia();
     final localMedia = allMedia.where((media) => media.id == id).firstOrNull;
 
     if (localMedia == null) {
@@ -168,7 +168,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     }
 
     // Get media from local storage that have the specified tags
-    final allLocalMedia = await _localMediaDataSource.getMedia();
+    final allLocalMedia = await _mediaPersistence.getMedia();
     final filteredLocalMedia = allLocalMedia
         .where((media) => media.tagIds.any((tagId) => tagIds.contains(tagId)))
         .toList();
@@ -211,7 +211,6 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       directoryId,
       tagIds,
       bookmarkData: bookmarkData,
-      sharedPreferencesDataSource: _localMediaDataSource,
     );
     final mergedModels = await _mergeTagsWithLocalStorage(models);
     return mergedModels.map(_modelToEntity).toList();
@@ -229,7 +228,6 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       directoryId,
       tagIds,
       bookmarkData: bookmarkData,
-      sharedPreferencesDataSource: _localMediaDataSource,
     );
     final mergedModels = await _mergeTagsWithLocalStorage(models);
     return mergedModels.map(_modelToEntity).toList();
@@ -237,7 +235,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<void> updateMediaTags(String mediaId, List<String> tagIds) async {
-    await _localMediaDataSource.updateMediaTags(mediaId, tagIds);
+    await _mediaPersistence.updateMediaTags(mediaId, tagIds);
   }
 
   @override
@@ -248,7 +246,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       return BatchUpdateResult.empty;
     }
 
-    final models = await _localMediaDataSource.getMedia();
+    final models = await _mediaPersistence.getMedia();
     final indexById = {
       for (var i = 0; i < models.length; i++) models[i].id: i,
     };
@@ -268,7 +266,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     }
 
     if (successes.isNotEmpty) {
-      await _localMediaDataSource.saveMedia(models);
+      await _mediaPersistence.saveMedia(models);
     }
 
     return BatchUpdateResult(
@@ -279,7 +277,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   /// Merges tags from local storage with filesystem-scanned media.
   Future<List<MediaModel>> _mergeTagsWithLocalStorage(List<MediaModel> scannedMedia) async {
-    final existingMedia = await _localMediaDataSource.getMedia();
+    final existingMedia = await _mediaPersistence.getMedia();
     final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
     // Convert entities back to models for persistence, merging tagIds from persisted data
@@ -316,7 +314,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<void> removeMediaForDirectory(String directoryId) async {
-    await _localMediaDataSource.removeMediaForDirectory(directoryId);
+    await _mediaPersistence.removeMediaForDirectory(directoryId);
   }
 
   Future<MediaEntity?> _scanDirectoriesForMedia(String id) async {

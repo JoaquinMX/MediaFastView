@@ -6,7 +6,7 @@ part 'favorite_model.freezed.dart';
 part 'favorite_model.g.dart';
 
 /// Data model for favorite information.
-/// Used for JSON serialization/deserialization with SharedPreferences.
+/// Used for JSON serialization/deserialization when persisting favorites.
 @freezed
 class FavoriteModel with _$FavoriteModel {
   const factory FavoriteModel({

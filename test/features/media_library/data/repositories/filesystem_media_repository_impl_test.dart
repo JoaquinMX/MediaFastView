@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
+import 'package:test/test.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/data/repositories/filesystem_media_repository_impl.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
@@ -15,21 +15,29 @@ void main() {
   late FilesystemMediaRepositoryImpl repository;
   late MockBookmarkService bookmarkService;
   late _MockDirectoryRepository directoryRepository;
-  late MockSharedPreferencesMediaDataSource localMediaDataSource;
   late MockFilesystemMediaDataSource filesystemDataSource;
   late MockPermissionService permissionService;
+  late MockIsarMediaDataSource isarMediaDataSource;
 
   setUp(() {
     bookmarkService = MockBookmarkService();
     directoryRepository = _MockDirectoryRepository();
-    localMediaDataSource = MockSharedPreferencesMediaDataSource();
     filesystemDataSource = MockFilesystemMediaDataSource();
     permissionService = MockPermissionService();
+    isarMediaDataSource = MockIsarMediaDataSource();
+
+    when(isarMediaDataSource.getMedia()).thenAnswer((_) async => <MediaModel>[]);
+    when(isarMediaDataSource.getMediaForDirectory(any)).thenAnswer((_) async => <MediaModel>[]);
+    when(isarMediaDataSource.saveMedia(any)).thenAnswer((_) async {});
+    when(isarMediaDataSource.upsertMedia(any)).thenAnswer((_) async {});
+    when(isarMediaDataSource.updateMediaTags(any, any)).thenAnswer((_) async {});
+    when(isarMediaDataSource.removeMediaForDirectory(any)).thenAnswer((_) async {});
+    when(isarMediaDataSource.migrateDirectoryId(any, any)).thenAnswer((_) async {});
 
     repository = FilesystemMediaRepositoryImpl(
       bookmarkService,
       directoryRepository,
-      localMediaDataSource,
+      isarMediaDataSource,
       permissionService: permissionService,
       filesystemDataSource: filesystemDataSource,
     );
@@ -62,7 +70,7 @@ void main() {
         lastModified: DateTime(2024),
       );
 
-      when(localMediaDataSource.getMedia()).thenAnswer((_) async => [persistedModel]);
+      when(isarMediaDataSource.getMedia()).thenAnswer((_) async => [persistedModel]);
       when(directoryRepository.getDirectoryById(directoryId)).thenAnswer((_) async => directory);
       when(filesystemDataSource.getMediaById(
         any,
@@ -100,7 +108,7 @@ void main() {
         lastModified: DateTime(2024),
       );
 
-      when(localMediaDataSource.getMedia()).thenAnswer((_) async => [persistedModel]);
+      when(isarMediaDataSource.getMedia()).thenAnswer((_) async => [persistedModel]);
       when(directoryRepository.getDirectoryById(directoryId)).thenAnswer((_) async => directory);
       when(filesystemDataSource.getMediaById(
         any,
@@ -138,7 +146,7 @@ void main() {
         directoryId: directoryId,
       );
 
-      when(localMediaDataSource.getMedia()).thenAnswer((_) async => []);
+      when(isarMediaDataSource.getMedia()).thenAnswer((_) async => []);
       when(directoryRepository.getDirectories()).thenAnswer((_) async => [directory]);
       when(filesystemDataSource.getMediaById(
         any,

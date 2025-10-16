@@ -15,8 +15,12 @@ Based on the requirements analysis, the application implements the following cor
 5. **Full-Screen Viewing**: Immersive viewing with zoom, pan, and video controls
 6. **UI Interactions**: Responsive grids, animations, drag-and-drop, gestures, and keyboard shortcuts
 7. **File Operations**: Safe file deletion and permission handling
-8. **Data Persistence**: SharedPreferences-based storage for all app data
-9. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
+8. **Data Persistence**: Isar-backed storage for directories, media, tags, favorites,
+   and cached metadata, enabling richer queries without SharedPreferences dependencies
+9. **Database Architecture**: A centralized Isar database service with schemas and
+   data sources for each persisted model, wired directly into repositories and Riverpod
+   providers so the Isar collections are the single source of truth for persistence
+10. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
 
 ## Architectural Principles
 
@@ -97,8 +101,7 @@ lib/
 │   │       │   └── tag_model.dart
 │   │       ├── data_sources/
 │   │       │   ├── local_directory_data_source.dart
-│   │       │   ├── local_media_data_source.dart
-│   │       │   └── shared_preferences_data_source.dart
+│   │       │   └── filesystem_media_data_source.dart
 │   │       └── repositories/
 │   │           ├── directory_repository_impl.dart
 │   │           ├── media_repository_impl.dart
@@ -123,7 +126,7 @@ lib/
 │   │       ├── models/
 │   │       │   └── tag_model.dart
 │   │       ├── data_sources/
-│   │       │   └── shared_preferences_data_source.dart
+│   │       │   └── isar_tag_data_source.dart
 │   │       └── repositories/
 │   │           └── tag_repository_impl.dart
 │   ├── favorites/
@@ -150,7 +153,7 @@ lib/
 │   │       ├── models/
 │   │       │   └── favorite_model.dart
 │   │       ├── data_sources/
-│   │       │   └── shared_preferences_data_source.dart
+│   │       │   └── isar_favorites_data_source.dart
 │   │       └── repositories/
 │   │           └── favorites_repository_impl.dart
 │   └── full_screen/
@@ -466,11 +469,11 @@ final directoryGridViewModelProvider = StateNotifierProvider<DirectoryGridViewMo
 // Repository providers
 final directoryRepositoryProvider = Provider<DirectoryRepository>((ref) {
   return DirectoryRepositoryImpl(
-    ref.watch(sharedPreferencesDataSourceProvider),
+    ref.watch(isarDirectoryDataSourceProvider),
     ref.watch(localDirectoryDataSourceProvider),
     ref.watch(bookmarkServiceProvider),
     ref.watch(permissionServiceProvider),
-    ref.watch(mediaDataSourceProvider),
+    ref.watch(isarMediaDataSourceProvider),
   );
 });
 
@@ -489,7 +492,7 @@ final directoryGridViewModelProvider = StateNotifierProvider<DirectoryGridViewMo
 
 // Shared providers
 final appSettingsProvider = StateNotifierProvider<AppSettingsNotifier, AppSettings>((ref) {
-  return AppSettingsNotifier(ref.watch(sharedPreferencesDataSourceProvider));
+  return AppSettingsNotifier(ref.watch(sharedPreferencesProvider));
 });
 
 final themeProvider = Provider<ThemeData>((ref) {

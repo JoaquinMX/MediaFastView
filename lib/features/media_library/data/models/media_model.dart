@@ -6,7 +6,7 @@ part 'media_model.freezed.dart';
 part 'media_model.g.dart';
 
 /// Data model for media item information.
-/// Used for JSON serialization/deserialization with SharedPreferences.
+/// Used for JSON serialization/deserialization when persisting media records.
 @freezed
 class MediaModel with _$MediaModel {
   const factory MediaModel({

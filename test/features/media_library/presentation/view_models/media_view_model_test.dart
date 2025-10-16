@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_fast_view/features/media_library/data/data_sources/local_media_data_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../../lib/features/favorites/domain/entities/favorite_entity.dart';
@@ -132,9 +131,8 @@ ProviderContainer _createMediaTestContainer({
   required SharedPreferences sharedPreferences,
   required InMemoryMediaRepository mediaRepository,
   required InMemoryFavoritesRepository favoritesRepository,
+  required MockIsarMediaDataSource mediaDataSource,
 }) {
-  final mediaDataSource = SharedPreferencesMediaDataSource(sharedPreferences);
-
   return ProviderContainer(
     overrides: [
       sharedPreferencesProvider.overrideWithValue(sharedPreferences),
@@ -147,7 +145,7 @@ ProviderContainer _createMediaTestContainer({
             ref,
             params,
             mediaRepository: mediaRepository,
-            sharedPreferencesDataSource: mediaDataSource,
+            mediaDataSource: mediaDataSource,
           ),
         );
       }),
@@ -161,6 +159,7 @@ void main() {
   late SharedPreferences sharedPreferences;
   late InMemoryMediaRepository mediaRepository;
   late InMemoryFavoritesRepository favoritesRepository;
+  late MockIsarMediaDataSource mediaDataSource;
   const params = MediaViewModelParams(
     directoryPath: '/dir1',
     directoryName: 'Directory 1',
@@ -202,6 +201,34 @@ void main() {
         directoryId: '/dir1',
       ),
     ]);
+
+    mediaDataSource = MockIsarMediaDataSource();
+    final persistedMedia = <MediaModel>[];
+    when(mediaDataSource.getMedia()).thenAnswer((_) async => List<MediaModel>.unmodifiable(persistedMedia));
+    when(mediaDataSource.upsertMedia(any)).thenAnswer((invocation) async {
+      final models = List<MediaModel>.from(invocation.positionalArguments[0] as List<MediaModel>);
+      for (final model in models) {
+        persistedMedia.removeWhere((existing) => existing.id == model.id);
+        persistedMedia.add(model);
+      }
+    });
+    when(mediaDataSource.addMedia(any)).thenAnswer((invocation) async {
+      final models = List<MediaModel>.from(invocation.positionalArguments[0] as List<MediaModel>);
+      for (final model in models) {
+        persistedMedia.removeWhere((existing) => existing.id == model.id);
+        persistedMedia.add(model);
+      }
+    });
+    when(mediaDataSource.removeMediaForDirectory(any)).thenAnswer((invocation) async {
+      final directoryId = invocation.positionalArguments[0] as String;
+      persistedMedia.removeWhere((model) => model.directoryId == directoryId);
+    });
+    when(mediaDataSource.saveMedia(any)).thenAnswer((invocation) async {
+      final models = List<MediaModel>.from(invocation.positionalArguments[0] as List<MediaModel>);
+      persistedMedia
+        ..clear()
+        ..addAll(models);
+    });
   });
 
   test('toggleMediaSelection toggles selection state', () async {
@@ -209,6 +236,7 @@ void main() {
       sharedPreferences: sharedPreferences,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
+      mediaDataSource: mediaDataSource,
     );
     addTearDown(container.dispose);
 
@@ -235,6 +263,7 @@ void main() {
       sharedPreferences: sharedPreferences,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
+      mediaDataSource: mediaDataSource,
     );
     addTearDown(container.dispose);
 
@@ -257,6 +286,7 @@ void main() {
       sharedPreferences: sharedPreferences,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
+      mediaDataSource: mediaDataSource,
     );
     addTearDown(container.dispose);
 

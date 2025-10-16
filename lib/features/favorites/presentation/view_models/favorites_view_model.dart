@@ -5,7 +5,7 @@ import '../../domain/entities/favorite_item_type.dart';
 import '../../domain/repositories/favorites_repository.dart';
 import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
-import '../../../media_library/data/data_sources/local_media_data_source.dart';
+import '../../../media_library/data/isar/isar_media_data_source.dart';
 import '../../../media_library/data/models/media_model.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../core/services/logging_service.dart';
@@ -124,7 +124,7 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
     : super(const FavoritesInitial());
 
   final FavoritesRepository _favoritesRepository;
-  final SharedPreferencesMediaDataSource _mediaDataSource;
+  final IsarMediaDataSource _mediaDataSource;
   bool _hasLoadedFavorites = false;
 
   /// Tracks whether an initial load has completed.
@@ -407,7 +407,7 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       'Loading media for ${favoriteIds.length} favorite IDs: $favoriteIds',
     );
 
-    // Get all stored media from SharedPreferences
+    // Get all stored media from the persistent cache
     final allStoredMedia = await _mediaDataSource.getMedia();
     LoggingService.instance.info(
       'Found ${allStoredMedia.length} stored media items',

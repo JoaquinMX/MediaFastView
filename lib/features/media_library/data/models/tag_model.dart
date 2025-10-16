@@ -4,7 +4,7 @@ part 'tag_model.freezed.dart';
 part 'tag_model.g.dart';
 
 /// Data model for tag information.
-/// Used for JSON serialization/deserialization with SharedPreferences.
+/// Used for JSON serialization/deserialization when persisting tags.
 @freezed
 class TagModel with _$TagModel {
   const factory TagModel({

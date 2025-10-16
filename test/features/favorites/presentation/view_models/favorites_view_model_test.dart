@@ -11,7 +11,7 @@ import '../../../../mocks.mocks.dart';
 
 void main() {
   late MockFavoritesRepository favoritesRepository;
-  late MockSharedPreferencesMediaDataSource mediaDataSource;
+  late MockIsarMediaDataSource mediaDataSource;
   late FavoritesViewModel viewModel;
 
   const mediaId = 'media-1';
@@ -55,7 +55,7 @@ void main() {
 
   setUp(() {
     favoritesRepository = MockFavoritesRepository();
-    mediaDataSource = MockSharedPreferencesMediaDataSource();
+    mediaDataSource = MockIsarMediaDataSource();
     viewModel = FavoritesViewModel(favoritesRepository, mediaDataSource);
   });
 

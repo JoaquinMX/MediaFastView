@@ -10,12 +10,12 @@ import '../mocks.mocks.dart';
 
 void main() {
   late MockMediaRepository mockMediaRepository;
-  late MockSharedPreferencesMediaDataSource mockSharedPreferencesDataSource;
+  late MockIsarMediaDataSource mockMediaDataSource;
   late ProviderContainer container;
 
   setUp(() {
     mockMediaRepository = MockMediaRepository();
-    mockSharedPreferencesDataSource = MockSharedPreferencesMediaDataSource();
+    mockMediaDataSource = MockIsarMediaDataSource();
     container = ProviderContainer();
   });
 
@@ -62,12 +62,12 @@ void main() {
 
       // Mock saveMedia to verify it's called
       when(
-        mockSharedPreferencesDataSource.saveMedia(any),
+        mockMediaDataSource.saveMedia(any),
       ).thenAnswer((_) async {});
 
       // Mock getMedia
       when(
-        mockSharedPreferencesDataSource.getMedia(),
+        mockMediaDataSource.getMedia(),
       ).thenAnswer((_) async => []);
 
       viewModel = MediaViewModel(
@@ -76,7 +76,7 @@ void main() {
           directoryName: testDirectoryName,
         ),
         mediaRepository: mockMediaRepository,
-        sharedPreferencesDataSource: mockSharedPreferencesDataSource,
+        mediaDataSource: mockMediaDataSource,
       );
     });
 
@@ -103,7 +103,7 @@ void main() {
 
     test('loadMedia with empty results transitions to MediaEmpty', () async {
       final emptyMock = MockMediaRepository();
-      final emptyDataSourceMock = MockSharedPreferencesMediaDataSource();
+      final emptyDataSourceMock = MockIsarMediaDataSource();
       when(
         emptyMock.getMediaForDirectoryPath(any, bookmarkData: anyNamed('bookmarkData')),
       ).thenAnswer((_) async => []);
@@ -117,7 +117,7 @@ void main() {
           directoryName: testDirectoryName,
         ),
         mediaRepository: emptyMock,
-        sharedPreferencesDataSource: emptyDataSourceMock,
+        mediaDataSource: emptyDataSourceMock,
       );
       await emptyViewModel.loadMedia();
 
@@ -126,7 +126,7 @@ void main() {
 
     test('loadMedia with error transitions to MediaError', () async {
       final errorMock = MockMediaRepository();
-      final errorDataSourceMock = MockSharedPreferencesMediaDataSource();
+      final errorDataSourceMock = MockIsarMediaDataSource();
       when(
         errorMock.getMediaForDirectoryPath(any, bookmarkData: anyNamed('bookmarkData')),
       ).thenThrow(Exception('Scan failed'));
@@ -137,7 +137,7 @@ void main() {
           directoryName: testDirectoryName,
         ),
         mediaRepository: errorMock,
-        sharedPreferencesDataSource: errorDataSourceMock,
+        mediaDataSource: errorDataSourceMock,
       );
       await errorViewModel.loadMedia();
 

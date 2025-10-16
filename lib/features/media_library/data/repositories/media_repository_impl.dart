@@ -3,18 +3,18 @@ import '../../../../core/utils/batch_update_result.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/media_repository.dart';
-import '../data_sources/local_media_data_source.dart';
+import '../isar/isar_media_data_source.dart';
 import '../models/media_model.dart';
 
-/// Implementation of MediaRepository using SharedPreferences.
+/// Implementation of [MediaRepository] backed by Isar.
 class MediaRepositoryImpl implements MediaRepository {
-  const MediaRepositoryImpl(this._mediaDataSource);
+  MediaRepositoryImpl(this._mediaPersistence);
 
-  final SharedPreferencesMediaDataSource _mediaDataSource;
+  final IsarMediaDataSource _mediaPersistence;
 
   @override
   Future<List<MediaEntity>> getMediaForDirectory(String directoryId) async {
-    final models = await _mediaDataSource.getMediaForDirectory(directoryId);
+    final models = await _mediaPersistence.getMediaForDirectory(directoryId);
     return models.map(_modelToEntity).toList();
   }
 
@@ -24,13 +24,13 @@ class MediaRepositoryImpl implements MediaRepository {
     String? bookmarkData,
   }) async {
     final directoryId = generateDirectoryId(directoryPath);
-    final models = await _mediaDataSource.getMediaForDirectory(directoryId);
+    final models = await _mediaPersistence.getMediaForDirectory(directoryId);
     return models.map(_modelToEntity).toList();
   }
 
   @override
   Future<MediaEntity?> getMediaById(String id) async {
-    final allMedia = await _mediaDataSource.getMedia();
+    final allMedia = await _mediaPersistence.getMedia();
     final model = allMedia.where((media) => media.id == id).firstOrNull;
     if (model != null) {
       LoggingService.instance.debug('Found media for ID $id: ${model.name}');
@@ -43,11 +43,11 @@ class MediaRepositoryImpl implements MediaRepository {
   @override
   Future<List<MediaEntity>> filterMediaByTags(List<String> tagIds) async {
     if (tagIds.isEmpty) {
-      final allMedia = await _mediaDataSource.getMedia();
+      final allMedia = await _mediaPersistence.getMedia();
       return allMedia.map(_modelToEntity).toList();
     }
 
-    final allMedia = await _mediaDataSource.getMedia();
+    final allMedia = await _mediaPersistence.getMedia();
     final filtered = allMedia
         .where((media) => media.tagIds.any((tagId) => tagIds.contains(tagId)))
         .toList();
@@ -61,7 +61,7 @@ class MediaRepositoryImpl implements MediaRepository {
     String? bookmarkData,
   }) async {
     final directoryId = generateDirectoryId(directoryPath);
-    final allMedia = await _mediaDataSource.getMediaForDirectory(directoryId);
+    final allMedia = await _mediaPersistence.getMediaForDirectory(directoryId);
 
     if (tagIds.isEmpty) {
       return allMedia.map(_modelToEntity).toList();
@@ -75,7 +75,7 @@ class MediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<void> updateMediaTags(String mediaId, List<String> tagIds) async {
-    await _mediaDataSource.updateMediaTags(mediaId, tagIds);
+    await _mediaPersistence.updateMediaTags(mediaId, tagIds);
   }
 
   @override
@@ -86,7 +86,7 @@ class MediaRepositoryImpl implements MediaRepository {
       return BatchUpdateResult.empty;
     }
 
-    final models = await _mediaDataSource.getMedia();
+    final models = await _mediaPersistence.getMedia();
     final indexById = {
       for (var i = 0; i < models.length; i++) models[i].id: i,
     };
@@ -106,7 +106,7 @@ class MediaRepositoryImpl implements MediaRepository {
     }
 
     if (successes.isNotEmpty) {
-      await _mediaDataSource.saveMedia(models);
+      await _mediaPersistence.saveMedia(models);
       LoggingService.instance.info(
         'Updated tags for ${successes.length} media items in a single batch.',
       );
@@ -126,7 +126,7 @@ class MediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<void> removeMediaForDirectory(String directoryId) async {
-    await _mediaDataSource.removeMediaForDirectory(directoryId);
+    await _mediaPersistence.removeMediaForDirectory(directoryId);
   }
 
   /// Converts MediaModel to MediaEntity.
