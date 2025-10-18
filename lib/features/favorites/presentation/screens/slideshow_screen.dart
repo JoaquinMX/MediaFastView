@@ -99,7 +99,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
         media: media,
         isPlaying: viewModel.isPlaying,
         isMuted: viewModel.isMuted,
-        isLooping: viewModel.isLooping,
+        isVideoLooping: viewModel.isVideoLooping,
         onProgress: viewModel.updateProgress,
         onCompleted: viewModel.nextItem,
       );
@@ -161,10 +161,13 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
                 onNext: viewModel.nextItem,
                 onPrevious: viewModel.previousItem,
                 onToggleLoop: viewModel.toggleLoop,
+                onToggleVideoLoop: viewModel.toggleVideoLoop,
                 onToggleMute: viewModel.toggleMute,
                 onToggleShuffle: viewModel.toggleShuffle,
                 onDurationSelected: viewModel.setImageDisplayDuration,
                 showProgressBar:
+                    viewModel.currentMedia?.type == MediaType.video,
+                showVideoLoopButton:
                     viewModel.currentMedia?.type == MediaType.video,
               ),
 
