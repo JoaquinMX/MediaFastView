@@ -2,17 +2,18 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
+import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/core/services/permission_service.dart';
 import 'package:media_fast_view/core/error/app_error.dart';
 
-import '../../mocks.mocks.dart';
+class _MockBookmarkService extends Mock implements BookmarkService {}
 
 void main() {
   late PermissionService permissionService;
-  late MockBookmarkService mockBookmarkService;
+  late _MockBookmarkService mockBookmarkService;
 
   setUp(() {
-    mockBookmarkService = MockBookmarkService();
+    mockBookmarkService = _MockBookmarkService();
     permissionService = PermissionService(mockBookmarkService);
   });
 

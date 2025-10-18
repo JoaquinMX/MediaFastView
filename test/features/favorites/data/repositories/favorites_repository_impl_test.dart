@@ -6,36 +6,27 @@ import 'package:media_fast_view/features/favorites/domain/entities/favorite_item
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
-import '../../../../mocks.mocks.dart';
-
 class _MockIsarFavoritesDataSource extends Mock implements IsarFavoritesDataSource {}
 
 void main() {
   group('FavoritesRepositoryImpl', () {
     late FavoritesRepositoryImpl repository;
     late _MockIsarFavoritesDataSource isarFavoritesDataSource;
-    late MockSharedPreferencesFavoritesDataSource legacyFavoritesDataSource;
 
     setUp(() {
       isarFavoritesDataSource = _MockIsarFavoritesDataSource();
-      legacyFavoritesDataSource = MockSharedPreferencesFavoritesDataSource();
-
-      repository = FavoritesRepositoryImpl(
-        isarFavoritesDataSource,
-        legacyFavoritesDataSource,
-      );
+      repository = FavoritesRepositoryImpl(isarFavoritesDataSource);
     });
 
-    test('getFavorites falls back to legacy storage and seeds Isar', () async {
+    test('getFavorites maps models to entities', () async {
       final favoriteModel = FavoriteModel(
         itemId: 'media-1',
         itemType: FavoriteItemType.media,
         addedAt: DateTime(2024, 1, 1),
       );
 
-      when(isarFavoritesDataSource.getFavorites()).thenAnswer((_) async => <FavoriteModel>[]);
-      when(legacyFavoritesDataSource.getFavorites()).thenAnswer((_) async => <FavoriteModel>[favoriteModel]);
-      when(isarFavoritesDataSource.saveFavorites(any)).thenAnswer((_) async {});
+      when(isarFavoritesDataSource.getFavorites())
+          .thenAnswer((_) async => <FavoriteModel>[favoriteModel]);
 
       final favorites = await repository.getFavorites();
 
@@ -46,10 +37,10 @@ void main() {
           addedAt: favoriteModel.addedAt,
         ),
       ]));
-      verify(isarFavoritesDataSource.saveFavorites(<FavoriteModel>[favoriteModel])).called(1);
+      verify(isarFavoritesDataSource.getFavorites()).called(1);
     });
 
-    test('addFavorites writes to both data sources', () async {
+    test('addFavorites writes to isar data source', () async {
       final favorite = FavoriteEntity(
         itemId: 'media-2',
         itemType: FavoriteItemType.media,
@@ -58,7 +49,6 @@ void main() {
       );
 
       when(isarFavoritesDataSource.addFavorites(any)).thenAnswer((_) async {});
-      when(legacyFavoritesDataSource.addFavorites(any)).thenAnswer((_) async {});
 
       await repository.addFavorites(<FavoriteEntity>[favorite]);
 
@@ -69,7 +59,6 @@ void main() {
         metadata: favorite.metadata,
       );
       verify(isarFavoritesDataSource.addFavorites(<FavoriteModel>[expectedModel])).called(1);
-      verify(legacyFavoritesDataSource.addFavorites(<FavoriteModel>[expectedModel])).called(1);
     });
   });
 }

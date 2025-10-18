@@ -10,7 +10,7 @@ import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/logging_service.dart';
 import '../models/media_model.dart';
 import '../../domain/entities/media_entity.dart';
-import 'local_media_data_source.dart';
+import '../isar/isar_media_data_source.dart';
 
 /// Result of permission validation for directory access
 class PermissionValidationResult {
@@ -497,15 +497,15 @@ class FilesystemMediaDataSource {
     String directoryId,
     List<String> tagIds, {
     String? bookmarkData,
-    SharedPreferencesMediaDataSource? sharedPreferencesDataSource,
+    IsarMediaDataSource? mediaPersistence,
   }) async {
     // Note: scanMediaForDirectory already handles bookmark access lifecycle
     final allMedia = await scanMediaForDirectory(directoryPath, directoryId, bookmarkData: bookmarkData);
 
     // If we have a shared preferences data source, merge tagIds from persisted data
     List<MediaModel> mediaWithTags = allMedia;
-    if (sharedPreferencesDataSource != null) {
-      final existingMedia = await sharedPreferencesDataSource.getMedia();
+    if (mediaPersistence != null) {
+      final existingMedia = await mediaPersistence.getMedia();
       final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
       // Convert entities back to models for persistence, merging tagIds from persisted data

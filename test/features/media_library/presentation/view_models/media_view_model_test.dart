@@ -1,12 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_fast_view/features/media_library/data/data_sources/local_media_data_source.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
+import 'package:mockito/mockito.dart';
 
 import '../../../../../lib/features/favorites/domain/entities/favorite_entity.dart';
 import '../../../../../lib/features/favorites/domain/entities/favorite_item_type.dart';
 import '../../../../../lib/features/favorites/domain/repositories/favorites_repository.dart';
-import '../../../../../lib/features/media_library/data/data_sources/shared_preferences_data_source.dart';
 import '../../../../../lib/features/media_library/domain/entities/media_entity.dart';
 import '../../../../../lib/features/media_library/domain/repositories/media_repository.dart';
 import '../../../../../lib/features/media_library/presentation/view_models/media_grid_view_model.dart';
@@ -128,16 +127,15 @@ class InMemoryFavoritesRepository implements FavoritesRepository {
   }
 }
 
+class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
+
 ProviderContainer _createMediaTestContainer({
-  required SharedPreferences sharedPreferences,
+  required IsarMediaDataSource mediaDataSource,
   required InMemoryMediaRepository mediaRepository,
   required InMemoryFavoritesRepository favoritesRepository,
 }) {
-  final mediaDataSource = SharedPreferencesMediaDataSource(sharedPreferences);
-
   return ProviderContainer(
     overrides: [
-      sharedPreferencesProvider.overrideWithValue(sharedPreferences),
       favoritesRepositoryProvider.overrideWith((ref) {
         return FavoritesRepositoryNotifier(favoritesRepository);
       }),
@@ -147,7 +145,7 @@ ProviderContainer _createMediaTestContainer({
             ref,
             params,
             mediaRepository: mediaRepository,
-            sharedPreferencesDataSource: mediaDataSource,
+            mediaDataSource: mediaDataSource,
           ),
         );
       }),
@@ -158,7 +156,7 @@ ProviderContainer _createMediaTestContainer({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late SharedPreferences sharedPreferences;
+  late _MockIsarMediaDataSource mediaCache;
   late InMemoryMediaRepository mediaRepository;
   late InMemoryFavoritesRepository favoritesRepository;
   const params = MediaViewModelParams(
@@ -167,8 +165,10 @@ void main() {
   );
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    sharedPreferences = await SharedPreferences.getInstance();
+    mediaCache = _MockIsarMediaDataSource();
+    when(mediaCache.getMedia()).thenAnswer((_) async => <MediaModel>[]);
+    when(mediaCache.removeMediaForDirectory(any)).thenAnswer((_) async {});
+    when(mediaCache.upsertMedia(any)).thenAnswer((_) async {});
     favoritesRepository = InMemoryFavoritesRepository();
     mediaRepository = InMemoryMediaRepository([
       MediaEntity(
@@ -206,7 +206,7 @@ void main() {
 
   test('toggleMediaSelection toggles selection state', () async {
     final container = _createMediaTestContainer(
-      sharedPreferences: sharedPreferences,
+      mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
     );
@@ -232,7 +232,7 @@ void main() {
 
   test('selectMediaRange appends when requested', () async {
     final container = _createMediaTestContainer(
-      sharedPreferences: sharedPreferences,
+      mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
     );
@@ -254,7 +254,7 @@ void main() {
 
   test('clearMediaSelection resets selection providers', () async {
     final container = _createMediaTestContainer(
-      sharedPreferences: sharedPreferences,
+      mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
     );
@@ -276,7 +276,7 @@ void main() {
 
   test('commonTagIdsForSelection returns shared tags', () async {
     final container = _createMediaTestContainer(
-      sharedPreferences: sharedPreferences,
+      mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
     );
@@ -291,7 +291,7 @@ void main() {
 
   test('applyTagsToSelection replaces tags across selected media', () async {
     final container = _createMediaTestContainer(
-      sharedPreferences: sharedPreferences,
+      mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
     );

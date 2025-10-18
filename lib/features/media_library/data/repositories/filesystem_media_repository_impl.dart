@@ -7,9 +7,7 @@ import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
 import '../../domain/repositories/media_repository.dart';
 import '../data_sources/filesystem_media_data_source.dart';
-import '../data_sources/local_media_data_source.dart';
 import '../isar/isar_media_data_source.dart';
-import '../persistence/hybrid_persistence_bridge.dart';
 import '../models/media_model.dart';
 
 /// Implementation of MediaRepository using filesystem scanning.
@@ -17,21 +15,15 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   FilesystemMediaRepositoryImpl(
     BookmarkService bookmarkService,
     this._directoryRepository,
-    IsarMediaDataSource isarMediaDataSource,
-    SharedPreferencesMediaDataSource legacyMediaDataSource, {
+    IsarMediaDataSource isarMediaDataSource, {
     PermissionService? permissionService,
     FilesystemMediaDataSource? filesystemDataSource,
-  })  : _legacyMediaDataSource = legacyMediaDataSource,
-        _mediaPersistence = MediaPersistenceBridge(
-          isarMediaDataSource: isarMediaDataSource,
-          legacyMediaDataSource: legacyMediaDataSource,
-        ),
+  })  : _mediaDataSource = isarMediaDataSource,
         _filesystemDataSource =
             filesystemDataSource ?? FilesystemMediaDataSource(bookmarkService, permissionService),
         _permissionService = permissionService ?? PermissionService();
   final DirectoryRepository _directoryRepository;
-  final SharedPreferencesMediaDataSource _legacyMediaDataSource;
-  final MediaPersistenceBridge _mediaPersistence;
+  final IsarMediaDataSource _mediaDataSource;
   final FilesystemMediaDataSource _filesystemDataSource;
   final PermissionService _permissionService;
 
@@ -109,7 +101,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<MediaEntity?> getMediaById(String id) async {
-    final allMedia = await _mediaPersistence.loadAllMedia();
+    final allMedia = await _mediaDataSource.getMedia();
     final localMedia = allMedia.where((media) => media.id == id).firstOrNull;
 
     if (localMedia == null) {
@@ -177,7 +169,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     }
 
     // Get media from local storage that have the specified tags
-    final allLocalMedia = await _mediaPersistence.loadAllMedia();
+    final allLocalMedia = await _mediaDataSource.getMedia();
     final filteredLocalMedia = allLocalMedia
         .where((media) => media.tagIds.any((tagId) => tagIds.contains(tagId)))
         .toList();
@@ -220,7 +212,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       directoryId,
       tagIds,
       bookmarkData: bookmarkData,
-      sharedPreferencesDataSource: _legacyMediaDataSource,
+      mediaPersistence: _mediaDataSource,
     );
     final mergedModels = await _mergeTagsWithLocalStorage(models);
     return mergedModels.map(_modelToEntity).toList();
@@ -238,7 +230,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       directoryId,
       tagIds,
       bookmarkData: bookmarkData,
-      sharedPreferencesDataSource: _legacyMediaDataSource,
+      mediaPersistence: _mediaDataSource,
     );
     final mergedModels = await _mergeTagsWithLocalStorage(models);
     return mergedModels.map(_modelToEntity).toList();
@@ -246,7 +238,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<void> updateMediaTags(String mediaId, List<String> tagIds) async {
-    await _mediaPersistence.updateMediaTags(mediaId, tagIds);
+    await _mediaDataSource.updateMediaTags(mediaId, tagIds);
   }
 
   @override
@@ -257,7 +249,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       return BatchUpdateResult.empty;
     }
 
-    final models = await _mediaPersistence.loadAllMedia();
+    final models = await _mediaDataSource.getMedia();
     final indexById = {
       for (var i = 0; i < models.length; i++) models[i].id: i,
     };
@@ -277,7 +269,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     }
 
     if (successes.isNotEmpty) {
-      await _mediaPersistence.saveMedia(models);
+      await _mediaDataSource.saveMedia(models);
     }
 
     return BatchUpdateResult(
@@ -288,7 +280,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   /// Merges tags from local storage with filesystem-scanned media.
   Future<List<MediaModel>> _mergeTagsWithLocalStorage(List<MediaModel> scannedMedia) async {
-    final existingMedia = await _mediaPersistence.loadAllMedia();
+    final existingMedia = await _mediaDataSource.getMedia();
     final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
     // Convert entities back to models for persistence, merging tagIds from persisted data
@@ -325,7 +317,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<void> removeMediaForDirectory(String directoryId) async {
-    await _mediaPersistence.removeMediaForDirectory(directoryId);
+    await _mediaDataSource.removeMediaForDirectory(directoryId);
   }
 
   Future<MediaEntity?> _scanDirectoriesForMedia(String id) async {

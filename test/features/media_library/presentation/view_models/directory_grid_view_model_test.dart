@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/core/services/bookmark_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../../lib/core/services/permission_service.dart';
 import '../../../../../lib/features/favorites/domain/entities/favorite_entity.dart';
@@ -232,11 +231,9 @@ Future<ProviderContainer> _createDirectoryTestContainer({
   required InMemoryDirectoryRepository directoryRepository,
   required InMemoryMediaRepository mediaRepository,
   required InMemoryFavoritesRepository favoritesRepository,
-  required SharedPreferences sharedPreferences,
 }) async {
   final container = ProviderContainer(
     overrides: [
-      sharedPreferencesProvider.overrideWithValue(sharedPreferences),
       localDirectoryDataSourceProvider.overrideWithValue(
         FakeLocalDirectoryDataSource(),
       ),
@@ -259,14 +256,11 @@ Future<ProviderContainer> _createDirectoryTestContainer({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late SharedPreferences sharedPreferences;
   late InMemoryDirectoryRepository directoryRepository;
   late InMemoryMediaRepository mediaRepository;
   late InMemoryFavoritesRepository favoritesRepository;
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    sharedPreferences = await SharedPreferences.getInstance();
     directoryRepository = InMemoryDirectoryRepository([
       DirectoryEntity(
         id: '1',
@@ -302,7 +296,6 @@ void main() {
       directoryRepository: directoryRepository,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
-      sharedPreferences: sharedPreferences,
     );
     addTearDown(container.dispose);
 
@@ -329,7 +322,6 @@ void main() {
       directoryRepository: directoryRepository,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
-      sharedPreferences: sharedPreferences,
     );
     addTearDown(container.dispose);
 
@@ -352,7 +344,6 @@ void main() {
       directoryRepository: directoryRepository,
       mediaRepository: mediaRepository,
       favoritesRepository: favoritesRepository,
-      sharedPreferences: sharedPreferences,
     );
     addTearDown(container.dispose);
 
@@ -377,7 +368,6 @@ void main() {
         directoryRepository: directoryRepository,
         mediaRepository: mediaRepository,
         favoritesRepository: favoritesRepository,
-        sharedPreferences: sharedPreferences,
       );
       addTearDown(container.dispose);
 

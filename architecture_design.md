@@ -15,17 +15,10 @@ Based on the requirements analysis, the application implements the following cor
 5. **Full-Screen Viewing**: Immersive viewing with zoom, pan, and video controls
 6. **UI Interactions**: Responsive grids, animations, drag-and-drop, gestures, and keyboard shortcuts
 7. **File Operations**: Safe file deletion and permission handling
-8. **Data Persistence**: SharedPreferences-based storage for all app data
-9. **Database Migration Prep**: Centralised Isar database service ready to host
-   persistent collections as part of the SharedPreferences replacement
-   roadmap, with schemas defined for directories, media, tags, and favorites,
-   plus concrete Isar data sources for directories, media, tags, and favorites
-   that mirror the legacy SharedPreferences behaviours while operating on the
-   shared database and enabling richer tag/favorite queries, alongside hybrid
-   repository bridges that keep both storage layers in sync while seeding Isar
-   from existing SharedPreferences payloads during the migration window and a
-   dedicated migration service that promotes the Isar-backed providers once the
-   legacy payloads have been copied across
+8. **Data Persistence**: Isar-backed storage for all app data with unified
+   collections for directories, media, tags, and favorites enabling rich
+   queries and cross-feature relationships without relying on legacy
+   SharedPreferences payloads or migration bridges.
 10. **Performance Optimizations**: Lazy loading, memory management, and efficient resource handling
 
 ## Architectural Principles

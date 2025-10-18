@@ -3,27 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:media_fast_view/features/media_library/presentation/screens/media_grid_screen.dart';
-import 'package:media_fast_view/shared/providers/repository_providers.dart';
-import '../mocks.mocks.dart';
 
 void main() {
-  late MockSharedPreferences mockSharedPreferences;
-
-  setUp(() {
-    mockSharedPreferences = MockSharedPreferences();
-  });
-
   group('MediaGridScreen', () {
     const testDirectoryPath = '/test/directory';
     const testDirectoryName = 'Test Directory';
 
     testWidgets('renders with correct title and app bar actions', (WidgetTester tester) async {
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            sharedPreferencesProvider.overrideWithValue(mockSharedPreferences),
-          ],
-          child: const MaterialApp(
+        const ProviderScope(
+          child: MaterialApp(
             home: MediaGridScreen(
               directoryPath: testDirectoryPath,
               directoryName: testDirectoryName,
@@ -40,11 +29,8 @@ void main() {
 
     testWidgets('builds without crashing', (WidgetTester tester) async {
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            sharedPreferencesProvider.overrideWithValue(mockSharedPreferences),
-          ],
-          child: const MaterialApp(
+        const ProviderScope(
+          child: MaterialApp(
             home: MediaGridScreen(
               directoryPath: testDirectoryPath,
               directoryName: testDirectoryName,
@@ -60,11 +46,8 @@ void main() {
 
     testWidgets('has proper UI structure', (WidgetTester tester) async {
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            sharedPreferencesProvider.overrideWithValue(mockSharedPreferences),
-          ],
-          child: const MaterialApp(
+        const ProviderScope(
+          child: MaterialApp(
             home: MediaGridScreen(
               directoryPath: testDirectoryPath,
               directoryName: testDirectoryName,
