@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
@@ -30,6 +31,10 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   VideoPlayerController? _videoController;
   VideoPlaybackSettings _playbackSettings;
   bool _loopOverridden = false;
+  bool _hasVideoCompleted = false;
+
+  static const Duration _completionTolerance = Duration(milliseconds: 300);
+  static const Duration _completionResetThreshold = Duration(seconds: 1);
 
   /// Initialize the viewer with media from a directory or provided media list
   Future<void> initialize(String directoryPath, {String? initialMediaId, String? bookmarkData, List<MediaEntity>? mediaList}) async {
@@ -84,6 +89,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       );
 
       _loopOverridden = false;
+      _resetVideoCompletionTracking();
 
       Future(() {
         state = FullScreenLoaded(
@@ -168,6 +174,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       );
 
       _loopOverridden = false;
+      _resetVideoCompletionTracking();
 
       // Initialize new media if video
       if (nextMedia.type == MediaType.video) {
@@ -200,6 +207,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       );
 
       _loopOverridden = false;
+      _resetVideoCompletionTracking();
 
       // Initialize new media if video
       if (previousMedia.type == MediaType.video) {
@@ -321,6 +329,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       _videoController = null;
     }
 
+    _resetVideoCompletionTracking();
+
     // Create new controller
     _videoController = VideoPlayerController.file(File(media.path));
 
@@ -357,6 +367,33 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     updateVideoPosition(position);
     updateVideoDuration(duration);
     updatePlayingState(isPlaying);
+
+    final currentState = state;
+    if (currentState is! FullScreenLoaded) {
+      return;
+    }
+
+    if (duration <= Duration.zero) {
+      return;
+    }
+
+    final remaining = duration - position;
+    final bool hasReachedEnd = remaining <= _completionTolerance;
+
+    if (!_hasVideoCompleted && hasReachedEnd) {
+      _hasVideoCompleted = true;
+
+      final bool hasNext =
+          currentState.currentIndex < currentState.mediaList.length - 1;
+
+      if (!currentState.isLooping && hasNext) {
+        Future.microtask(nextMedia);
+      }
+    } else if (_hasVideoCompleted &&
+        (remaining >= _completionResetThreshold ||
+            position <= _completionResetThreshold)) {
+      _hasVideoCompleted = false;
+    }
   }
 
   /// Go to specific media by index
@@ -381,6 +418,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     );
 
     _loopOverridden = false;
+    _resetVideoCompletionTracking();
 
     // Initialize new media if video
     if (targetMedia.type == MediaType.video) {
@@ -392,6 +430,10 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   void dispose() {
     _videoController?.dispose();
     super.dispose();
+  }
+
+  void _resetVideoCompletionTracking() {
+    _hasVideoCompleted = false;
   }
 
   /// Helper method to check if an error is permission-related.
