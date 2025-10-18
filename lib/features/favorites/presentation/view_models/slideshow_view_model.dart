@@ -486,6 +486,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
 
   /// Updates progress (for video playback).
   void updateProgress(double progress) {
+    final clampedProgress = progress.clamp(0.0, 1.0).toDouble();
     state = switch (state) {
       SlideshowPlaying(
         :final currentIndex,
@@ -500,7 +501,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isPlaying: isPlaying,
           isLooping: isLooping,
           isMuted: isMuted,
-          progress: progress,
+          progress: clampedProgress,
           isShuffleEnabled: isShuffleEnabled,
           imageDisplayDuration: imageDisplayDuration,
         ),
@@ -515,7 +516,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           currentIndex: currentIndex,
           isLooping: isLooping,
           isMuted: isMuted,
-          progress: progress,
+          progress: clampedProgress,
           isShuffleEnabled: isShuffleEnabled,
           imageDisplayDuration: imageDisplayDuration,
         ),
