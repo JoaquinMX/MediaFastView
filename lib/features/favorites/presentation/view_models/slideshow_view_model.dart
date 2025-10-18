@@ -21,6 +21,7 @@ class SlideshowPlaying extends SlideshowState {
     required this.currentIndex,
     required this.isPlaying,
     required this.isLooping,
+    required this.isVideoLooping,
     required this.isMuted,
     required this.progress,
     required this.isShuffleEnabled,
@@ -30,6 +31,7 @@ class SlideshowPlaying extends SlideshowState {
   final int currentIndex;
   final bool isPlaying;
   final bool isLooping;
+  final bool isVideoLooping;
   final bool isMuted;
   final double progress;
   final bool isShuffleEnabled;
@@ -39,6 +41,7 @@ class SlideshowPlaying extends SlideshowState {
     int? currentIndex,
     bool? isPlaying,
     bool? isLooping,
+    bool? isVideoLooping,
     bool? isMuted,
     double? progress,
     bool? isShuffleEnabled,
@@ -48,6 +51,7 @@ class SlideshowPlaying extends SlideshowState {
       currentIndex: currentIndex ?? this.currentIndex,
       isPlaying: isPlaying ?? this.isPlaying,
       isLooping: isLooping ?? this.isLooping,
+      isVideoLooping: isVideoLooping ?? this.isVideoLooping,
       isMuted: isMuted ?? this.isMuted,
       progress: progress ?? this.progress,
       isShuffleEnabled: isShuffleEnabled ?? this.isShuffleEnabled,
@@ -62,6 +66,7 @@ class SlideshowPaused extends SlideshowState {
   const SlideshowPaused({
     required this.currentIndex,
     required this.isLooping,
+    required this.isVideoLooping,
     required this.isMuted,
     required this.progress,
     required this.isShuffleEnabled,
@@ -70,6 +75,7 @@ class SlideshowPaused extends SlideshowState {
 
   final int currentIndex;
   final bool isLooping;
+  final bool isVideoLooping;
   final bool isMuted;
   final double progress;
   final bool isShuffleEnabled;
@@ -134,6 +140,11 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     SlideshowPaused(:final isLooping) => isLooping,
     _ => false,
   };
+  bool get isVideoLooping => switch (state) {
+    SlideshowPlaying(:final isVideoLooping) => isVideoLooping,
+    SlideshowPaused(:final isVideoLooping) => isVideoLooping,
+    _ => false,
+  };
   bool get isMuted => switch (state) {
     SlideshowPlaying(:final isMuted) => isMuted,
     SlideshowPaused(:final isMuted) => isMuted,
@@ -162,6 +173,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     state = SlideshowPaused(
       currentIndex: 0,
       isLooping: false,
+      isVideoLooping: false,
       isMuted: false,
       progress: 0.0,
       isShuffleEnabled: _isShuffleEnabled,
@@ -181,6 +193,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       currentIndex: currentIndex,
       isPlaying: true,
       isLooping: isLooping,
+      isVideoLooping: isVideoLooping,
       isMuted: isMuted,
       progress: 0.0,
       isShuffleEnabled: _isShuffleEnabled,
@@ -197,12 +210,14 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       SlideshowPlaying(
         :final currentIndex,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
         :final progress,
       ) =>
         SlideshowPaused(
           currentIndex: currentIndex,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: isMuted,
           progress: progress,
           isShuffleEnabled: _isShuffleEnabled,
@@ -220,6 +235,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       SlideshowPaused(
         :final currentIndex,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
         :final progress,
       ) =>
@@ -227,6 +243,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           currentIndex: currentIndex,
           isPlaying: true,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: isMuted,
           progress: progress,
           isShuffleEnabled: _isShuffleEnabled,
@@ -280,20 +297,22 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     _timer?.cancel();
 
     state = switch (state) {
-      SlideshowPlaying(:final isLooping, :final isMuted) =>
+      SlideshowPlaying(:final isLooping, :final isVideoLooping, :final isMuted) =>
         SlideshowPlaying(
           currentIndex: index,
           isPlaying: wasPlaying,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: isMuted,
           progress: 0.0,
           isShuffleEnabled: _isShuffleEnabled,
           imageDisplayDuration: _imageDisplayDuration,
         ),
-      SlideshowPaused(:final isLooping, :final isMuted) =>
+      SlideshowPaused(:final isLooping, :final isVideoLooping, :final isMuted) =>
         SlideshowPaused(
           currentIndex: index,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: isMuted,
           progress: 0.0,
           isShuffleEnabled: _isShuffleEnabled,
@@ -304,6 +323,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
               currentIndex: index,
               isPlaying: wasPlaying,
               isLooping: false,
+              isVideoLooping: isVideoLooping,
               isMuted: false,
               progress: 0.0,
               isShuffleEnabled: _isShuffleEnabled,
@@ -312,6 +332,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           : SlideshowPaused(
               currentIndex: index,
               isLooping: false,
+              isVideoLooping: isVideoLooping,
               isMuted: false,
               progress: 0.0,
               isShuffleEnabled: _isShuffleEnabled,
@@ -331,6 +352,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
         :final currentIndex,
         :final isPlaying,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
         :final progress,
         :final isShuffleEnabled,
@@ -340,6 +362,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           currentIndex: currentIndex,
           isPlaying: isPlaying,
           isLooping: !isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: isMuted,
           progress: progress,
           isShuffleEnabled: isShuffleEnabled,
@@ -348,6 +371,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       SlideshowPaused(
         :final currentIndex,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
         :final progress,
         :final isShuffleEnabled,
@@ -356,6 +380,52 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
         SlideshowPaused(
           currentIndex: currentIndex,
           isLooping: !isLooping,
+          isVideoLooping: isVideoLooping,
+          isMuted: isMuted,
+          progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
+        ),
+      _ => state,
+    };
+  }
+
+  /// Toggles looping for the current video item without advancing the slideshow.
+  void toggleVideoLoop() {
+    state = switch (state) {
+      SlideshowPlaying(
+        :final currentIndex,
+        :final isPlaying,
+        :final isLooping,
+        :final isVideoLooping,
+        :final isMuted,
+        :final progress,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
+      ) =>
+        SlideshowPlaying(
+          currentIndex: currentIndex,
+          isPlaying: isPlaying,
+          isLooping: isLooping,
+          isVideoLooping: !isVideoLooping,
+          isMuted: isMuted,
+          progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
+        ),
+      SlideshowPaused(
+        :final currentIndex,
+        :final isLooping,
+        :final isVideoLooping,
+        :final isMuted,
+        :final progress,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
+      ) =>
+        SlideshowPaused(
+          currentIndex: currentIndex,
+          isLooping: isLooping,
+          isVideoLooping: !isVideoLooping,
           isMuted: isMuted,
           progress: progress,
           isShuffleEnabled: isShuffleEnabled,
@@ -372,6 +442,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
         :final currentIndex,
         :final isPlaying,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
         :final progress,
         :final isShuffleEnabled,
@@ -381,6 +452,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           currentIndex: currentIndex,
           isPlaying: isPlaying,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: !isMuted,
           progress: progress,
           isShuffleEnabled: isShuffleEnabled,
@@ -389,6 +461,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       SlideshowPaused(
         :final currentIndex,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
         :final progress,
         :final isShuffleEnabled,
@@ -397,6 +470,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
         SlideshowPaused(
           currentIndex: currentIndex,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: !isMuted,
           progress: progress,
           isShuffleEnabled: isShuffleEnabled,
@@ -441,12 +515,14 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       SlideshowPlaying(
         :final currentIndex,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
       ) =>
         SlideshowPlaying(
           currentIndex: currentIndex,
           isPlaying: true,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: isMuted,
           progress: 0.0,
           isShuffleEnabled: _isShuffleEnabled,
@@ -455,11 +531,13 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       SlideshowPaused(
         :final currentIndex,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
       ) =>
         SlideshowPaused(
           currentIndex: currentIndex,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: isMuted,
           progress: 0.0,
           isShuffleEnabled: _isShuffleEnabled,
@@ -471,6 +549,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
             : SlideshowPaused(
                 currentIndex: 0,
                 isLooping: false,
+                isVideoLooping: false,
                 isMuted: false,
                 progress: 0.0,
                 isShuffleEnabled: _isShuffleEnabled,
@@ -492,6 +571,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
         :final currentIndex,
         :final isPlaying,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
         :final isShuffleEnabled,
         :final imageDisplayDuration,
@@ -500,6 +580,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           currentIndex: currentIndex,
           isPlaying: isPlaying,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: isMuted,
           progress: clampedProgress,
           isShuffleEnabled: isShuffleEnabled,
@@ -508,6 +589,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       SlideshowPaused(
         :final currentIndex,
         :final isLooping,
+        :final isVideoLooping,
         :final isMuted,
         :final isShuffleEnabled,
         :final imageDisplayDuration,
@@ -515,6 +597,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
         SlideshowPaused(
           currentIndex: currentIndex,
           isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
           isMuted: isMuted,
           progress: clampedProgress,
           isShuffleEnabled: isShuffleEnabled,

@@ -12,10 +12,12 @@ class SlideshowControls extends StatelessWidget {
     required this.onNext,
     required this.onPrevious,
     required this.onToggleLoop,
+    required this.onToggleVideoLoop,
     required this.onToggleMute,
     required this.onToggleShuffle,
     required this.onDurationSelected,
     required this.showProgressBar,
+    required this.showVideoLoopButton,
   });
 
   final SlideshowState state;
@@ -23,10 +25,12 @@ class SlideshowControls extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onPrevious;
   final VoidCallback onToggleLoop;
+  final VoidCallback onToggleVideoLoop;
   final VoidCallback onToggleMute;
   final VoidCallback onToggleShuffle;
   final ValueChanged<Duration> onDurationSelected;
   final bool showProgressBar;
+  final bool showVideoLoopButton;
 
   static const Duration _defaultDuration = Duration(seconds: 5);
 
@@ -63,6 +67,10 @@ class SlideshowControls extends StatelessWidget {
           Expanded(
             child: _buildProgressBar(),
           ),
+          if (showVideoLoopButton) ...[
+            const SizedBox(width: 16),
+            _buildVideoLoopButton(),
+          ],
         ],
       ],
     );
@@ -218,6 +226,23 @@ class SlideshowControls extends StatelessWidget {
         backgroundColor: Colors.white.withValues(alpha: 0.3),
         valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
       ),
+    );
+  }
+
+  Widget _buildVideoLoopButton() {
+    final isVideoLooping = switch (state) {
+      SlideshowPlaying(:final isVideoLooping) => isVideoLooping,
+      SlideshowPaused(:final isVideoLooping) => isVideoLooping,
+      _ => false,
+    };
+
+    return IconButton(
+      icon: Icon(
+        Icons.repeat_one,
+        color: isVideoLooping ? Colors.blue : Colors.white,
+      ),
+      onPressed: onToggleVideoLoop,
+      tooltip: isVideoLooping ? 'Disable video loop' : 'Loop current video',
     );
   }
 }

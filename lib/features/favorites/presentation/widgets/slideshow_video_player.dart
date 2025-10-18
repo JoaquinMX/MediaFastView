@@ -16,7 +16,7 @@ class SlideshowVideoPlayer extends StatefulWidget {
     required this.media,
     required this.isPlaying,
     required this.isMuted,
-    required this.isLooping,
+    required this.isVideoLooping,
     required this.onProgress,
     required this.onCompleted,
   });
@@ -24,7 +24,7 @@ class SlideshowVideoPlayer extends StatefulWidget {
   final MediaEntity media;
   final bool isPlaying;
   final bool isMuted;
-  final bool isLooping;
+  final bool isVideoLooping;
   final ValueChanged<double> onProgress;
   final VoidCallback onCompleted;
 
@@ -61,8 +61,9 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
     if (widget.isMuted != oldWidget.isMuted) {
       controller.setVolume(widget.isMuted ? 0.0 : 1.0);
     }
-    if (widget.isLooping != oldWidget.isLooping) {
-      controller.setLooping(widget.isLooping);
+    if (widget.isVideoLooping != oldWidget.isVideoLooping) {
+      _hasCompleted = false;
+      controller.setLooping(widget.isVideoLooping);
     }
     if (widget.isPlaying != oldWidget.isPlaying) {
       _hasCompleted = false;
@@ -86,7 +87,7 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
     try {
       await controller.initialize();
       await controller.setVolume(widget.isMuted ? 0.0 : 1.0);
-      await controller.setLooping(widget.isLooping);
+      await controller.setLooping(widget.isVideoLooping);
       controller.addListener(_onVideoUpdate);
 
       if (widget.isPlaying) {
@@ -118,7 +119,7 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
     }
 
     final hasFinished = duration > Duration.zero && position >= duration;
-    if (!widget.isLooping && widget.isPlaying && hasFinished && !_hasCompleted) {
+    if (!widget.isVideoLooping && widget.isPlaying && hasFinished && !_hasCompleted) {
       _hasCompleted = true;
       widget.onProgress(1.0);
       widget.onCompleted();
