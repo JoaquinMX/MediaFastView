@@ -226,7 +226,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     if (directory != null) {
       final updatedDirectory = directory.copyWith(tagIds: tagIds);
       final model = _entityToModel(updatedDirectory);
-      await _directories.updateDirectory(model);
+      await _isarDirectoryDataSource.updateDirectory(model);
     }
   }
 

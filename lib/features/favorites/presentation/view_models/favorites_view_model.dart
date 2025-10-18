@@ -471,7 +471,7 @@ final favoritesViewModelProvider =
       (ref) {
         final viewModel = FavoritesViewModel(
           ref.watch(favoritesRepositoryProvider),
-          ref.watch(mediaDataSourceProvider),
+          ref.watch(isarMediaDataSourceProvider),
         );
         viewModel.loadFavorites();
         return viewModel;
