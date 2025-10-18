@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
+import 'package:media_fast_view/core/services/bookmark_service.dart';
+import 'package:media_fast_view/core/services/permission_service.dart';
+import 'package:media_fast_view/features/media_library/data/data_sources/filesystem_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/repositories/filesystem_media_repository_impl.dart';
@@ -8,26 +11,30 @@ import 'package:media_fast_view/features/media_library/domain/entities/media_ent
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
 
-import '../../../../mocks.mocks.dart';
-
 class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
+
 class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
+
+class _MockBookmarkService extends Mock implements BookmarkService {}
+
+class _MockFilesystemMediaDataSource extends Mock
+    implements FilesystemMediaDataSource {}
+
+class _MockPermissionService extends Mock implements PermissionService {}
 
 void main() {
   late FilesystemMediaRepositoryImpl repository;
-  late MockBookmarkService bookmarkService;
+  late _MockBookmarkService bookmarkService;
   late _MockDirectoryRepository directoryRepository;
-  late MockSharedPreferencesMediaDataSource localMediaDataSource;
-  late MockFilesystemMediaDataSource filesystemDataSource;
-  late MockPermissionService permissionService;
+  late _MockFilesystemMediaDataSource filesystemDataSource;
+  late _MockPermissionService permissionService;
   late _MockIsarMediaDataSource isarMediaDataSource;
 
   setUp(() {
-    bookmarkService = MockBookmarkService();
+    bookmarkService = _MockBookmarkService();
     directoryRepository = _MockDirectoryRepository();
-    localMediaDataSource = MockSharedPreferencesMediaDataSource();
-    filesystemDataSource = MockFilesystemMediaDataSource();
-    permissionService = MockPermissionService();
+    filesystemDataSource = _MockFilesystemMediaDataSource();
+    permissionService = _MockPermissionService();
     isarMediaDataSource = _MockIsarMediaDataSource();
 
     when(isarMediaDataSource.getMedia()).thenAnswer((_) async => <MediaModel>[]);
@@ -42,7 +49,6 @@ void main() {
       bookmarkService,
       directoryRepository,
       isarMediaDataSource,
-      localMediaDataSource,
       permissionService: permissionService,
       filesystemDataSource: filesystemDataSource,
     );
@@ -75,7 +81,7 @@ void main() {
         lastModified: DateTime(2024),
       );
 
-      when(localMediaDataSource.getMedia()).thenAnswer((_) async => [persistedModel]);
+      when(isarMediaDataSource.getMedia()).thenAnswer((_) async => [persistedModel]);
       when(directoryRepository.getDirectoryById(directoryId)).thenAnswer((_) async => directory);
       when(filesystemDataSource.getMediaById(
         any,
@@ -113,7 +119,7 @@ void main() {
         lastModified: DateTime(2024),
       );
 
-      when(localMediaDataSource.getMedia()).thenAnswer((_) async => [persistedModel]);
+      when(isarMediaDataSource.getMedia()).thenAnswer((_) async => [persistedModel]);
       when(directoryRepository.getDirectoryById(directoryId)).thenAnswer((_) async => directory);
       when(filesystemDataSource.getMediaById(
         any,
@@ -151,7 +157,7 @@ void main() {
         directoryId: directoryId,
       );
 
-      when(localMediaDataSource.getMedia()).thenAnswer((_) async => []);
+      when(isarMediaDataSource.getMedia()).thenAnswer((_) async => []);
       when(directoryRepository.getDirectories()).thenAnswer((_) async => [directory]);
       when(filesystemDataSource.getMediaById(
         any,

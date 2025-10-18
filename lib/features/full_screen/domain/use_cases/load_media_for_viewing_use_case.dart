@@ -2,13 +2,13 @@ import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/data/data_sources/filesystem_media_data_source.dart';
-import '../../../media_library/data/data_sources/local_media_data_source.dart';
+import '../../../media_library/data/isar/isar_media_data_source.dart';
 
 /// Use case for loading media for full-screen viewing
 class LoadMediaForViewingUseCase {
   const LoadMediaForViewingUseCase(this._mediaDataSource);
 
-  final SharedPreferencesMediaDataSource _mediaDataSource;
+  final IsarMediaDataSource _mediaDataSource;
 
   /// Load media list for a directory
   Future<List<MediaEntity>> call(String directoryPath, String directoryId, {String? bookmarkData}) async {
@@ -45,9 +45,9 @@ class LoadMediaForViewingUseCase {
         details: 'loaded=${mediaModels.length} items',
       );
 
-      // Save media to SharedPreferences for favorites functionality
+      // Save media to Isar for favorites functionality
       if (mediaModels.isNotEmpty) {
-        await _mediaDataSource.addMedia(mediaModels);
+        await _mediaDataSource.upsertMedia(mediaModels);
       }
 
       // Convert models to entities for return

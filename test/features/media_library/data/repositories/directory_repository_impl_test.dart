@@ -1,3 +1,4 @@
+import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/core/services/permission_service.dart';
 import 'package:media_fast_view/features/media_library/data/data_sources/local_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
@@ -8,40 +9,34 @@ import 'package:media_fast_view/features/media_library/domain/entities/directory
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
-import '../../../../mocks.mocks.dart';
-
 class _MockLocalDirectoryDataSource extends Mock implements LocalDirectoryDataSource {}
 class _MockIsarDirectoryDataSource extends Mock implements IsarDirectoryDataSource {}
 class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
+class _MockBookmarkService extends Mock implements BookmarkService {}
+class _MockPermissionService extends Mock implements PermissionService {}
 
 void main() {
   group('DirectoryRepositoryImpl', () {
     late DirectoryRepositoryImpl repository;
-    late MockSharedPreferencesDirectoryDataSource directoryDataSource;
     late _MockLocalDirectoryDataSource localDirectoryDataSource;
-    late MockBookmarkService bookmarkService;
-    late MockPermissionService permissionService;
-    late MockSharedPreferencesMediaDataSource mediaDataSource;
+    late _MockBookmarkService bookmarkService;
+    late _MockPermissionService permissionService;
     late _MockIsarDirectoryDataSource isarDirectoryDataSource;
     late _MockIsarMediaDataSource isarMediaDataSource;
 
     setUp(() {
-      directoryDataSource = MockSharedPreferencesDirectoryDataSource();
       localDirectoryDataSource = _MockLocalDirectoryDataSource();
-      bookmarkService = MockBookmarkService();
-      permissionService = MockPermissionService();
-      mediaDataSource = MockSharedPreferencesMediaDataSource();
+      bookmarkService = _MockBookmarkService();
+      permissionService = _MockPermissionService();
       isarDirectoryDataSource = _MockIsarDirectoryDataSource();
       isarMediaDataSource = _MockIsarMediaDataSource();
 
       repository = DirectoryRepositoryImpl(
         isarDirectoryDataSource,
-        directoryDataSource,
         localDirectoryDataSource,
         bookmarkService,
         permissionService,
         isarMediaDataSource,
-        mediaDataSource,
       );
     });
 
@@ -59,20 +54,16 @@ void main() {
           bookmarkData: 'existing-bookmark',
         );
 
-        when(directoryDataSource.getDirectories()).thenAnswer(
+        when(isarDirectoryDataSource.getDirectories()).thenAnswer(
           (_) async => [existingModel],
         );
-        when(isarDirectoryDataSource.getDirectories()).thenAnswer((_) async => <DirectoryModel>[]);
-        when(isarDirectoryDataSource.saveDirectories(any)).thenAnswer((_) async {});
         when(localDirectoryDataSource.validateDirectory(any)).thenAnswer((_) async => true);
         when(bookmarkService.createBookmark(any)).thenThrow(UnsupportedError('not supported on platform'));
         when(permissionService.validateBookmark(any)).thenAnswer(
           (_) async => const BookmarkValidationResult(isValid: true),
         );
-        when(directoryDataSource.updateDirectory(any)).thenAnswer((_) async {});
         when(isarDirectoryDataSource.updateDirectory(any)).thenAnswer((_) async {});
         when(isarMediaDataSource.migrateDirectoryId(any, any)).thenAnswer((_) async {});
-        when(mediaDataSource.migrateDirectoryId(any, any)).thenAnswer((_) async {});
 
         final directory = DirectoryEntity(
           id: directoryId,
@@ -85,7 +76,8 @@ void main() {
 
         await repository.addDirectory(directory);
 
-        final capturedModel = verify(directoryDataSource.updateDirectory(captureAny)).captured.single
+        final capturedModel =
+            verify(isarDirectoryDataSource.updateDirectory(captureAny)).captured.single
             as DirectoryModel;
 
         expect(capturedModel.tagIds, equals(existingModel.tagIds));

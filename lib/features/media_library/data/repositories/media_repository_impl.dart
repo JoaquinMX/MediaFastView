@@ -3,26 +3,20 @@ import '../../../../core/utils/batch_update_result.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/media_repository.dart';
-import '../data_sources/local_media_data_source.dart';
 import '../isar/isar_media_data_source.dart';
-import '../persistence/hybrid_persistence_bridge.dart';
 import '../models/media_model.dart';
 
-/// Implementation of MediaRepository using SharedPreferences.
+/// Implementation of MediaRepository backed by Isar persistence.
 class MediaRepositoryImpl implements MediaRepository {
   MediaRepositoryImpl(
-    IsarMediaDataSource isarMediaDataSource,
-    SharedPreferencesMediaDataSource legacyMediaDataSource,
-  ) : _mediaPersistence = MediaPersistenceBridge(
-          isarMediaDataSource: isarMediaDataSource,
-          legacyMediaDataSource: legacyMediaDataSource,
-        );
+    this._mediaDataSource,
+  );
 
-  final MediaPersistenceBridge _mediaPersistence;
+  final IsarMediaDataSource _mediaDataSource;
 
   @override
   Future<List<MediaEntity>> getMediaForDirectory(String directoryId) async {
-    final models = await _mediaPersistence.loadMediaForDirectory(directoryId);
+    final models = await _mediaDataSource.getMediaForDirectory(directoryId);
     return models.map(_modelToEntity).toList();
   }
 
@@ -32,13 +26,13 @@ class MediaRepositoryImpl implements MediaRepository {
     String? bookmarkData,
   }) async {
     final directoryId = generateDirectoryId(directoryPath);
-    final models = await _mediaPersistence.loadMediaForDirectory(directoryId);
+    final models = await _mediaDataSource.getMediaForDirectory(directoryId);
     return models.map(_modelToEntity).toList();
   }
 
   @override
   Future<MediaEntity?> getMediaById(String id) async {
-    final allMedia = await _mediaPersistence.loadAllMedia();
+    final allMedia = await _mediaDataSource.getMedia();
     final model = allMedia.where((media) => media.id == id).firstOrNull;
     if (model != null) {
       LoggingService.instance.debug('Found media for ID $id: ${model.name}');
@@ -51,11 +45,11 @@ class MediaRepositoryImpl implements MediaRepository {
   @override
   Future<List<MediaEntity>> filterMediaByTags(List<String> tagIds) async {
     if (tagIds.isEmpty) {
-      final allMedia = await _mediaPersistence.loadAllMedia();
+      final allMedia = await _mediaDataSource.getMedia();
       return allMedia.map(_modelToEntity).toList();
     }
 
-    final allMedia = await _mediaPersistence.loadAllMedia();
+    final allMedia = await _mediaDataSource.getMedia();
     final filtered = allMedia
         .where((media) => media.tagIds.any((tagId) => tagIds.contains(tagId)))
         .toList();
@@ -69,7 +63,7 @@ class MediaRepositoryImpl implements MediaRepository {
     String? bookmarkData,
   }) async {
     final directoryId = generateDirectoryId(directoryPath);
-    final allMedia = await _mediaPersistence.loadMediaForDirectory(directoryId);
+    final allMedia = await _mediaDataSource.getMediaForDirectory(directoryId);
 
     if (tagIds.isEmpty) {
       return allMedia.map(_modelToEntity).toList();
@@ -83,7 +77,7 @@ class MediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<void> updateMediaTags(String mediaId, List<String> tagIds) async {
-    await _mediaPersistence.updateMediaTags(mediaId, tagIds);
+    await _mediaDataSource.updateMediaTags(mediaId, tagIds);
   }
 
   @override
@@ -94,7 +88,7 @@ class MediaRepositoryImpl implements MediaRepository {
       return BatchUpdateResult.empty;
     }
 
-    final models = await _mediaPersistence.loadAllMedia();
+    final models = await _mediaDataSource.getMedia();
     final indexById = {
       for (var i = 0; i < models.length; i++) models[i].id: i,
     };
@@ -114,7 +108,7 @@ class MediaRepositoryImpl implements MediaRepository {
     }
 
     if (successes.isNotEmpty) {
-      await _mediaPersistence.saveMedia(models);
+      await _mediaDataSource.saveMedia(models);
       LoggingService.instance.info(
         'Updated tags for ${successes.length} media items in a single batch.',
       );
@@ -134,7 +128,7 @@ class MediaRepositoryImpl implements MediaRepository {
 
   @override
   Future<void> removeMediaForDirectory(String directoryId) async {
-    await _mediaPersistence.removeMediaForDirectory(directoryId);
+    await _mediaDataSource.removeMediaForDirectory(directoryId);
   }
 
   /// Converts MediaModel to MediaEntity.
