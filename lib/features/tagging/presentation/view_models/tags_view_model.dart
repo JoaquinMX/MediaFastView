@@ -391,7 +391,7 @@ final tagsViewModelProvider =
         ref.watch(getTagsUseCaseProvider),
         ref.watch(filterByTagsUseCaseProvider),
         ref.watch(favoritesRepositoryProvider),
-        ref.watch(mediaDataSourceProvider),
+        ref.watch(isarMediaDataSourceProvider),
       );
       return viewModel;
     });
