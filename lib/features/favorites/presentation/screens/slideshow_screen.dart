@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../view_models/slideshow_view_model.dart';
 import '../widgets/slideshow_controls.dart';
+import '../widgets/slideshow_video_player.dart';
 
 /// Full-screen slideshow screen for viewing favorite media items.
 class SlideshowScreen extends ConsumerStatefulWidget {
@@ -58,7 +59,8 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
             _buildSlideshowContent(viewModel, slideshowViewModel),
 
             // Controls overlay
-            if (_areControlsVisible) _buildControlsOverlay(viewModel, slideshowViewModel),
+            if (_areControlsVisible)
+              _buildControlsOverlay(viewModel, slideshowViewModel),
           ],
         ),
       ),
@@ -84,12 +86,25 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
       onTap: _toggleControlsVisibility,
       child: Container(
         color: Colors.black,
-        child: Center(child: _buildMediaContent(currentMedia)),
+        child: Center(
+          child: _buildMediaContent(currentMedia, viewModel),
+        ),
       ),
     );
   }
 
-  Widget _buildMediaContent(MediaEntity media) {
+  Widget _buildMediaContent(MediaEntity media, SlideshowViewModel viewModel) {
+    if (media.type == MediaType.video) {
+      return SlideshowVideoPlayer(
+        media: media,
+        isPlaying: viewModel.isPlaying,
+        isMuted: viewModel.isMuted,
+        isLooping: viewModel.isLooping,
+        onProgress: viewModel.updateProgress,
+        onCompleted: viewModel.nextItem,
+      );
+    }
+
     return SizedBox.expand(
       child: Image.file(
         File(media.path),
@@ -149,6 +164,8 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
                 onToggleMute: viewModel.toggleMute,
                 onToggleShuffle: viewModel.toggleShuffle,
                 onDurationSelected: viewModel.setImageDisplayDuration,
+                showProgressBar:
+                    viewModel.currentMedia?.type == MediaType.video,
               ),
 
               const SizedBox(height: 16),

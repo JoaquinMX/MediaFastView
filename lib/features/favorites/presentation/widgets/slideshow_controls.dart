@@ -15,6 +15,7 @@ class SlideshowControls extends StatelessWidget {
     required this.onToggleMute,
     required this.onToggleShuffle,
     required this.onDurationSelected,
+    required this.showProgressBar,
   });
 
   final SlideshowState state;
@@ -25,6 +26,7 @@ class SlideshowControls extends StatelessWidget {
   final VoidCallback onToggleMute;
   final VoidCallback onToggleShuffle;
   final ValueChanged<Duration> onDurationSelected;
+  final bool showProgressBar;
 
   static const Duration _defaultDuration = Duration(seconds: 5);
 
@@ -56,8 +58,12 @@ class SlideshowControls extends StatelessWidget {
         _buildMuteButton(),
         const SizedBox(width: 32),
         _buildDurationSlider(context),
-        const SizedBox(width: 32),
-        if (_isVideoState()) _buildProgressBar(),
+        if (showProgressBar) ...[
+          const SizedBox(width: 32),
+          Expanded(
+            child: _buildProgressBar(),
+          ),
+        ],
       ],
     );
   }
@@ -204,22 +210,14 @@ class SlideshowControls extends StatelessWidget {
       _ => 0.0,
     };
 
-    return Expanded(
-      child: Container(
-        height: 4,
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        child: LinearProgressIndicator(
-          value: progress,
-          backgroundColor: Colors.white.withValues(alpha: 0.3),
-          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-        ),
+    return Container(
+      height: 4,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: LinearProgressIndicator(
+        value: progress,
+        backgroundColor: Colors.white.withValues(alpha: 0.3),
+        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
       ),
     );
-  }
-
-  bool _isVideoState() {
-    // This would check if the current media is a video
-    // For now, return false as we don't have video detection
-    return false;
   }
 }
