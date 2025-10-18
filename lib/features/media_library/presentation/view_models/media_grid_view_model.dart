@@ -167,12 +167,12 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final tagSet = LinkedHashSet<String>.from(media.tagIds);
       common = common == null
           ? tagSet
-          : LinkedHashSet<String>.from(common!.where(tagSet.contains));
+          : LinkedHashSet<String>.from(common.where(tagSet.contains));
     }
 
     return common == null
         ? const <String>[]
-        : List<String>.unmodifiable(common!);
+        : List<String>.unmodifiable(common);
   }
 
   /// Gets the directory ID generated from the directory path.
@@ -493,10 +493,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   /// Sets the number of columns for the grid.
   void setColumns(int columns) {
     final clampedColumns = columns.clamp(2, 12);
-    final newColumns = clampedColumns is int
-        ? clampedColumns
-        : clampedColumns.toInt();
-    _ref.read(gridColumnsProvider.notifier).setColumns(newColumns);
+    _ref.read(gridColumnsProvider.notifier).setColumns(clampedColumns);
   }
 
   /// Navigates to a subdirectory.
@@ -781,10 +778,9 @@ final mediaViewModelProvider = StateNotifierProvider.autoDispose
           ref.watch(bookmarkServiceProvider),
           ref.watch(directoryRepositoryProvider),
           ref.watch(isarMediaDataSourceProvider),
-          ref.watch(mediaDataSourceProvider),
           permissionService: ref.watch(permissionServiceProvider),
         ),
-        sharedPreferencesDataSource: ref.watch(mediaDataSourceProvider),
+        mediaDataSource: ref.watch(isarMediaDataSourceProvider),
       ),
     );
 
