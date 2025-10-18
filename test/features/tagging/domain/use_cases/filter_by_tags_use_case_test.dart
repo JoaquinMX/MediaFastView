@@ -4,9 +4,10 @@ import 'package:mockito/mockito.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
+import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/filter_by_tags_use_case.dart';
 
-import '../../../../mocks.mocks.dart';
+class _MockMediaRepository extends Mock implements MediaRepository {}
 
 class _DummyDirectoryRepository implements DirectoryRepository {
   @override
@@ -56,7 +57,7 @@ class _DummyDirectoryRepository implements DirectoryRepository {
 }
 
 void main() {
-  late MockMediaRepository mediaRepository;
+  late _MockMediaRepository mediaRepository;
   late FilterByTagsUseCase useCase;
   const tagId = 'tag-1';
   final directory = DirectoryEntity(
@@ -94,7 +95,7 @@ void main() {
   ];
 
   setUp(() {
-    mediaRepository = MockMediaRepository();
+    mediaRepository = _MockMediaRepository();
     useCase = FilterByTagsUseCase(
       directoryRepository: _DummyDirectoryRepository(),
       mediaRepository: mediaRepository,

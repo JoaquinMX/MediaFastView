@@ -7,43 +7,29 @@ import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
 import '../data_sources/local_directory_data_source.dart';
-import '../data_sources/local_media_data_source.dart';
-import '../data_sources/shared_preferences_data_source.dart';
 import '../isar/isar_directory_data_source.dart';
 import '../isar/isar_media_data_source.dart';
-import '../persistence/hybrid_persistence_bridge.dart';
 import '../models/directory_model.dart';
 
-/// Implementation of DirectoryRepository using SharedPreferences and local file system.
+/// Implementation of DirectoryRepository using Isar-backed persistence and the local file system.
 class DirectoryRepositoryImpl implements DirectoryRepository {
   DirectoryRepositoryImpl(
-    IsarDirectoryDataSource isarDirectoryDataSource,
-    SharedPreferencesDirectoryDataSource legacyDirectoryDataSource,
+    this._isarDirectoryDataSource,
     this._localDirectoryDataSource,
     this._bookmarkService,
     this._permissionService,
-    IsarMediaDataSource isarMediaDataSource,
-    SharedPreferencesMediaDataSource legacyMediaDataSource,
-  )   : _directories = DirectoryPersistenceBridge(
-          isarDirectoryDataSource: isarDirectoryDataSource,
-          legacyDirectoryDataSource: legacyDirectoryDataSource,
-          isarMediaDataSource: isarMediaDataSource,
-          legacyMediaDataSource: legacyMediaDataSource,
-        ),
-        _media = MediaPersistenceBridge(
-          isarMediaDataSource: isarMediaDataSource,
-          legacyMediaDataSource: legacyMediaDataSource,
-        );
+    this._isarMediaDataSource,
+  );
 
-  final DirectoryPersistenceBridge _directories;
-  final MediaPersistenceBridge _media;
+  final IsarDirectoryDataSource _isarDirectoryDataSource;
+  final IsarMediaDataSource _isarMediaDataSource;
   final LocalDirectoryDataSource _localDirectoryDataSource;
   final BookmarkService _bookmarkService;
   final PermissionService _permissionService;
 
   @override
   Future<List<DirectoryEntity>> getDirectories() async {
-    final models = await _directories.loadDirectories();
+    final models = await _isarDirectoryDataSource.getDirectories();
     final entities = <DirectoryEntity>[];
 
     for (final model in models) {
@@ -192,16 +178,16 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
 
     final model = _entityToModel(directoryToPersist);
     if (existing != null) {
-      await _directories.updateDirectory(model);
+      await _isarDirectoryDataSource.updateDirectory(model);
     } else {
-      await _directories.addDirectory(model);
+      await _isarDirectoryDataSource.addDirectory(model);
     }
   }
 
   @override
   Future<void> removeDirectory(String id) async {
     // Remove the directory itself
-    await _directories.removeDirectory(id);
+    await _isarDirectoryDataSource.removeDirectory(id);
   }
 
   @override
@@ -252,7 +238,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       return BatchUpdateResult.empty;
     }
 
-    final models = await _directories.loadDirectories();
+    final models = await _isarDirectoryDataSource.getDirectories();
     final indexById = {
       for (var i = 0; i < models.length; i++) models[i].id: i,
     };
@@ -272,7 +258,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     }
 
     if (successes.isNotEmpty) {
-      await _directories.saveDirectories(models);
+      await _isarDirectoryDataSource.saveDirectories(models);
       LoggingService.instance.info(
         'Updated tags for ${successes.length} directories in a single batch.',
       );
@@ -296,7 +282,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     if (directory != null) {
       final updatedDirectory = directory.copyWith(bookmarkData: bookmarkData);
       final model = _entityToModel(updatedDirectory);
-      await _directories.updateDirectory(model);
+      await _isarDirectoryDataSource.updateDirectory(model);
     }
   }
 
@@ -313,8 +299,9 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
 
     final updatedModel = model.copyWith(id: expectedId);
 
-    await _media.migrateDirectoryId(model.id, expectedId);
-    await _directories.replaceDirectoryId(model.id, updatedModel);
+    await _isarMediaDataSource.migrateDirectoryId(model.id, expectedId);
+    await _isarDirectoryDataSource.removeDirectory(model.id);
+    await _isarDirectoryDataSource.addDirectory(updatedModel);
 
     return updatedModel;
   }
@@ -348,7 +335,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
   @override
   Future<void> clearAllDirectories() async {
     try {
-      await _directories.clear();
+      await _isarDirectoryDataSource.clearDirectories();
       LoggingService.instance.info('Successfully cleared all directory data from cache');
     } catch (e) {
       LoggingService.instance.error('Failed to clear directory cache: $e');

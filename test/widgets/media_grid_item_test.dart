@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
-
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/presentation/widgets/media_grid_item.dart';
 import 'package:media_fast_view/shared/providers/repository_providers.dart';
-import '../mocks.mocks.dart';
+import 'package:media_fast_view/core/services/file_service.dart';
+import 'package:mockito/mockito.dart';
+
+class _MockFileService extends Mock implements FileService {}
 
 void main() {
-  late MockSharedPreferences mockSharedPreferences;
-  late MockFileService mockFileService;
+  late _MockFileService mockFileService;
 
   setUp(() {
-    mockSharedPreferences = MockSharedPreferences();
-    mockFileService = MockFileService();
+    mockFileService = _MockFileService();
   });
 
   group('MediaGridItem', () {
@@ -36,9 +35,6 @@ void main() {
     testWidgets('renders image media type', (WidgetTester tester) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            sharedPreferencesProvider.overrideWithValue(mockSharedPreferences),
-          ],
           child: MaterialApp(
             home: Scaffold(
               body: MediaGridItem(
@@ -69,7 +65,6 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            sharedPreferencesProvider.overrideWithValue(mockSharedPreferences),
             fileServiceProvider.overrideWithValue(mockFileService),
           ],
           child: MaterialApp(
@@ -95,19 +90,14 @@ void main() {
       final videoMedia = testMedia.copyWith(type: MediaType.video);
 
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            sharedPreferencesProvider.overrideWithValue(mockSharedPreferences),
-          ],
-          child: MaterialApp(
-            home: Scaffold(
-              body: MediaGridItem(
-                media: videoMedia,
-                onTap: () {},
-                onSelectionToggle: () {},
-                isSelected: false,
-                isSelectionMode: false,
-              ),
+        MaterialApp(
+          home: Scaffold(
+            body: MediaGridItem(
+              media: videoMedia,
+              onTap: () {},
+              onSelectionToggle: () {},
+              isSelected: false,
+              isSelectionMode: false,
             ),
           ),
         ),

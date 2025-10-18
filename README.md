@@ -7,7 +7,7 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 - **Platform focus**: Desktop-first experience for macOS with support for iOS builds. Security-scoped bookmarks keep directory access stable across launches.
 - **Feature-based clean architecture**: Presentation, domain, and data layers are split by feature (media library, tagging, favorites, full screen) and coordinated with Riverpod view models.
 - **Rich browsing experience**: Directory and media grids offer search, tag filtering, column density controls, and quick entry into a full-screen viewer with keyboard shortcuts and video controls.
-- **Stateful persistence**: SharedPreferences stores user selections (directories, tags, favorites) while filesystem scans keep metadata fresh.
+- **Stateful persistence**: Isar persists user selections (directories, tags, favorites) while filesystem scans keep metadata fresh.
 
 ## Key Capabilities
 
@@ -61,7 +61,7 @@ Widget and integration test scaffolds live under `test/`. Add coverage for new v
 - Align directory IDs across layers; current mix of `path.hashCode` in add_directory_use_case.dart:16 and local_directory_data_source.dart:170 vs SHA-256 ids in filesystem_media_repository_impl.dart:47-269 breaks tag assignment, favorites cleanup, and directory lookups.
 - Replace placeholder tag filter data and wire DirectoryGrid into the tag system; directories never persist tagIds and TagManagementDialog toggles fail because directoryRepository.getDirectoryById() can't resolve SHA ids (directory_grid_screen.dart:130, assign_tag_use_case.dart:17, tag_management_dialog.dart:239).
 - Persist recovered paths/bookmarks back to DirectoryRepository when permissions are re-granted; MediaViewModel only updates local state, so reopening the directory breaks again (media_grid_view_model.dart:300-333).
-- Extend RemoveDirectoryUseCase to purge cached media metadata via SharedPreferencesMediaDataSource.removeMediaForDirectory(); otherwise stale IDs linger for favorites/tag lookups (remove_directory_use_case.dart:40-63, local_media_data_source.dart:58).
+- Extend RemoveDirectoryUseCase to purge cached media metadata via IsarMediaDataSource.removeMediaForDirectory(); otherwise stale IDs linger for favorites/tag lookups (remove_directory_use_case.dart:40-63, lib/features/media_library/data/isar/isar_media_data_source.dart).
 - Preserve grid layout preferences when filtering/sorting; filterByTags replaces state with MediaLoading and resets columns to 3, undoing user changes (media_grid_view_model.dart:205-244).
 - Loosen drag-and-drop directory detection; the current suffix check skips valid macOS bundle directories like *.photoslibrary (directory_grid_screen.dart:124-127).
 

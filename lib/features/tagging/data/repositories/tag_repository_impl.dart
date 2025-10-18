@@ -1,25 +1,17 @@
 import '../../domain/entities/tag_entity.dart';
 import '../../domain/repositories/tag_repository.dart';
 import '../../../media_library/data/models/tag_model.dart';
-import '../data_sources/shared_preferences_data_source.dart';
 import '../isar/isar_tag_data_source.dart';
-import '../persistence/hybrid_tag_persistence_bridge.dart';
 
-/// Implementation of TagRepository using SharedPreferences.
+/// Implementation of TagRepository backed by Isar.
 class TagRepositoryImpl implements TagRepository {
-  TagRepositoryImpl(
-    IsarTagDataSource isarTagDataSource,
-    SharedPreferencesTagDataSource legacyTagDataSource,
-  ) : _tags = TagPersistenceBridge(
-          isarTagDataSource: isarTagDataSource,
-          legacyTagDataSource: legacyTagDataSource,
-        );
+  TagRepositoryImpl(this._tagDataSource);
 
-  final TagPersistenceBridge _tags;
+  final IsarTagDataSource _tagDataSource;
 
   @override
   Future<List<TagEntity>> getTags() async {
-    final models = await _tags.loadTags();
+    final models = await _tagDataSource.getTags();
     return models.map(_modelToEntity).toList();
   }
 
@@ -32,18 +24,18 @@ class TagRepositoryImpl implements TagRepository {
   @override
   Future<void> createTag(TagEntity tag) async {
     final model = _entityToModel(tag);
-    await _tags.addTag(model);
+    await _tagDataSource.addTag(model);
   }
 
   @override
   Future<void> updateTag(TagEntity tag) async {
     final model = _entityToModel(tag);
-    await _tags.updateTag(model);
+    await _tagDataSource.updateTag(model);
   }
 
   @override
   Future<void> deleteTag(String id) async {
-    await _tags.removeTag(id);
+    await _tagDataSource.removeTag(id);
   }
 
   /// Converts TagModel to TagEntity.

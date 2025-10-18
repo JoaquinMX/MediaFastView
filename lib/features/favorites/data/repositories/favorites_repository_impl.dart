@@ -1,32 +1,30 @@
 import '../../domain/entities/favorite_entity.dart';
 import '../../domain/entities/favorite_item_type.dart';
 import '../../domain/repositories/favorites_repository.dart';
-import '../data_sources/shared_preferences_data_source.dart';
 import '../isar/isar_favorites_data_source.dart';
-import '../persistence/hybrid_favorite_persistence_bridge.dart';
 import '../models/favorite_model.dart';
 
-/// Implementation of FavoritesRepository using SharedPreferences.
+/// Implementation of FavoritesRepository backed by Isar persistence.
 class FavoritesRepositoryImpl implements FavoritesRepository {
   FavoritesRepositoryImpl(
-    IsarFavoritesDataSource isarFavoritesDataSource,
-    SharedPreferencesFavoritesDataSource legacyFavoritesDataSource,
-  ) : _favorites = FavoritePersistenceBridge(
-          isarFavoritesDataSource: isarFavoritesDataSource,
-          legacyFavoritesDataSource: legacyFavoritesDataSource,
-        );
+    this._favoritesDataSource,
+  );
 
-  final FavoritePersistenceBridge _favorites;
+  final IsarFavoritesDataSource _favoritesDataSource;
 
   @override
   Future<List<FavoriteEntity>> getFavorites() async {
-    final favorites = await _favorites.loadFavorites();
+    final favorites = await _favoritesDataSource.getFavorites();
     return favorites.map(_mapModelToEntity).toList(growable: false);
   }
 
   @override
   Future<List<String>> getFavoriteMediaIds() async {
-    return _favorites.getFavoriteMediaIds();
+    final favorites = await _favoritesDataSource.getFavorites();
+    return favorites
+        .where((favorite) => favorite.itemType == FavoriteItemType.media)
+        .map((favorite) => favorite.itemId)
+        .toList(growable: false);
   }
 
   @override
@@ -46,7 +44,7 @@ class FavoritesRepositoryImpl implements FavoritesRepository {
     }
 
     final models = favorites.map(_mapEntityToModel).toList(growable: false);
-    await _favorites.addFavorites(models);
+    await _favoritesDataSource.addFavorites(models);
   }
 
   @override
@@ -60,7 +58,7 @@ class FavoritesRepositoryImpl implements FavoritesRepository {
       return;
     }
 
-    await _favorites.removeFavorites(itemIds);
+    await _favoritesDataSource.removeFavorites(itemIds);
   }
 
   @override
@@ -68,7 +66,7 @@ class FavoritesRepositoryImpl implements FavoritesRepository {
     String itemId, {
     FavoriteItemType type = FavoriteItemType.media,
   }) async {
-    return _favorites.isFavorite(itemId, type: type);
+    return _favoritesDataSource.isFavorite(itemId, type: type);
   }
 
   FavoriteModel _mapEntityToModel(FavoriteEntity entity) {

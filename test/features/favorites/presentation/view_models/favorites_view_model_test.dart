@@ -2,16 +2,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
+import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
 import 'package:media_fast_view/features/favorites/presentation/view_models/favorites_view_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
+import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 
-import '../../../../mocks.mocks.dart';
+class _MockFavoritesRepository extends Mock implements FavoritesRepository {}
+
+class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
 
 void main() {
-  late MockFavoritesRepository favoritesRepository;
-  late MockSharedPreferencesMediaDataSource mediaDataSource;
+  late _MockFavoritesRepository favoritesRepository;
+  late _MockIsarMediaDataSource mediaDataSource;
   late FavoritesViewModel viewModel;
 
   const mediaId = 'media-1';
@@ -54,8 +58,8 @@ void main() {
   );
 
   setUp(() {
-    favoritesRepository = MockFavoritesRepository();
-    mediaDataSource = MockSharedPreferencesMediaDataSource();
+    favoritesRepository = _MockFavoritesRepository();
+    mediaDataSource = _MockIsarMediaDataSource();
     viewModel = FavoritesViewModel(favoritesRepository, mediaDataSource);
   });
 
