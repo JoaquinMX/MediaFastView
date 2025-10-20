@@ -135,8 +135,7 @@ lib/
 │   │   │   │   ├── favorites_screen.dart
 │   │   │   │   └── slideshow_screen.dart
 │   │   │   ├── widgets/
-│   │   │   │   ├── favorite_toggle_button.dart
-│   │   │   │   └── slideshow_controls.dart
+│   │   │   │   └── favorite_toggle_button.dart
 │   │   │   └── view_models/
 │   │   │       ├── favorites_view_model.dart
 │   │   │       └── slideshow_view_model.dart
@@ -156,13 +155,19 @@ lib/
 │   │       │   └── shared_preferences_data_source.dart
 │   │       └── repositories/
 │   │           └── favorites_repository_impl.dart
+│   ├── shared/
+│   │   └── widgets/
+│   │       ├── media_playback_controls.dart
+│   │       └── media_progress_indicator.dart
 │   └── full_screen/
 │       ├── presentation/
 │       │   ├── screens/
 │       │   │   └── full_screen_viewer_screen.dart
 │       │   ├── widgets/
-│       │   │   ├── image_viewer.dart
-│       │   │   ├── video_player_controls.dart
+│       │   │   ├── full_screen_favorite_toggle.dart
+│       │   │   ├── full_screen_image_viewer.dart
+│       │   │   ├── full_screen_video_player.dart
+│       │   │   ├── full_screen_video_progress_slider.dart
 │       │   │   └── zoom_pan_viewer.dart
 │       │   └── view_models/
 │       │       └── full_screen_view_model.dart
@@ -200,13 +205,24 @@ lib/
 ├── shared/
 │   ├── widgets/
 │   │   ├── app_bar.dart
+│   │   ├── confirmation_dialog.dart
+│   │   ├── error_boundary.dart
+│   │   ├── file_operation_button.dart
+│   │   ├── file_operation_progress_dialog.dart
 │   │   ├── grid_layout.dart
-│   │   └── confirmation_dialog.dart
+│   │   ├── main_navigation.dart
+│   │   ├── media_playback_controls.dart
+│   │   ├── media_progress_indicator.dart
+│   │   └── operation_progress_indicator.dart
 │   └── providers/
 │       ├── app_settings_provider.dart
 │       └── theme_provider.dart
 └── main.dart
 ```
+
+### Shared Playback Components
+
+- **MediaPlaybackControls** and **MediaProgressIndicator** offer configurable playback chrome reused by the favorites slideshow and the full-screen viewer, ensuring consistent play/pause, looping, muting, and progress interactions across media surfaces.
 
 ## Key Classes and Entities
 
