@@ -11,8 +11,10 @@ import '../../domain/entities/viewer_state_entity.dart';
 import '../view_models/full_screen_view_model.dart';
 import '../widgets/full_screen_favorite_toggle.dart';
 import '../widgets/full_screen_image_viewer.dart';
-import '../widgets/full_screen_video_controls.dart';
 import '../widgets/full_screen_video_player.dart';
+import '../widgets/full_screen_video_progress_slider.dart';
+import '../../../../shared/widgets/media_playback_controls.dart';
+import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 
 /// Full-screen media viewer screen
@@ -154,16 +156,9 @@ class _FullScreenViewerScreenState
                       ),
                     ),
                     padding: const EdgeInsets.all(16),
-                    child: FullScreenVideoControls(
-                      isPlaying: state.isPlaying,
-                      isMuted: state.isMuted,
-                      isLooping: state.isLooping,
-                      currentPosition: state.currentPosition,
-                      totalDuration: state.totalDuration,
-                      onPlayPause: _viewModel.togglePlayPause,
-                      onMute: _viewModel.toggleMute,
-                      onLoop: _viewModel.toggleLoop,
-                      onSeek: _handleSeek,
+                    child: SafeArea(
+                      top: false,
+                      child: _buildVideoControls(state),
                     ),
                   ),
                 ),
@@ -248,6 +243,89 @@ class _FullScreenViewerScreenState
           ),
         },
       ),
+    );
+  }
+
+  Widget _buildVideoControls(FullScreenLoaded state) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final totalItems = state.mediaList.length;
+    final videoProgress = state.totalDuration.inMilliseconds > 0
+        ? state.currentPosition.inMilliseconds /
+            state.totalDuration.inMilliseconds
+        : 0.0;
+    final clampedProgress = videoProgress.clamp(0.0, 1.0).toDouble();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (totalItems > 0)
+          MediaProgressIndicator(
+            currentIndex: state.currentIndex,
+            totalItems: totalItems,
+            showProgressBar: false,
+            counterTextStyle: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        if (totalItems > 0) const SizedBox(height: 12),
+        MediaPlaybackControls(
+          isPlaying: state.isPlaying,
+          isLooping: state.isLooping,
+          isMuted: state.isMuted,
+          progress: clampedProgress,
+          onPlayPause: _viewModel.togglePlayPause,
+          onNext: () => _viewModel.nextMedia(),
+          onPrevious: () => _viewModel.previousMedia(),
+          onToggleLoop: _viewModel.toggleLoop,
+          onToggleMute: _viewModel.toggleMute,
+          visibility: const MediaPlaybackControlVisibility(
+            showShuffle: false,
+            showDurationSlider: false,
+            showVideoLoop: false,
+          ),
+          availability: MediaPlaybackControlAvailability(
+            enablePrevious: state.currentIndex > 0,
+            enablePlayPause: true,
+            enableNext: state.currentIndex < totalItems - 1,
+            enableLoop: true,
+            enableShuffle: false,
+            enableMute: true,
+            enableDurationSlider: false,
+            enableVideoLoop: false,
+          ),
+          style: MediaPlaybackControlStyle(
+            iconTheme: const IconThemeData(color: Colors.white, size: 28),
+            playPauseIconSize: 48,
+            activeColor: colorScheme.primary,
+            inactiveColor: Colors.white,
+            durationLabelTextStyle: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            sliderActiveTrackColor: colorScheme.primary,
+            sliderInactiveTrackColor: Colors.white30,
+            sliderThumbColor: Colors.white,
+            sliderOverlayColor: Colors.white24,
+            progressColor: colorScheme.primary,
+            progressBackgroundColor: Colors.white24,
+            controlSpacing: 16,
+            sectionSpacing: 24,
+            progressBarHeight: 56,
+          ),
+          progressBuilder: (context, progress, style) {
+            return FullScreenVideoProgressSlider(
+              progress: progress,
+              currentPosition: state.currentPosition,
+              totalDuration: state.totalDuration,
+              onSeek: _handleSeek,
+              style: style,
+            );
+          },
+        ),
+      ],
     );
   }
 

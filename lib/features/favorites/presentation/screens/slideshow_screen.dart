@@ -3,10 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_fast_view/core/config/app_config.dart';
+import 'package:media_fast_view/shared/widgets/media_playback_controls.dart';
+import 'package:media_fast_view/shared/widgets/media_progress_indicator.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
+
 import '../view_models/slideshow_view_model.dart';
-import '../widgets/slideshow_controls.dart';
 import '../widgets/slideshow_video_player.dart';
 
 /// Full-screen slideshow screen for viewing favorite media items.
@@ -149,31 +152,71 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Progress indicator
-              _buildProgressIndicator(state, viewModel),
-
-              const SizedBox(height: 16),
-
-              // Controls
-              SlideshowControls(
-                state: state,
-                onPlayPause: _handlePlayPause,
-                onNext: viewModel.nextItem,
-                onPrevious: viewModel.previousItem,
-                onToggleLoop: viewModel.toggleLoop,
-                onToggleVideoLoop: viewModel.toggleVideoLoop,
-                onToggleMute: viewModel.toggleMute,
-                onToggleShuffle: viewModel.toggleShuffle,
-                onDurationSelected: viewModel.setImageDisplayDuration,
-                showProgressBar:
-                    viewModel.currentMedia?.type == MediaType.video,
-                showVideoLoopButton:
-                    viewModel.currentMedia?.type == MediaType.video,
+              MediaProgressIndicator(
+                currentIndex: viewModel.currentIndex,
+                totalItems: viewModel.totalItems,
+                progress: viewModel.totalItems > 0
+                    ? (viewModel.currentIndex + 1) / viewModel.totalItems
+                    : 0,
+                counterTextStyle: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                progressColor: Colors.white,
+                backgroundColor: Colors.white.withValues(alpha: 0.3),
               ),
 
               const SizedBox(height: 16),
 
-              // Close button
+              MediaPlaybackControls(
+                isPlaying: viewModel.isPlaying,
+                isLooping: viewModel.isLooping,
+                isShuffleEnabled: switch (state) {
+                  SlideshowPlaying(:final isShuffleEnabled) =>
+                    isShuffleEnabled,
+                  SlideshowPaused(:final isShuffleEnabled) =>
+                    isShuffleEnabled,
+                  _ => false,
+                },
+                isMuted: viewModel.isMuted,
+                isVideoLooping: viewModel.isVideoLooping,
+                progress: switch (state) {
+                  SlideshowPlaying(:final progress) => progress,
+                  SlideshowPaused(:final progress) => progress,
+                  _ => 0.0,
+                },
+                minDuration: AppConfig.slideshowMinDuration,
+                maxDuration: AppConfig.slideshowMaxDuration,
+                currentItemDuration: switch (state) {
+                  SlideshowPlaying(:final imageDisplayDuration) =>
+                    imageDisplayDuration,
+                  SlideshowPaused(:final imageDisplayDuration) =>
+                    imageDisplayDuration,
+                  _ => const Duration(seconds: 5),
+                },
+                onPlayPause: _handlePlayPause,
+                onNext: viewModel.nextItem,
+                onPrevious: viewModel.previousItem,
+                onToggleLoop: viewModel.toggleLoop,
+                onToggleShuffle: viewModel.toggleShuffle,
+                onToggleMute: viewModel.toggleMute,
+                onToggleVideoLoop: viewModel.toggleVideoLoop,
+                onDurationSelected: viewModel.setImageDisplayDuration,
+                visibility: MediaPlaybackControlVisibility(
+                  showProgressBar:
+                      viewModel.currentMedia?.type == MediaType.video,
+                  showVideoLoop:
+                      viewModel.currentMedia?.type == MediaType.video,
+                ),
+                style: MediaPlaybackControlStyle(
+                  progressBackgroundColor:
+                      Colors.white.withValues(alpha: 0.3),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
               Align(
                 alignment: Alignment.centerRight,
                 child: IconButton(
@@ -186,37 +229,6 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildProgressIndicator(
-    SlideshowState state,
-    SlideshowViewModel viewModel,
-  ) {
-    final currentIndex = viewModel.currentIndex;
-    final totalItems = viewModel.totalItems;
-
-    return Column(
-      children: [
-        // Item counter
-        Text(
-          '${currentIndex + 1} / $totalItems',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-
-        const SizedBox(height: 8),
-
-        // Progress bar
-        LinearProgressIndicator(
-          value: totalItems > 0 ? (currentIndex + 1) / totalItems : 0,
-          backgroundColor: Colors.white.withValues(alpha: 0.3),
-          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-        ),
-      ],
     );
   }
 
