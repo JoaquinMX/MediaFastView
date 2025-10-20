@@ -3,11 +3,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_fast_view/core/config/app_config.dart';
+import 'package:media_fast_view/shared/widgets/media_playback_controls.dart';
+import 'package:media_fast_view/shared/widgets/media_progress_indicator.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
-import '../../../shared/widgets/media_playback_controls.dart';
-import '../../../shared/widgets/media_progress_indicator.dart';
+
 import '../view_models/slideshow_view_model.dart';
 import '../widgets/slideshow_video_player.dart';
 
