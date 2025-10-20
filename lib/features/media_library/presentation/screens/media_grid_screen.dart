@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
+import '../../../../shared/widgets/permission_issue_panel.dart';
 
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
@@ -663,88 +664,40 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     MediaViewModel viewModel,
   ) {
     return Center(
-      child: Container(
-        padding: UiSpacing.dialogPadding,
-        margin: UiSpacing.dialogMargin,
-        decoration: BoxDecoration(
-          color: UiColors.white,
-          borderRadius: BorderRadius.circular(UiSizing.borderRadiusMedium),
-          border: Border.all(
-            color: UiColors.orange,
-            width: UiSizing.borderWidth,
-          ),
-          boxShadow: [UiShadows.standard],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.lock, size: UiSizing.iconHuge, color: UiColors.orange),
-            SizedBox(height: UiSpacing.verticalGap),
-            const Text(
-              'Access to this directory has been revoked',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: UiSpacing.smallGap),
-            Text(
-              'The permissions for "$directoryName" are no longer available.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16),
-            ),
-            SizedBox(height: UiSpacing.smallGap),
-            const Text(
-              'This can happen when security-scoped bookmarks expire or when directory permissions change.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            SizedBox(height: UiSpacing.verticalGap * 1.5),
-            ElevatedButton.icon(
-              onPressed: () async {
-                try {
-                  await viewModel.recoverPermissions();
-                  // Show success feedback
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Permissions recovered successfully!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  // Show error feedback
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Failed to recover permissions: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              icon: const Icon(Icons.folder_open),
-              label: const Text('Re-select Directory'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: UiColors.orange,
-                foregroundColor: UiColors.white,
-                padding: UiSpacing.buttonPadding,
-              ),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () =>
-                  viewModel.loadMedia(), // Try refreshing without recovery
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try Again'),
-            ),
-            SizedBox(height: UiSpacing.verticalGap),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Go Back'),
-            ),
-          ],
-        ),
+      child: PermissionIssuePanel(
+        message: 'The permissions for "$directoryName" are no longer available.',
+        helpText:
+            'This can happen when security-scoped bookmarks expire or when directory permissions change.',
+        recoverLabel: 'Re-select Directory',
+        recoverIcon: Icons.folder_open,
+        tryAgainIcon: Icons.refresh,
+        backIcon: Icons.arrow_back,
+        tryAgainLabel: 'Try Again',
+        backLabel: 'Go Back',
+        onRecover: () async {
+          try {
+            await viewModel.recoverPermissions();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Permissions recovered successfully!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to recover permissions: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
+        onTryAgain: viewModel.loadMedia,
+        onBack: () => Navigator.of(context).pop(),
       ),
     );
   }
