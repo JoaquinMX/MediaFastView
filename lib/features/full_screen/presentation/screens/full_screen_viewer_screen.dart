@@ -13,6 +13,7 @@ import '../widgets/full_screen_favorite_toggle.dart';
 import '../widgets/full_screen_image_viewer.dart';
 import '../widgets/full_screen_video_controls.dart';
 import '../widgets/full_screen_video_player.dart';
+import '../../../../shared/widgets/permission_issue_panel.dart';
 
 /// Full-screen media viewer screen
 class FullScreenViewerScreen extends ConsumerStatefulWidget {
@@ -345,93 +346,70 @@ class _FullScreenViewerScreenState
   Widget _buildPermissionRevoked() {
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
-      child: Container(
-        padding: const EdgeInsets.all(24),
+      child: PermissionIssuePanel(
         margin: const EdgeInsets.symmetric(horizontal: 32),
-        decoration: BoxDecoration(
-          color: colorScheme.surface.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: colorScheme.error, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: colorScheme.shadow.withValues(alpha: 0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+        maxWidth: 520,
+        backgroundColor: colorScheme.surface.withValues(alpha: 0.9),
+        borderColor: colorScheme.error,
+        iconColor: colorScheme.error,
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        actions: [
+          PermissionIssueAction(
+            label: 'Try to Recover',
+            icon: Icons.refresh,
+            buttonStyle: ElevatedButton.styleFrom(
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.onPrimary,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.lock,
-              size: 64,
-              color: colorScheme.error,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Access to this directory has been revoked',
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'The permissions for this directory are no longer available.',
-              style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'This can happen when security-scoped bookmarks expire or when directory permissions change.',
-              style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () async {
-                // Try to recover permissions using the view model
-                final success = await _viewModel.attemptPermissionRecovery(
-                  widget.directoryPath,
-                  bookmarkData: widget.bookmarkData,
-                );
+            onPressed: () async {
+              final success = await _viewModel.attemptPermissionRecovery(
+                widget.directoryPath,
+                bookmarkData: widget.bookmarkData,
+              );
 
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(success ? 'Access recovered successfully!' : 'Recovery failed. Please go back and re-select the directory.'),
-                      backgroundColor: success ? colorScheme.primary : colorScheme.error,
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success
+                          ? 'Access recovered successfully!'
+                          : 'Recovery failed. Please go back and re-select the directory.',
                     ),
-                  );
-                }
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try to Recover'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
-              ),
+                    backgroundColor:
+                        success ? colorScheme.primary : colorScheme.error,
+                  ),
+                );
+              }
+            },
+          ),
+          PermissionIssueAction(
+            label: 'Back to Grid',
+            icon: Icons.arrow_back,
+            buttonStyle: ElevatedButton.styleFrom(
+              backgroundColor: colorScheme.secondary,
+              foregroundColor: colorScheme.onSecondary,
             ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('Back to Grid'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colorScheme.secondary,
-                foregroundColor: colorScheme.onSecondary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Return to the media grid and re-select the directory to restore full access.',
-              style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            onPressed: () async => Navigator.of(context).pop(),
+          ),
+        ],
+        messages: const [
+          PermissionIssueMessage(
+            'The permissions for this directory are no longer available.',
+            type: PermissionIssueMessageType.secondary,
+          ),
+          PermissionIssueMessage(
+            'This can happen when security-scoped bookmarks expire or when directory permissions change.',
+            type: PermissionIssueMessageType.helper,
+          ),
+        ],
+        footer: const Text(
+          'Return to the media grid and re-select the directory to restore full access.',
         ),
       ),
     );

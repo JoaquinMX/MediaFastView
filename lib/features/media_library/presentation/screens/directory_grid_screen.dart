@@ -14,6 +14,7 @@ import '../../../../core/constants/ui_constants.dart';
 
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
@@ -501,30 +502,38 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     return Column(
       children: [
         if (inaccessibleDirectories.isNotEmpty)
-          Container(
-            padding: UiSpacing.gridPadding,
-            color: Colors.orange.shade50,
-            child: Row(
-              children: [
-                Icon(Icons.warning, color: UiColors.orange),
-                SizedBox(width: UiSpacing.smallGap),
-                Expanded(
-                  child: Text(
-                    '${inaccessibleDirectories.length} directory(ies) are inaccessible due to permission changes. '
-                    'Click "Re-grant Permissions" to restore access.',
-                    style: TextStyle(color: UiColors.orange),
-                  ),
+          PermissionIssuePanel(
+            title: 'Some directories are inaccessible',
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            maxWidth: null,
+            backgroundColor: Colors.orange.shade50,
+            iconColor: UiColors.orange,
+            borderColor: UiColors.orange,
+            boxShadow: const [],
+            actions: [
+              PermissionIssueAction(
+                label: 'Re-grant Permissions',
+                buttonStyle: ElevatedButton.styleFrom(
+                  backgroundColor: UiColors.orange,
+                  foregroundColor: UiColors.white,
                 ),
-                ElevatedButton(
-                  onPressed: () => _showReGrantPermissionsDialog(
-                    context,
-                    inaccessibleDirectories,
-                    viewModel,
-                  ),
-                  child: const Text('Re-grant Permissions'),
+                onPressed: () async => _showReGrantPermissionsDialog(
+                  context,
+                  inaccessibleDirectories,
+                  viewModel,
                 ),
-              ],
-            ),
+              ),
+            ],
+            messages: [
+              PermissionIssueMessage(
+                '${inaccessibleDirectories.length} directory(ies) are inaccessible due to permission changes.',
+              ),
+              const PermissionIssueMessage(
+                'Click "Re-grant Permissions" to restore access.',
+                type: PermissionIssueMessageType.helper,
+              ),
+            ],
           ),
         Expanded(
           child: _buildDirectoryMarqueeWrapper(
@@ -589,30 +598,37 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     return Column(
       children: [
         if (invalidDirectories.isNotEmpty)
-          Container(
-            padding: UiSpacing.gridPadding,
-            color: Colors.red.shade50,
-            child: Row(
-              children: [
-                Icon(Icons.error, color: UiColors.red),
-                SizedBox(width: UiSpacing.smallGap),
-                Expanded(
-                  child: Text(
-                    '${invalidDirectories.length} directory(ies) have invalid bookmarks. '
-                    'Click "Recover Bookmarks" to re-select directories.',
-                    style: TextStyle(color: UiColors.red),
-                  ),
+          PermissionIssuePanel(
+            title: 'Bookmarks need recovery',
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            backgroundColor: Colors.red.shade50,
+            iconColor: UiColors.red,
+            borderColor: UiColors.red,
+            boxShadow: const [],
+            actions: [
+              PermissionIssueAction(
+                label: 'Recover Bookmarks',
+                buttonStyle: ElevatedButton.styleFrom(
+                  backgroundColor: UiColors.red,
+                  foregroundColor: UiColors.white,
                 ),
-                ElevatedButton(
-                  onPressed: () => _showRecoverBookmarksDialog(
-                    context,
-                    invalidDirectories,
-                    viewModel,
-                  ),
-                  child: const Text('Recover Bookmarks'),
+                onPressed: () async => _showRecoverBookmarksDialog(
+                  context,
+                  invalidDirectories,
+                  viewModel,
                 ),
-              ],
-            ),
+              ),
+            ],
+            messages: [
+              PermissionIssueMessage(
+                '${invalidDirectories.length} directory(ies) have invalid bookmarks.',
+              ),
+              const PermissionIssueMessage(
+                'Click "Recover Bookmarks" to re-select directories.',
+                type: PermissionIssueMessageType.helper,
+              ),
+            ],
           ),
         Expanded(
           child: _buildDirectoryMarqueeWrapper(
