@@ -8,6 +8,7 @@ import '../../../../../lib/features/favorites/domain/entities/favorite_item_type
 import '../../../../../lib/features/favorites/domain/repositories/favorites_repository.dart';
 import '../../../../../lib/features/media_library/domain/entities/media_entity.dart';
 import '../../../../../lib/features/media_library/domain/repositories/media_repository.dart';
+import '../../../../../lib/features/media_library/domain/use_cases/get_media_use_case.dart';
 import '../../../../../lib/features/media_library/presentation/view_models/media_grid_view_model.dart';
 import '../../../../../lib/shared/providers/repository_providers.dart';
 
@@ -132,6 +133,7 @@ class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
 ProviderContainer _createMediaTestContainer({
   required IsarMediaDataSource mediaDataSource,
   required InMemoryMediaRepository mediaRepository,
+  required GetMediaUseCase getMediaUseCase,
   required InMemoryFavoritesRepository favoritesRepository,
 }) {
   return ProviderContainer(
@@ -144,7 +146,7 @@ ProviderContainer _createMediaTestContainer({
           (ref) => MediaViewModel(
             ref,
             params,
-            mediaRepository: mediaRepository,
+            getMediaUseCase: getMediaUseCase,
             mediaDataSource: mediaDataSource,
           ),
         );
@@ -159,6 +161,7 @@ void main() {
   late _MockIsarMediaDataSource mediaCache;
   late InMemoryMediaRepository mediaRepository;
   late InMemoryFavoritesRepository favoritesRepository;
+  late GetMediaUseCase getMediaUseCase;
   const params = MediaViewModelParams(
     directoryPath: '/dir1',
     directoryName: 'Directory 1',
@@ -202,12 +205,14 @@ void main() {
         directoryId: '/dir1',
       ),
     ]);
+    getMediaUseCase = GetMediaUseCase(mediaRepository);
   });
 
   test('toggleMediaSelection toggles selection state', () async {
     final container = _createMediaTestContainer(
       mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
+      getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
     );
     addTearDown(container.dispose);
@@ -234,6 +239,7 @@ void main() {
     final container = _createMediaTestContainer(
       mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
+      getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
     );
     addTearDown(container.dispose);
@@ -256,6 +262,7 @@ void main() {
     final container = _createMediaTestContainer(
       mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
+      getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
     );
     addTearDown(container.dispose);
@@ -278,6 +285,7 @@ void main() {
     final container = _createMediaTestContainer(
       mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
+      getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
     );
     addTearDown(container.dispose);
@@ -293,6 +301,7 @@ void main() {
     final container = _createMediaTestContainer(
       mediaDataSource: mediaCache,
       mediaRepository: mediaRepository,
+      getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
     );
     addTearDown(container.dispose);
