@@ -117,6 +117,21 @@ void main() {
       expect(directories, equals(<DirectoryModel>[model]));
     });
 
+    test('getDirectoryById retrieves a stored directory', () async {
+      final model = _buildDirectory(id: 'dir-1');
+      await dataSource.addDirectory(model);
+
+      final result = await dataSource.getDirectoryById('dir-1');
+
+      expect(result, equals(model));
+    });
+
+    test('getDirectoryById returns null when directory missing', () async {
+      final result = await dataSource.getDirectoryById('unknown');
+
+      expect(result, isNull);
+    });
+
     test('saveDirectories replaces existing entries', () async {
       final original = _buildDirectory(id: 'dir-1', name: 'Original');
       await dataSource.addDirectory(original);

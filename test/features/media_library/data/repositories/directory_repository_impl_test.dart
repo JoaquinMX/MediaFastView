@@ -6,6 +6,7 @@ import 'package:media_fast_view/features/media_library/data/isar/isar_media_data
 import 'package:media_fast_view/features/media_library/data/models/directory_model.dart';
 import 'package:media_fast_view/features/media_library/data/repositories/directory_repository_impl.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
+import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
@@ -82,6 +83,65 @@ void main() {
 
         expect(capturedModel.tagIds, equals(existingModel.tagIds));
         expect(capturedModel.bookmarkData, equals(existingModel.bookmarkData));
+      });
+    });
+
+    group('getDirectoryById', () {
+      test('returns entity when data source finds a matching directory', () async {
+        const path = '/test/path';
+        final stableId = generateDirectoryId(path);
+        final model = DirectoryModel(
+          id: stableId,
+          path: path,
+          name: 'Test',
+          thumbnailPath: null,
+          tagIds: const ['tag-1'],
+          lastModified: DateTime(2024, 1, 1),
+          bookmarkData: null,
+        );
+
+        when(isarDirectoryDataSource.getDirectoryById(stableId)).thenAnswer(
+          (_) async => model,
+        );
+
+        final entity = await repository.getDirectoryById(stableId);
+
+        expect(entity, isNotNull);
+        expect(entity!.id, stableId);
+        expect(entity.tagIds, ['tag-1']);
+      });
+
+      test('migrates legacy identifiers when direct lookup misses', () async {
+        final legacyModel = DirectoryModel(
+          id: 'legacy-id',
+          path: '/legacy/path',
+          name: 'Legacy',
+          thumbnailPath: null,
+          tagIds: const ['tag-legacy'],
+          lastModified: DateTime(2024, 1, 1),
+          bookmarkData: null,
+        );
+        final stableId = generateDirectoryId(legacyModel.path);
+
+        when(isarDirectoryDataSource.getDirectoryById(stableId)).thenAnswer(
+          (_) async => null,
+        );
+        when(isarDirectoryDataSource.getDirectories()).thenAnswer(
+          (_) async => [legacyModel],
+        );
+        when(isarMediaDataSource.migrateDirectoryId(any, any)).thenAnswer((_) async {});
+        when(isarDirectoryDataSource.removeDirectory(any)).thenAnswer((_) async {});
+        when(isarDirectoryDataSource.addDirectory(any)).thenAnswer((_) async {});
+
+        final entity = await repository.getDirectoryById(stableId);
+
+        expect(entity, isNotNull);
+        expect(entity!.id, stableId);
+        expect(entity.tagIds, ['tag-legacy']);
+        verify(isarDirectoryDataSource.getDirectories()).called(1);
+        verify(isarMediaDataSource.migrateDirectoryId('legacy-id', stableId)).called(1);
+        verify(isarDirectoryDataSource.removeDirectory('legacy-id')).called(1);
+        verify(isarDirectoryDataSource.addDirectory(any)).called(1);
       });
     });
   });
