@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
+import '../../../../shared/widgets/selection_toolbar.dart';
 
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
@@ -81,10 +82,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     _viewModel = ref.read(mediaViewModelProvider(_params!).notifier);
     final selectedMediaIds = ref.watch(selectedMediaIdsProvider(_params!));
     final isSelectionMode = ref.watch(mediaSelectionModeProvider(_params!));
-    final selectedMediaCount = ref.watch(selectedMediaCountProvider(_params!));
     final sortOption = state is MediaLoaded
         ? state.sortOption
         : _viewModel?.currentSortOption ?? MediaSortOption.nameAscending;
+    final favoritesState = ref.watch(favoritesViewModelProvider);
 
     return Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
@@ -110,14 +111,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            appBar: isSelectionMode
-                ? _buildSelectionAppBar(
-                    selectedMediaCount,
-                    _viewModel!,
-                    state as MediaLoaded,
-                    selectedMediaIds,
-                  )
-                : _buildNormalAppBar(sortOption, _viewModel!),
+            appBar: _buildNormalAppBar(sortOption, _viewModel!),
             body: Stack(
               children: [
                 Column(
@@ -153,6 +147,20 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     ),
                   ],
                 ),
+                if (isSelectionMode)
+                  SelectionToolbar(
+                    selectedCount: selectedMediaIds.length,
+                    onClearSelection: _viewModel!.clearMediaSelection,
+                    clearButtonLabel: 'Clear Selection',
+                    actions: _buildMediaSelectionActions(
+                      _viewModel!,
+                      state,
+                      selectedMediaIds,
+                      favoritesState,
+                    ),
+                    selectionLabelBuilder: (count) =>
+                        '$count item${count == 1 ? '' : 's'} selected',
+                  ),
               ],
             ),
           ),
@@ -191,60 +199,46 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
   }
 
-  AppBar _buildSelectionAppBar(
-    int selectedCount,
+  List<SelectionToolbarAction> _buildMediaSelectionActions(
     MediaViewModel viewModel,
-    MediaLoaded state,
+    MediaState state,
     Set<String> selectedMediaIds,
+    FavoritesState favoritesState,
   ) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final favoritesState = ref.watch(favoritesViewModelProvider);
-    final favoriteActionLabel =
-        _favoriteBulkActionLabel(favoritesState, selectedMediaIds);
+    final actions = <SelectionToolbarAction>[
+      SelectionToolbarAction(
+        icon: Icons.tag,
+        label: 'Assign Tags',
+        tooltip: 'Assign Tags',
+        onPressed: selectedMediaIds.isEmpty
+            ? null
+            : () => unawaited(
+                  _assignTagsToSelectedMedia(viewModel),
+                ),
+      ),
+    ];
 
-    return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.close),
-        tooltip: 'Clear selection',
-        onPressed: viewModel.clearMediaSelection,
-      ),
-      title: Text(
-        '$selectedCount selected',
-        style: theme.textTheme.titleLarge?.copyWith(
-          color: colorScheme.onSurface,
-          fontWeight: FontWeight.w600,
+    if (state is MediaLoaded) {
+      final favoriteActionLabel =
+          _favoriteBulkActionLabel(favoritesState, selectedMediaIds);
+      actions.add(
+        SelectionToolbarAction(
+          icon: Icons.favorite,
+          label: favoriteActionLabel,
+          tooltip: favoriteActionLabel,
+          onPressed: selectedMediaIds.isEmpty
+              ? null
+              : () => unawaited(
+                    _toggleSelectedMediaFavorites(
+                      state.media,
+                      selectedMediaIds,
+                    ),
+                  ),
         ),
-      ),
-      actions: [
-        FilledButton.icon(
-          onPressed: () => unawaited(_assignTagsToSelectedMedia(viewModel)),
-          icon: const Icon(Icons.tag),
-          label: const Text('Assign Tags'),
-          style: FilledButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            textStyle: const TextStyle(fontSize: 12),
-          ),
-        ),
-        const SizedBox(width: 8),
-        FilledButton.icon(
-          onPressed: () => unawaited(
-            _toggleSelectedMediaFavorites(state.media, selectedMediaIds),
-          ),
-          icon: const Icon(Icons.favorite),
-          label: Text(favoriteActionLabel),
-          style: FilledButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            textStyle: const TextStyle(fontSize: 12),
-          ),
-        ),
-        const SizedBox(width: 8),
-      ],
-    );
+      );
+    }
+
+    return actions;
   }
 
   String _favoriteBulkActionLabel(
