@@ -404,6 +404,20 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
     await _mediaDataSource.upsertMedia([model]);
   }
 
+  MediaEntity _mediaModelToEntity(MediaModel media) {
+    return MediaEntity(
+      id: media.id,
+      path: media.path,
+      name: media.name,
+      type: media.type,
+      size: media.size,
+      lastModified: media.lastModified,
+      tagIds: media.tagIds,
+      directoryId: media.directoryId,
+      bookmarkData: media.bookmarkData,
+    );
+  }
+
   /// Helper method to get media entities for favorite IDs.
   Future<List<MediaEntity>> _getMediaForFavorites(
     List<String> favoriteIds,
@@ -417,32 +431,54 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       return const <MediaEntity>[];
     }
 
-    final libraryMedia = await _getMediaUseCase.entireLibrary();
+    final storedMedia = await _mediaDataSource.getMedia();
     LoggingService.instance.info(
-      'Received ${libraryMedia.length} media items from GetMediaUseCase',
+      'Found ${storedMedia.length} stored media items',
     );
 
-    final mediaMap = {for (final media in libraryMedia) media.id: media};
-    final validMedia = <MediaEntity>[];
+    final storedMediaMap = {for (final media in storedMedia) media.id: media};
+    final resolvedMedia = <MediaEntity>[];
+    final missingIds = <String>[];
 
     for (final id in favoriteIds) {
-      final media = mediaMap[id];
-      if (media != null) {
-        validMedia.add(media);
+      final stored = storedMediaMap[id];
+      if (stored != null) {
+        final entity = _mediaModelToEntity(stored);
+        resolvedMedia.add(entity);
         LoggingService.instance.debug(
-          'Successfully loaded media for ID $id: ${media.name}, path: ${media.path}',
+          'Successfully loaded cached media for ID $id: ${entity.name}, path: ${entity.path}',
         );
       } else {
+        missingIds.add(id);
         LoggingService.instance.warning(
-          'No media found for favorite ID $id in library results',
+          'No cached media found for favorite ID $id, will attempt repository lookup',
         );
       }
     }
 
+    if (missingIds.isNotEmpty) {
+      LoggingService.instance.info(
+        'Attempting to resolve ${missingIds.length} missing favorites via repository',
+      );
+      for (final id in missingIds) {
+        final media = await _getMediaUseCase.byId(id);
+        if (media != null) {
+          resolvedMedia.add(media);
+          LoggingService.instance.debug(
+            'Resolved missing favorite $id via repository lookup',
+          );
+        } else {
+          LoggingService.instance.warning(
+            'Repository could not resolve favorite ID $id',
+          );
+        }
+      }
+    }
+
     LoggingService.instance.info(
-      'Loaded ${validMedia.length} valid media entities out of ${favoriteIds.length} favorites',
+      'Loaded ${resolvedMedia.length} valid media entities out of ${favoriteIds.length} favorites',
     );
-    return validMedia;
+    return resolvedMedia;
   }
 }
 

@@ -62,6 +62,17 @@ void main() {
     });
   });
 
+  group('byId', () {
+    test('delegates to repository', () async {
+      when(mediaRepository.getMediaById(any))
+          .thenAnswer((_) async => null);
+
+      await useCase.byId('media-id');
+
+      verify(mediaRepository.getMediaById('media-id')).called(1);
+    });
+  });
+
   group('filterByTagsForDirectory', () {
     test('delegates to repository with bookmark data', () async {
       const tags = ['tag-1', 'tag-2'];
