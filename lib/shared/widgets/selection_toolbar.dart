@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/constants/ui_constants.dart';
+import '../../core/constants/ui_constants.dart';
 
 /// Describes an action that can be displayed inside the bulk selection toolbar.
 class SelectionToolbarAction {
@@ -9,6 +9,7 @@ class SelectionToolbarAction {
     required this.label,
     this.onPressed,
     this.tooltip,
+    this.isVisible = true,
   });
 
   /// Icon displayed for the action button.
@@ -24,6 +25,9 @@ class SelectionToolbarAction {
   /// Optional tooltip message shown on hover.
   final String? tooltip;
 
+  /// Whether this action should be rendered.
+  final bool isVisible;
+
   /// Whether the action is currently enabled.
   bool get isEnabled => onPressed != null;
 }
@@ -36,6 +40,11 @@ class SelectionToolbar extends StatelessWidget {
     required this.selectedCount,
     required this.onClearSelection,
     required this.actions,
+    this.selectionIcon = Icons.check_box_outlined,
+    this.selectionLabelBuilder,
+    this.clearButtonLabel = 'Clear',
+    this.clearButtonIcon = Icons.close,
+    this.clearButtonTooltip,
   });
 
   /// Number of items currently selected.
@@ -47,10 +56,40 @@ class SelectionToolbar extends StatelessWidget {
   /// Actions displayed within the toolbar.
   final List<SelectionToolbarAction> actions;
 
+  /// Icon displayed alongside the selection count.
+  final IconData selectionIcon;
+
+  /// Builder that creates the label shown for the current selection count.
+  ///
+  /// Defaults to "{count} selected" when null.
+  final String Function(int count)? selectionLabelBuilder;
+
+  /// Label displayed for the clear selection button.
+  final String clearButtonLabel;
+
+  /// Icon displayed for the clear selection button.
+  final IconData clearButtonIcon;
+
+  /// Optional tooltip for the clear selection button.
+  final String? clearButtonTooltip;
+
+  String _defaultLabel(int count) => '$count selected';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
+    final visibleActions = actions.where((action) => action.isVisible).toList();
+
+    final selectionLabel =
+        (selectionLabelBuilder ?? _defaultLabel).call(selectedCount);
+
+    final clearButton = TextButton.icon(
+      onPressed: onClearSelection,
+      icon: Icon(clearButtonIcon),
+      label: Text(clearButtonLabel),
+    );
 
     return SafeArea(
       minimum: EdgeInsets.symmetric(
@@ -71,17 +110,17 @@ class SelectionToolbar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.check_box_outlined, color: colorScheme.primary),
+                Icon(selectionIcon, color: colorScheme.primary),
                 SizedBox(width: UiSpacing.smallGap),
                 Text(
-                  '$selectedCount selected',
+                  selectionLabel,
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: colorScheme.onSurface,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 SizedBox(width: UiSpacing.smallGap),
-                for (final action in actions) ...[
+                for (final action in visibleActions) ...[
                   Tooltip(
                     message: action.tooltip ?? action.label,
                     child: FilledButton.icon(
@@ -97,7 +136,8 @@ class SelectionToolbar extends StatelessWidget {
                             : colorScheme.onSurfaceVariant,
                         disabledBackgroundColor:
                             colorScheme.surfaceContainerHighest,
-                        disabledForegroundColor: colorScheme.onSurfaceVariant,
+                        disabledForegroundColor:
+                            colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -105,11 +145,13 @@ class SelectionToolbar extends StatelessWidget {
                 ],
                 const VerticalDivider(width: 1.0),
                 SizedBox(width: UiSpacing.smallGap),
-                TextButton.icon(
-                  onPressed: onClearSelection,
-                  icon: const Icon(Icons.close),
-                  label: const Text('Clear'),
-                ),
+                if (clearButtonTooltip != null)
+                  Tooltip(
+                    message: clearButtonTooltip!,
+                    child: clearButton,
+                  )
+                else
+                  clearButton,
               ],
             ),
           ),
