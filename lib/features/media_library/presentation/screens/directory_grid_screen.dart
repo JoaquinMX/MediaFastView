@@ -14,6 +14,7 @@ import '../../../../core/constants/ui_constants.dart';
 
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/widgets/selection_toolbar.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
@@ -61,6 +62,25 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       _ => viewModel.currentSortOption,
     };
 
+    final selectionActions = [
+      SelectionToolbarAction(
+        icon: Icons.tag,
+        label: 'Assign Tags',
+        tooltip: 'Assign tags to selected directories',
+        onPressed: () => unawaited(
+          _assignTagsToSelectedDirectories(viewModel),
+        ),
+      ),
+      SelectionToolbarAction(
+        icon: Icons.favorite,
+        label: 'Toggle Favorites',
+        tooltip: 'Toggle favorites for selected directories',
+        onPressed: () => unawaited(
+          _toggleSelectedDirectoryFavorites(state, selectedDirectoryIds),
+        ),
+      ),
+    ];
+
     return Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.escape):
@@ -84,14 +104,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            appBar: isSelectionMode
-                ? _buildDirectorySelectionAppBar(
-                    viewModel.selectedDirectoryCount,
-                    viewModel,
-                    state,
-                    selectedDirectoryIds,
-                  )
-                : _buildDirectoryNormalAppBar(currentSortOption, viewModel, ref),
+            appBar:
+                _buildDirectoryNormalAppBar(currentSortOption, viewModel, ref),
             body: DropTarget(
               onDragDone: (details) => _onDragDone(details, viewModel),
               onDragEntered: (_) => setState(() => _isDragging = true),
@@ -179,6 +193,18 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                         ),
                       ),
                     ),
+                  if (isSelectionMode)
+                    SelectionToolbar(
+                      selectedCount: viewModel.selectedDirectoryCount,
+                      onClearSelection: viewModel.clearDirectorySelection,
+                      actions: selectionActions,
+                      selectionIcon: Icons.folder,
+                      selectionLabelBuilder: (count) =>
+                          '$count director${count == 1 ? 'y' : 'ies'} selected',
+                      clearButtonLabel: 'Clear Selection',
+                      clearButtonIcon: Icons.close,
+                      clearButtonTooltip: 'Clear selection',
+                    ),
                 ],
               ),
             ),
@@ -225,58 +251,6 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     );
   }
 
-  AppBar _buildDirectorySelectionAppBar(
-    int selectedCount,
-    DirectoryViewModel viewModel,
-    DirectoryState state,
-    Set<String> selectedDirectoryIds,
-  ) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.close),
-        tooltip: 'Clear selection',
-        onPressed: viewModel.clearDirectorySelection,
-      ),
-      title: Text(
-        '$selectedCount selected',
-        style: theme.textTheme.titleLarge?.copyWith(
-          color: colorScheme.onSurface,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      actions: [
-        FilledButton.icon(
-          onPressed: () => unawaited(_assignTagsToSelectedDirectories(viewModel)),
-          icon: const Icon(Icons.tag),
-          label: const Text('Assign Tags'),
-          style: FilledButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            textStyle: const TextStyle(fontSize: 12),
-          ),
-        ),
-        const SizedBox(width: 8),
-        FilledButton.icon(
-          onPressed: () => unawaited(
-            _toggleSelectedDirectoryFavorites(state, selectedDirectoryIds),
-          ),
-          icon: const Icon(Icons.favorite),
-          label: const Text('Toggle Favorites'),
-          style: FilledButton.styleFrom(
-            backgroundColor: colorScheme.primary,
-            foregroundColor: colorScheme.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            textStyle: const TextStyle(fontSize: 12),
-          ),
-        ),
-        const SizedBox(width: 8),
-      ],
-    );
-  }
 
   void _onDragDone(DropDoneDetails details, DirectoryViewModel viewModel) {
     setState(() => _isDragging = false);

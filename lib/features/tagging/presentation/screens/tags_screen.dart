@@ -11,6 +11,7 @@ import '../../../media_library/presentation/widgets/column_selector_popup.dart';
 import '../../domain/enums/tag_filter_mode.dart';
 import '../view_models/tags_view_model.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
+import '../../../../shared/widgets/selection_toolbar.dart';
 
 class TagsScreen extends ConsumerStatefulWidget {
   const TagsScreen({super.key});
@@ -91,36 +92,67 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       selectedSections,
       state.filterMode,
     );
-
-    return RefreshIndicator(
-      onRefresh: viewModel.loadTags,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          _buildSearchField(),
-          const SizedBox(height: 12),
-          _buildTagSelectionChips(state, viewModel),
-          const SizedBox(height: 12),
-          _buildFilterModeToggle(state, viewModel),
-          const SizedBox(height: 24),
-          if (selectedSections.isEmpty)
-            _buildSelectionPlaceholder()
-          else ...[
-            _buildSelectionSummary(
-              aggregatedMedia,
-              viewModel,
-              state.filterMode,
-              state.selectedTagIds.length,
-            ),
-            const SizedBox(height: 12),
-            if (aggregatedMedia.isEmpty)
-              _buildNoResultsMessage()
-            else
-              _buildMediaGrid(aggregatedMedia, aggregatedMedia, gridColumns),
-          ],
-        ],
+    final hasSelection = selectedSections.isNotEmpty;
+    final listPadding = EdgeInsets.fromLTRB(
+      16,
+      16,
+      16,
+      hasSelection ? 120 : 16,
+    );
+    final selectionActions = [
+      SelectionToolbarAction(
+        icon: Icons.slideshow,
+        label: 'Start Slideshow',
+        tooltip: 'Start slideshow for selected tags',
+        onPressed:
+            aggregatedMedia.isEmpty ? null : () => _startSlideshow(aggregatedMedia),
       ),
+    ];
+
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: viewModel.loadTags,
+          child: ListView(
+            padding: listPadding,
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              _buildSearchField(),
+              const SizedBox(height: 12),
+              _buildTagSelectionChips(state, viewModel),
+              const SizedBox(height: 12),
+              _buildFilterModeToggle(state, viewModel),
+              const SizedBox(height: 24),
+              if (!hasSelection)
+                _buildSelectionPlaceholder()
+              else ...[
+                _buildSelectionSummary(
+                  aggregatedMedia,
+                  state.filterMode,
+                  state.selectedTagIds.length,
+                ),
+                const SizedBox(height: 12),
+                if (aggregatedMedia.isEmpty)
+                  _buildNoResultsMessage()
+                else
+                  _buildMediaGrid(aggregatedMedia, aggregatedMedia, gridColumns),
+              ],
+            ],
+          ),
+        ),
+        if (hasSelection)
+          SelectionToolbar(
+            selectedCount: state.selectedTagIds.length,
+            onClearSelection: viewModel.clearSelection,
+            actions: selectionActions,
+            selectionIcon: Icons.label,
+            selectionLabelBuilder: (count) =>
+                '$count tag${count == 1 ? '' : 's'} selected',
+            clearButtonLabel: 'Clear Selection',
+            clearButtonIcon: Icons.close,
+            clearButtonTooltip: 'Clear selection',
+          ),
+      ],
     );
   }
 
@@ -220,7 +252,6 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
   Widget _buildSelectionSummary(
     List<MediaEntity> aggregatedMedia,
-    TagsViewModel viewModel,
     TagFilterMode filterMode,
     int selectedTagCount,
   ) {
@@ -229,39 +260,23 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         ? 'Matching all selected tags'
         : 'Matching any selected tag';
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Showing ${aggregatedMedia.length} '
-                'item${aggregatedMedia.length == 1 ? '' : 's'}',
-                style: theme.textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                selectedTagCount <= 1
-                    ? filterDescription
-                    : '$filterDescription (${selectedTagCount} tags)',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+        Text(
+          'Showing ${aggregatedMedia.length} '
+          'item${aggregatedMedia.length == 1 ? '' : 's'}',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          selectedTagCount <= 1
+              ? filterDescription
+              : '$filterDescription (${selectedTagCount} tags)',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        TextButton(
-          onPressed: viewModel.clearSelection,
-          child: const Text('Clear selection'),
-        ),
-        if (aggregatedMedia.isNotEmpty)
-          IconButton(
-            icon: const Icon(Icons.slideshow),
-            tooltip: 'Start slideshow',
-            onPressed: () => _startSlideshow(aggregatedMedia),
-          ),
       ],
     );
   }
