@@ -30,6 +30,11 @@ class GetMediaUseCase {
     return _mediaRepository.filterMediaByTags(const <String>[]);
   }
 
+  /// Loads a single media entity by [id] if available.
+  Future<MediaEntity?> byId(String id) {
+    return _mediaRepository.getMediaById(id);
+  }
+
   /// Filters media by [tagIds] for the directory at [directoryPath].
   Future<List<MediaEntity>> filterByTagsForDirectory(
     List<String> tagIds,
