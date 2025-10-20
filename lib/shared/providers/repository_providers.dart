@@ -39,9 +39,9 @@ import '../../features/favorites/domain/use_cases/start_slideshow_use_case.dart'
 import '../../features/full_screen/data/repositories/media_viewer_repository_impl.dart';
 import '../../features/full_screen/domain/repositories/media_viewer_repository.dart';
 import '../../features/full_screen/domain/use_cases/load_media_for_viewing_use_case.dart';
-import '../../features/tagging/data/repositories/tag_repository_impl.dart';
+import '../../features/media_library/data/repositories/tag_repository_impl.dart';
 import '../../features/tagging/data/isar/isar_tag_data_source.dart';
-import '../../features/tagging/domain/repositories/tag_repository.dart';
+import '../../features/media_library/domain/repositories/tag_repository.dart';
 import '../../features/favorites/data/isar/isar_favorites_data_source.dart';
 
 // Isar database provider
