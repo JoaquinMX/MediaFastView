@@ -11,8 +11,9 @@ import '../../domain/entities/viewer_state_entity.dart';
 import '../view_models/full_screen_view_model.dart';
 import '../widgets/full_screen_favorite_toggle.dart';
 import '../widgets/full_screen_image_viewer.dart';
-import '../widgets/full_screen_video_controls.dart';
 import '../widgets/full_screen_video_player.dart';
+import '../../../../shared/widgets/media_playback_controls.dart';
+import '../../../../shared/widgets/media_progress_indicator.dart';
 
 /// Full-screen media viewer screen
 class FullScreenViewerScreen extends ConsumerStatefulWidget {
@@ -100,7 +101,7 @@ class _FullScreenViewerScreenState
 
             // Overlay controls
             if (state is FullScreenLoaded && _showControls) ...[
-              // Top bar with close button and favorite toggle
+              // Top bar with close button, favorite toggle, and progress indicator
               Positioned(
                 top: 0,
                 left: 0,
@@ -116,21 +117,45 @@ class _FullScreenViewerScreenState
                       ],
                     ),
                   ),
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: Platform.isMacOS
-                            ? Icon(Icons.arrow_back, color: colorScheme.onSurface)
-                            : Icon(Icons.close, color: colorScheme.onSurface),
-                      ),
-                      const Spacer(),
-                      FullScreenFavoriteToggle(
-                        isFavorite: state.isFavorite,
-                        onToggle: () => _toggleFavoriteAndRefreshTags(),
-                      ),
-                    ],
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  child: SafeArea(
+                    bottom: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            IconButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              icon: Platform.isMacOS
+                                  ? Icon(Icons.arrow_back, color: colorScheme.onSurface)
+                                  : Icon(Icons.close, color: colorScheme.onSurface),
+                            ),
+                            const Spacer(),
+                            FullScreenFavoriteToggle(
+                              isFavorite: state.isFavorite,
+                              onToggle: () => _toggleFavoriteAndRefreshTags(),
+                            ),
+                          ],
+                        ),
+                        if (state.mediaList.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          MediaProgressIndicator(
+                            currentIndex: state.currentIndex,
+                            totalItems: state.mediaList.length,
+                            progress: _calculateOverallProgress(state),
+                            counterTextStyle: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                            progressColor: colorScheme.primary,
+                            backgroundColor:
+                                colorScheme.onSurface.withValues(alpha: 0.25),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -153,16 +178,73 @@ class _FullScreenViewerScreenState
                       ),
                     ),
                     padding: const EdgeInsets.all(16),
-                    child: FullScreenVideoControls(
-                      isPlaying: state.isPlaying,
-                      isMuted: state.isMuted,
-                      isLooping: state.isLooping,
-                      currentPosition: state.currentPosition,
-                      totalDuration: state.totalDuration,
-                      onPlayPause: _viewModel.togglePlayPause,
-                      onMute: _viewModel.toggleMute,
-                      onLoop: _viewModel.toggleLoop,
-                      onSeek: _handleSeek,
+                    child: SafeArea(
+                      top: false,
+                      child: MediaPlaybackControls(
+                        isPlaying: state.isPlaying,
+                        isLooping: state.isLooping,
+                        isMuted: state.isMuted,
+                        progress: _videoProgress(state),
+                        onPlayPause: _viewModel.togglePlayPause,
+                        onNext: _viewModel.nextMedia,
+                        onPrevious: _viewModel.previousMedia,
+                        onToggleLoop: _viewModel.toggleLoop,
+                        onToggleMute: _viewModel.toggleMute,
+                        visibility: const MediaPlaybackControlVisibility(
+                          showPrevious: true,
+                          showPlayPause: true,
+                          showNext: true,
+                          showLoop: true,
+                          showShuffle: false,
+                          showMute: true,
+                          showDurationSlider: false,
+                          showProgressBar: true,
+                          showVideoLoop: false,
+                        ),
+                        availability: MediaPlaybackControlAvailability(
+                          enablePrevious: state.currentIndex > 0,
+                          enablePlayPause: true,
+                          enableNext:
+                              state.currentIndex < state.mediaList.length - 1,
+                          enableLoop: true,
+                          enableShuffle: false,
+                          enableMute: true,
+                          enableDurationSlider: false,
+                          enableVideoLoop: false,
+                        ),
+                        style: MediaPlaybackControlStyle(
+                          iconTheme: IconThemeData(
+                            color: colorScheme.onSurface,
+                            size: 28,
+                          ),
+                          playPauseIconSize: 44,
+                          activeColor: colorScheme.primary,
+                          inactiveColor: colorScheme.onSurface,
+                          progressColor: colorScheme.primary,
+                          progressBackgroundColor:
+                              colorScheme.onSurface.withValues(alpha: 0.3),
+                          sliderActiveTrackColor: colorScheme.primary,
+                          sliderInactiveTrackColor:
+                              colorScheme.onSurface.withValues(alpha: 0.3),
+                          sliderThumbColor: colorScheme.onSurface,
+                          sliderOverlayColor:
+                              colorScheme.onSurface.withValues(alpha: 0.1),
+                          durationLabelTextStyle:
+                              TextStyle(color: colorScheme.onSurface),
+                          controlSpacing: 16,
+                          sectionSpacing: 24,
+                          durationSliderWidth: 220,
+                          progressBarHeight: 72,
+                        ),
+                        progressBuilder: (context, progress, style) =>
+                            _VideoProgressScrubber(
+                          progress: progress,
+                          style: style,
+                          currentPosition: state.currentPosition,
+                          totalDuration: state.totalDuration,
+                          onSeek: _handleSeek,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -342,6 +424,35 @@ class _FullScreenViewerScreenState
     _viewModel.seekTo(position);
   }
 
+  double? _calculateOverallProgress(FullScreenLoaded state) {
+    final totalItems = state.mediaList.length;
+    if (totalItems <= 0) {
+      return null;
+    }
+
+    final media = state.currentMedia;
+    var itemProgress = 1.0;
+    if (media.type == MediaType.video &&
+        state.totalDuration.inMilliseconds > 0 &&
+        state.currentPosition.inMilliseconds >= 0) {
+      final rawProgress = state.currentPosition.inMilliseconds /
+          state.totalDuration.inMilliseconds;
+      itemProgress = rawProgress.clamp(0.0, 1.0);
+    }
+
+    final overall = (state.currentIndex + itemProgress) / totalItems;
+    return overall.clamp(0.0, 1.0);
+  }
+
+  double _videoProgress(FullScreenLoaded state) {
+    if (state.totalDuration.inMilliseconds <= 0) {
+      return 0.0;
+    }
+    final raw = state.currentPosition.inMilliseconds /
+        state.totalDuration.inMilliseconds;
+    return raw.clamp(0.0, 1.0);
+  }
+
   Widget _buildPermissionRevoked() {
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
@@ -509,5 +620,88 @@ class _FullScreenViewerScreenState
       default:
         return KeyEventResult.ignored;
     }
+  }
+}
+
+class _VideoProgressScrubber extends StatefulWidget {
+  const _VideoProgressScrubber({
+    required this.progress,
+    required this.style,
+    required this.currentPosition,
+    required this.totalDuration,
+    required this.onSeek,
+  });
+
+  final double progress;
+  final MediaPlaybackControlStyle style;
+  final Duration currentPosition;
+  final Duration totalDuration;
+  final ValueChanged<Duration> onSeek;
+
+  @override
+  State<_VideoProgressScrubber> createState() =>
+      _VideoProgressScrubberState();
+}
+
+class _VideoProgressScrubberState extends State<_VideoProgressScrubber> {
+  double? _dragValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalMilliseconds = widget.totalDuration.inMilliseconds;
+    final isSeekable = totalMilliseconds > 0;
+    final effectiveValue = (_dragValue ?? widget.progress).clamp(0.0, 1.0);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: widget.style.sliderActiveTrackColor,
+            inactiveTrackColor: widget.style.sliderInactiveTrackColor,
+            thumbColor: widget.style.sliderThumbColor,
+            overlayColor: widget.style.sliderOverlayColor,
+          ),
+          child: Slider(
+            value: effectiveValue,
+            onChanged: isSeekable
+                ? (value) {
+                    setState(() => _dragValue = value);
+                  }
+                : null,
+            onChangeEnd: isSeekable
+                ? (value) {
+                    setState(() => _dragValue = null);
+                    final targetMilliseconds =
+                        (value * totalMilliseconds).round().clamp(0, totalMilliseconds);
+                    widget.onSeek(Duration(milliseconds: targetMilliseconds));
+                  }
+                : null,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _formatDuration(widget.currentPosition),
+                style: widget.style.durationLabelTextStyle,
+              ),
+              Text(
+                _formatDuration(widget.totalDuration),
+                style: widget.style.durationLabelTextStyle,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 }

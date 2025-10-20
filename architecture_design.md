@@ -12,7 +12,7 @@ Based on the requirements analysis, the application implements the following cor
 2. **Media Viewing**: Grid-based display of images, videos, and text files with thumbnail previews and navigation
 3. **Tagging System**: Dual tagging for directories and media files with dynamic creation and filtering
 4. **Favorites System**: Marking favorites with dedicated screen and slideshow functionality
-5. **Full-Screen Viewing**: Immersive viewing with zoom, pan, and video controls
+5. **Full-Screen Viewing**: Immersive viewing with zoom, pan, and video controls built on the shared playback chrome used across slideshow and viewer surfaces
 6. **UI Interactions**: Responsive grids, animations, drag-and-drop, gestures, and keyboard shortcuts
 7. **File Operations**: Safe file deletion and permission handling
 8. **Data Persistence**: Isar-backed storage for all app data with unified
@@ -135,8 +135,7 @@ lib/
 │   │   │   │   ├── favorites_screen.dart
 │   │   │   │   └── slideshow_screen.dart
 │   │   │   ├── widgets/
-│   │   │   │   ├── favorite_toggle_button.dart
-│   │   │   │   └── slideshow_controls.dart
+│   │   │   │   └── favorite_toggle_button.dart
 │   │   │   └── view_models/
 │   │   │       ├── favorites_view_model.dart
 │   │   │       └── slideshow_view_model.dart
@@ -156,6 +155,10 @@ lib/
 │   │       │   └── shared_preferences_data_source.dart
 │   │       └── repositories/
 │   │           └── favorites_repository_impl.dart
+│   ├── shared/
+│   │   └── widgets/
+│   │       ├── media_playback_controls.dart
+│   │       └── media_progress_indicator.dart
 │   └── full_screen/
 │       ├── presentation/
 │       │   ├── screens/
