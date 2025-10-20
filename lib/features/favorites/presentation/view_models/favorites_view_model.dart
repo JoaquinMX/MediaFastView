@@ -5,6 +5,7 @@ import '../../domain/entities/favorite_item_type.dart';
 import '../../domain/repositories/favorites_repository.dart';
 import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../media_library/domain/use_cases/get_media_use_case.dart';
 import '../../../media_library/data/isar/isar_media_data_source.dart';
 import '../../../media_library/data/models/media_model.dart';
 import '../../../../shared/providers/repository_providers.dart';
@@ -120,11 +121,15 @@ class SlideshowFinished extends SlideshowState {
 
 /// ViewModel for managing favorites state and operations.
 class FavoritesViewModel extends StateNotifier<FavoritesState> {
-  FavoritesViewModel(this._favoritesRepository, this._mediaDataSource)
-    : super(const FavoritesInitial());
+  FavoritesViewModel(
+    this._favoritesRepository,
+    this._mediaDataSource,
+    this._getMediaUseCase,
+  ) : super(const FavoritesInitial());
 
   final FavoritesRepository _favoritesRepository;
   final IsarMediaDataSource _mediaDataSource;
+  final GetMediaUseCase _getMediaUseCase;
   bool _hasLoadedFavorites = false;
 
   /// Tracks whether an initial load has completed.
@@ -407,39 +412,29 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       'Loading media for ${favoriteIds.length} favorite IDs: $favoriteIds',
     );
 
-    // Get all stored media from Isar persistence
-    final allStoredMedia = await _mediaDataSource.getMedia();
+    if (favoriteIds.isEmpty) {
+      LoggingService.instance.info('No favorite IDs provided, returning empty');
+      return const <MediaEntity>[];
+    }
+
+    final libraryMedia = await _getMediaUseCase.entireLibrary();
     LoggingService.instance.info(
-      'Found ${allStoredMedia.length} stored media items',
+      'Received ${libraryMedia.length} media items from GetMediaUseCase',
     );
 
-    // Create a map for fast lookup by ID
-    final mediaMap = {for (final media in allStoredMedia) media.id: media};
-
-    // Find media entities for favorite IDs
+    final mediaMap = {for (final media in libraryMedia) media.id: media};
     final validMedia = <MediaEntity>[];
+
     for (final id in favoriteIds) {
-      final storedMedia = mediaMap[id];
-      if (storedMedia != null) {
-        // Convert MediaModel to MediaEntity
-        final mediaEntity = MediaEntity(
-          id: storedMedia.id,
-          path: storedMedia.path,
-          name: storedMedia.name,
-          type: storedMedia.type,
-          size: storedMedia.size,
-          lastModified: storedMedia.lastModified,
-          tagIds: storedMedia.tagIds,
-          directoryId: storedMedia.directoryId,
-          bookmarkData: storedMedia.bookmarkData,
-        );
-        validMedia.add(mediaEntity);
+      final media = mediaMap[id];
+      if (media != null) {
+        validMedia.add(media);
         LoggingService.instance.debug(
-          'Successfully loaded media for ID $id: ${mediaEntity.name}, path: ${mediaEntity.path}',
+          'Successfully loaded media for ID $id: ${media.name}, path: ${media.path}',
         );
       } else {
         LoggingService.instance.warning(
-          'No stored media found for favorite ID $id',
+          'No media found for favorite ID $id in library results',
         );
       }
     }
@@ -472,6 +467,7 @@ final favoritesViewModelProvider =
         final viewModel = FavoritesViewModel(
           ref.watch(favoritesRepositoryProvider),
           ref.watch(isarMediaDataSourceProvider),
+          ref.watch(getMediaUseCaseProvider),
         );
         viewModel.loadFavorites();
         return viewModel;

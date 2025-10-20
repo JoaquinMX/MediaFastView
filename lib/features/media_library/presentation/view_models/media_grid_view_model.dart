@@ -7,9 +7,8 @@ import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
-import '../../domain/repositories/media_repository.dart';
+import '../../domain/use_cases/get_media_use_case.dart';
 import '../../domain/entities/media_entity.dart';
-import '../../data/repositories/filesystem_media_repository_impl.dart';
 import '../../data/isar/isar_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
@@ -120,13 +119,13 @@ class MediaViewModel extends StateNotifier<MediaState> {
   MediaViewModel(
     this._ref,
     this._params, {
-    required MediaRepository mediaRepository,
+    required GetMediaUseCase getMediaUseCase,
     required IsarMediaDataSource mediaDataSource,
   }) : super(const MediaLoading()) {
     _directoryPath = _params.directoryPath;
     _directoryName = _params.directoryName;
     _bookmarkData = _params.bookmarkData;
-    _mediaRepository = mediaRepository;
+    _getMediaUseCase = getMediaUseCase;
     _mediaDataSource = mediaDataSource;
     _gridColumnsSubscription = _ref.listen<int>(
       gridColumnsProvider,
@@ -136,7 +135,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   }
 
   final Ref _ref;
-  late final MediaRepository _mediaRepository;
+  late final GetMediaUseCase _getMediaUseCase;
   late final IsarMediaDataSource _mediaDataSource;
   final MediaViewModelParams _params;
   late final String _directoryPath;
@@ -301,10 +300,10 @@ class MediaViewModel extends StateNotifier<MediaState> {
     state = const MediaLoading();
     try {
       LoggingService.instance.debug(
-        'Calling _mediaRepository.getMediaForDirectoryPath',
+        'Calling _getMediaUseCase.forDirectoryPath',
       );
       final scanStartTime = DateTime.now();
-      final media = await _mediaRepository.getMediaForDirectoryPath(
+      final media = await _getMediaUseCase.forDirectoryPath(
         _directoryPath,
         bookmarkData: _bookmarkData,
       );
@@ -428,7 +427,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     final previousColumns = _ref.read(gridColumnsProvider);
     state = const MediaLoading();
     try {
-      final media = await _mediaRepository.filterMediaByTagsForDirectory(
+      final media = await _getMediaUseCase.filterByTagsForDirectory(
         tagIds,
         _directoryPath,
         bookmarkData: _bookmarkData,
@@ -774,12 +773,7 @@ final mediaViewModelProvider = StateNotifierProvider.autoDispose
       (ref, params) => MediaViewModel(
         ref,
         params,
-        mediaRepository: FilesystemMediaRepositoryImpl(
-          ref.watch(bookmarkServiceProvider),
-          ref.watch(directoryRepositoryProvider),
-          ref.watch(isarMediaDataSourceProvider),
-          permissionService: ref.watch(permissionServiceProvider),
-        ),
+        getMediaUseCase: ref.watch(getMediaUseCaseProvider),
         mediaDataSource: ref.watch(isarMediaDataSourceProvider),
       ),
     );

@@ -25,6 +25,7 @@ import '../../features/media_library/domain/use_cases/clear_directories_use_case
 import '../../features/media_library/domain/use_cases/delete_directory_use_case.dart';
 import '../../features/media_library/domain/use_cases/delete_file_use_case.dart';
 import '../../features/media_library/domain/use_cases/get_directories_use_case.dart';
+import '../../features/media_library/domain/use_cases/get_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/remove_directory_use_case.dart';
 import '../../features/media_library/domain/use_cases/search_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/validate_path_use_case.dart';
@@ -171,6 +172,10 @@ class FavoritesRepositoryNotifier extends StateNotifier<FavoritesRepository> {
 // Use case providers
 final getDirectoriesUseCaseProvider = Provider<GetDirectoriesUseCase>((ref) {
   return GetDirectoriesUseCase(ref.watch(directoryRepositoryProvider));
+});
+
+final getMediaUseCaseProvider = Provider<GetMediaUseCase>((ref) {
+  return GetMediaUseCase(ref.watch(mediaRepositoryProvider));
 });
 
 final searchDirectoriesUseCaseProvider = Provider<SearchDirectoriesUseCase>((
