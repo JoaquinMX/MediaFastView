@@ -49,6 +49,20 @@ class IsarDirectoryDataSource {
     }
   }
 
+  /// Retrieves a single directory by its identifier.
+  Future<DirectoryModel?> getDirectoryById(String directoryId) async {
+    await _ensureReady();
+    try {
+      final collection = await _store.getByDirectoryId(directoryId);
+      return collection?.toModel();
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PersistenceError('Failed to load directory $directoryId: $error'),
+        stackTrace,
+      );
+    }
+  }
+
   /// Replaces all persisted directories with [directories].
   Future<void> saveDirectories(List<DirectoryModel> directories) async {
     final collections =

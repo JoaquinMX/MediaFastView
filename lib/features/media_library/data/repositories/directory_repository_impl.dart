@@ -34,51 +34,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
 
     for (final model in models) {
       final normalizedModel = await _ensureStableDirectoryId(model);
-      DirectoryEntity entity;
-      try {
-        if (normalizedModel.bookmarkData != null &&
-            normalizedModel.bookmarkData!.isNotEmpty) {
-          final validationResult = await _permissionService.validateAndRenewBookmark(
-            normalizedModel.bookmarkData!,
-            normalizedModel.path,
-          );
-
-          if (validationResult.renewedBookmarkData != null) {
-            // Update stored bookmark data
-            await updateDirectoryBookmark(
-              normalizedModel.id,
-              validationResult.renewedBookmarkData,
-            );
-            LoggingService.instance.info('Bookmark renewed and updated for directory ${normalizedModel.path}');
-          }
-
-          if (validationResult.isValid) {
-            entity = await _resolveBookmarkForModel(
-              normalizedModel.copyWith(
-                bookmarkData:
-                    validationResult.renewedBookmarkData ?? normalizedModel.bookmarkData,
-              ),
-            );
-          } else {
-            // Bookmark invalid and renewal failed
-            throw BookmarkInvalidError(
-              'Bookmark for directory ${normalizedModel.path} is invalid and could not be renewed. Please re-select the directory.',
-              normalizedModel.id,
-              normalizedModel.path,
-            );
-          }
-        } else {
-          LoggingService.instance.debug('No bookmark data available for directory ${normalizedModel.path}, using stored path');
-          entity = _modelToEntity(normalizedModel);
-        }
-      } catch (e) {
-        if (e is BookmarkInvalidError) {
-          rethrow; // Re-throw bookmark errors to be handled by UI
-        }
-        LoggingService.instance.error('Failed to resolve bookmark for directory ${normalizedModel.path}: $e');
-        // Fall back to the stored path if bookmark resolution fails
-        entity = _modelToEntity(normalizedModel);
-      }
+      final entity = await _buildEntityFromModel(normalizedModel);
       entities.add(entity);
     }
 
@@ -87,8 +43,22 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
 
   @override
   Future<DirectoryEntity?> getDirectoryById(String id) async {
-    final directories = await getDirectories();
-    return directories.where((dir) => dir.id == id).firstOrNull;
+    final model = await _isarDirectoryDataSource.getDirectoryById(id);
+    if (model != null) {
+      final normalizedModel = await _ensureStableDirectoryId(model);
+      return _buildEntityFromModel(normalizedModel);
+    }
+
+    final models = await _isarDirectoryDataSource.getDirectories();
+    for (final candidate in models) {
+      final normalizedModel = await _ensureStableDirectoryId(candidate);
+      if (normalizedModel.id != id) {
+        continue;
+      }
+      return _buildEntityFromModel(normalizedModel);
+    }
+
+    return null;
   }
 
   @override
@@ -278,12 +248,14 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
 
   @override
   Future<void> updateDirectoryBookmark(String directoryId, String? bookmarkData) async {
-    final directory = await getDirectoryById(directoryId);
-    if (directory != null) {
-      final updatedDirectory = directory.copyWith(bookmarkData: bookmarkData);
-      final model = _entityToModel(updatedDirectory);
-      await _isarDirectoryDataSource.updateDirectory(model);
+    final model = await _isarDirectoryDataSource.getDirectoryById(directoryId);
+    if (model == null) {
+      return;
     }
+
+    final normalizedModel = await _ensureStableDirectoryId(model);
+    final updatedModel = normalizedModel.copyWith(bookmarkData: bookmarkData);
+    await _isarDirectoryDataSource.updateDirectory(updatedModel);
   }
 
   /// Ensures that stored directory IDs use the shared hashing strategy.
@@ -304,6 +276,54 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     await _isarDirectoryDataSource.addDirectory(updatedModel);
 
     return updatedModel;
+  }
+
+  Future<DirectoryEntity> _buildEntityFromModel(DirectoryModel model) async {
+    try {
+      if (model.bookmarkData != null && model.bookmarkData!.isNotEmpty) {
+        final validationResult = await _permissionService.validateAndRenewBookmark(
+          model.bookmarkData!,
+          model.path,
+        );
+
+        if (validationResult.renewedBookmarkData != null) {
+          await updateDirectoryBookmark(
+            model.id,
+            validationResult.renewedBookmarkData,
+          );
+          LoggingService.instance
+              .info('Bookmark renewed and updated for directory ${model.path}');
+        }
+
+        if (validationResult.isValid) {
+          return _resolveBookmarkForModel(
+            model.copyWith(
+              bookmarkData:
+                  validationResult.renewedBookmarkData ?? model.bookmarkData,
+            ),
+          );
+        }
+
+        throw BookmarkInvalidError(
+          'Bookmark for directory ${model.path} is invalid and could not be renewed. Please re-select the directory.',
+          model.id,
+          model.path,
+        );
+      }
+
+      LoggingService.instance.debug(
+        'No bookmark data available for directory ${model.path}, using stored path',
+      );
+      return _modelToEntity(model);
+    } catch (error) {
+      if (error is BookmarkInvalidError) {
+        rethrow;
+      }
+
+      LoggingService.instance
+          .error('Failed to resolve bookmark for directory ${model.path}: $error');
+      return _modelToEntity(model);
+    }
   }
 
   /// Converts DirectoryModel to DirectoryEntity.
