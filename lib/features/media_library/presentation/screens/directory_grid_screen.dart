@@ -15,7 +15,7 @@ import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
-import '../../../tagging/domain/entities/tag_entity.dart';
+import '../../domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
 import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';

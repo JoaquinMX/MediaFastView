@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../tagging/domain/entities/tag_entity.dart';
+import '../../domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
 import '../../../tagging/presentation/widgets/tag_chip.dart';
