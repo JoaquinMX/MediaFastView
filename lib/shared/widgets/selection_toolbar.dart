@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/constants/ui_constants.dart';
+import '../../core/constants/ui_constants.dart';
 
 /// Describes an action that can be displayed inside the bulk selection toolbar.
 class SelectionToolbarAction {
@@ -9,6 +9,7 @@ class SelectionToolbarAction {
     required this.label,
     this.onPressed,
     this.tooltip,
+    this.isVisible = true,
   });
 
   /// Icon displayed for the action button.
@@ -24,6 +25,9 @@ class SelectionToolbarAction {
   /// Optional tooltip message shown on hover.
   final String? tooltip;
 
+  /// Whether the action should be rendered.
+  final bool isVisible;
+
   /// Whether the action is currently enabled.
   bool get isEnabled => onPressed != null;
 }
@@ -36,6 +40,10 @@ class SelectionToolbar extends StatelessWidget {
     required this.selectedCount,
     required this.onClearSelection,
     required this.actions,
+    this.selectionIcon = Icons.check_box_outlined,
+    this.clearButtonIcon = Icons.close,
+    this.clearButtonLabel = 'Clear',
+    this.selectionLabelBuilder,
   });
 
   /// Number of items currently selected.
@@ -47,10 +55,24 @@ class SelectionToolbar extends StatelessWidget {
   /// Actions displayed within the toolbar.
   final List<SelectionToolbarAction> actions;
 
+  /// Icon used to indicate the current selection.
+  final IconData selectionIcon;
+
+  /// Icon used for the clear-selection button.
+  final IconData clearButtonIcon;
+
+  /// Label used for the clear-selection button.
+  final String clearButtonLabel;
+
+  /// Builder used to generate the selection label text. If null, defaults to
+  /// `"{count} selected"`.
+  final String Function(int count)? selectionLabelBuilder;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final visibleActions = actions.where((action) => action.isVisible);
 
     return SafeArea(
       minimum: EdgeInsets.symmetric(
@@ -71,17 +93,18 @@ class SelectionToolbar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.check_box_outlined, color: colorScheme.primary),
+                Icon(selectionIcon, color: colorScheme.primary),
                 SizedBox(width: UiSpacing.smallGap),
                 Text(
-                  '$selectedCount selected',
+                  selectionLabelBuilder?.call(selectedCount) ??
+                      '$selectedCount selected',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: colorScheme.onSurface,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 SizedBox(width: UiSpacing.smallGap),
-                for (final action in actions) ...[
+                for (final action in visibleActions) ...[
                   Tooltip(
                     message: action.tooltip ?? action.label,
                     child: FilledButton.icon(
@@ -107,8 +130,8 @@ class SelectionToolbar extends StatelessWidget {
                 SizedBox(width: UiSpacing.smallGap),
                 TextButton.icon(
                   onPressed: onClearSelection,
-                  icon: const Icon(Icons.close),
-                  label: const Text('Clear'),
+                  icon: Icon(clearButtonIcon),
+                  label: Text(clearButtonLabel),
                 ),
               ],
             ),
