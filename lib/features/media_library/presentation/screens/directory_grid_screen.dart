@@ -14,6 +14,7 @@ import '../../../../core/constants/ui_constants.dart';
 
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
@@ -501,29 +502,24 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     return Column(
       children: [
         if (inaccessibleDirectories.isNotEmpty)
-          Container(
-            padding: UiSpacing.gridPadding,
-            color: Colors.orange.shade50,
-            child: Row(
-              children: [
-                Icon(Icons.warning, color: UiColors.orange),
-                SizedBox(width: UiSpacing.smallGap),
-                Expanded(
-                  child: Text(
-                    '${inaccessibleDirectories.length} directory(ies) are inaccessible due to permission changes. '
-                    'Click "Re-grant Permissions" to restore access.',
-                    style: TextStyle(color: UiColors.orange),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: () => _showReGrantPermissionsDialog(
-                    context,
-                    inaccessibleDirectories,
-                    viewModel,
-                  ),
-                  child: const Text('Re-grant Permissions'),
-                ),
-              ],
+          PermissionIssuePanel(
+            title: 'Access to some directories has been revoked',
+            message:
+                '${inaccessibleDirectories.length} directory(ies) are inaccessible due to permission changes.',
+            helpText: 'Select "Re-grant Permissions" to restore access.',
+            recoverLabel: 'Re-grant Permissions',
+            recoverIcon: Icons.verified_user,
+            accentColor: Theme.of(context).colorScheme.error,
+            borderColor: Theme.of(context).colorScheme.error,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            margin: UiSpacing.gridPadding,
+            padding: const EdgeInsets.all(16),
+            fullWidth: true,
+            dense: true,
+            onRecover: () async => _showReGrantPermissionsDialog(
+              context,
+              inaccessibleDirectories,
+              viewModel,
             ),
           ),
         Expanded(
