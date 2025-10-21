@@ -9,13 +9,13 @@ import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../tagging/presentation/view_models/tags_view_model.dart';
 import '../../domain/entities/viewer_state_entity.dart';
 import '../view_models/full_screen_view_model.dart';
-import '../widgets/full_screen_favorite_toggle.dart';
 import '../widgets/full_screen_image_viewer.dart';
 import '../widgets/full_screen_video_player.dart';
 import '../widgets/full_screen_video_progress_slider.dart';
 import '../../../../shared/widgets/media_playback_controls.dart';
 import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
+import '../../../../shared/widgets/favorite_toggle_button.dart';
 
 /// Full-screen media viewer screen
 class FullScreenViewerScreen extends ConsumerStatefulWidget {
@@ -129,9 +129,12 @@ class _FullScreenViewerScreenState
                             : Icon(Icons.close, color: colorScheme.onSurface),
                       ),
                       const Spacer(),
-                      FullScreenFavoriteToggle(
+                      FavoriteToggleButton(
                         isFavorite: state.isFavorite,
                         onToggle: () => _toggleFavoriteAndRefreshTags(),
+                        iconSize: 28,
+                        favoriteColor: colorScheme.error,
+                        idleColor: colorScheme.onSurface,
                       ),
                     ],
                   ),
