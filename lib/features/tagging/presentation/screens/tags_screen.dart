@@ -22,6 +22,7 @@ class TagsScreen extends ConsumerStatefulWidget {
 class _TagsScreenState extends ConsumerState<TagsScreen> {
   late final TextEditingController _searchController;
   String _searchQuery = '';
+  String? _selectedDirectoryId;
 
   @override
   void initState() {
@@ -112,10 +113,17 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               viewModel,
               state.filterMode,
               state.selectedTagIds.length,
+              () => _clearSelection(viewModel),
             ),
             const SizedBox(height: 12),
             if (aggregatedMedia.isEmpty)
               _buildNoResultsMessage()
+            else if (selectedSections.length == 1 &&
+                selectedSections.first.directories.isNotEmpty)
+              _buildTagDetailView(
+                selectedSections.first,
+                gridColumns,
+              )
             else
               _buildMediaGrid(aggregatedMedia, aggregatedMedia, gridColumns),
           ],
@@ -184,7 +192,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                       : null,
               selected: isSelected,
               onSelected: (selected) =>
-                  viewModel.setTagSelected(section.id, selected),
+                  _onTagChipToggled(section.id, selected, viewModel),
             );
           }).toList(),
         ),
@@ -223,6 +231,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     TagsViewModel viewModel,
     TagFilterMode filterMode,
     int selectedTagCount,
+    VoidCallback onClearSelection,
   ) {
     final theme = Theme.of(context);
     final filterDescription = filterMode.matchesAll
@@ -253,7 +262,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           ),
         ),
         TextButton(
-          onPressed: viewModel.clearSelection,
+          onPressed: onClearSelection,
           child: const Text('Clear selection'),
         ),
         if (aggregatedMedia.isNotEmpty)
@@ -264,6 +273,24 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           ),
       ],
     );
+  }
+
+  void _onTagChipToggled(
+    String tagId,
+    bool isSelected,
+    TagsViewModel viewModel,
+  ) {
+    viewModel.setTagSelected(tagId, isSelected);
+    setState(() {
+      _selectedDirectoryId = null;
+    });
+  }
+
+  void _clearSelection(TagsViewModel viewModel) {
+    viewModel.clearSelection();
+    setState(() {
+      _selectedDirectoryId = null;
+    });
   }
 
   Widget _buildNoResultsMessage() {
@@ -290,6 +317,313 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildTagDetailView(
+    TagSection section,
+    int gridColumns,
+  ) {
+    _ensureSelectedDirectorySelection(section);
+
+    TagDirectoryContent? selectedContent;
+    if (_selectedDirectoryId != null) {
+      for (final content in section.directories) {
+        if (content.directory.id == _selectedDirectoryId) {
+          selectedContent = content;
+          break;
+        }
+      }
+    }
+
+    final entries = _buildDirectoryEntries(section.directories);
+
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 800;
+            final treeView = _buildDirectoryTreeView(entries);
+            final preview = _buildDirectoryPreview(
+              section,
+              selectedContent,
+              gridColumns,
+            );
+
+            if (isCompact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 240,
+                    child: treeView,
+                  ),
+                  const Divider(height: 32),
+                  preview,
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: constraints.maxWidth * 0.35,
+                  height: 360,
+                  child: treeView,
+                ),
+                const SizedBox(width: 16),
+                Expanded(child: preview),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _ensureSelectedDirectorySelection(TagSection section) {
+    if (section.directories.isEmpty) {
+      if (_selectedDirectoryId != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _selectedDirectoryId = null;
+          });
+        });
+      }
+      return;
+    }
+
+    final hasSelection = section.directories
+        .any((content) => content.directory.id == _selectedDirectoryId);
+    if (!hasSelection) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _selectedDirectoryId = section.directories.first.directory.id;
+        });
+      });
+    }
+  }
+
+  Widget _buildDirectoryTreeView(List<_DirectoryEntry> entries) {
+    final theme = Theme.of(context);
+    return Scrollbar(
+      child: ListView.builder(
+        itemCount: entries.length,
+        itemBuilder: (context, index) {
+          final entry = entries[index];
+          final indentation = (entry.depth * 16.0) + 8;
+
+          if (!entry.isSelectable) {
+            return ListTile(
+              dense: true,
+              enabled: false,
+              leading: const Icon(Icons.folder, size: 18),
+              contentPadding:
+                  EdgeInsets.only(left: indentation, right: 8, bottom: 0),
+              title: Text(
+                entry.name,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
+          }
+
+          final content = entry.content!;
+          final isSelected = content.directory.id == _selectedDirectoryId;
+
+          return ListTile(
+            dense: true,
+            selected: isSelected,
+            leading: Icon(
+              isSelected ? Icons.folder_open : Icons.folder_outlined,
+              size: 18,
+            ),
+            contentPadding:
+                EdgeInsets.only(left: indentation, right: 8, bottom: 0),
+            title: Text(
+              content.directory.name,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+            subtitle: Text(_directoryItemCountLabel(content)),
+            onTap: () => _onDirectorySelected(content),
+          );
+        },
+      ),
+    );
+  }
+
+  void _onDirectorySelected(TagDirectoryContent content) {
+    setState(() {
+      _selectedDirectoryId = content.directory.id;
+    });
+  }
+
+  String _directoryItemCountLabel(TagDirectoryContent content) {
+    final count = content.media.length;
+    return '$count item${count == 1 ? '' : 's'}';
+  }
+
+  Widget _buildDirectoryPreview(
+    TagSection section,
+    TagDirectoryContent? selectedContent,
+    int gridColumns,
+  ) {
+    final theme = Theme.of(context);
+
+    if (selectedContent == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Select a directory to preview its media.',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
+      );
+    }
+
+    final segments = _buildBreadcrumbSegments(selectedContent);
+    final media = selectedContent.media;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildBreadcrumbBar(segments),
+        const SizedBox(height: 12),
+        Text(
+          _directoryItemCountLabel(selectedContent),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (media.isEmpty)
+          Text(
+            'No media found in this directory for the selected tag.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          )
+        else
+          _buildMediaGrid(media, media, gridColumns),
+        if (section.media.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text(
+            'Other tagged media',
+            style: theme.textTheme.titleSmall,
+          ),
+          const SizedBox(height: 12),
+          _buildMediaGrid(section.media, section.media, gridColumns),
+        ],
+      ],
+    );
+  }
+
+  List<String> _buildBreadcrumbSegments(TagDirectoryContent content) {
+    final segments = _splitPathSegments(content.directory.path);
+    if (segments.isEmpty) {
+      return [content.directory.name];
+    }
+    if (segments.last != content.directory.name &&
+        content.directory.name.isNotEmpty) {
+      segments.add(content.directory.name);
+    }
+    return segments;
+  }
+
+  Widget _buildBreadcrumbBar(List<String> segments) {
+    final theme = Theme.of(context);
+    final children = <Widget>[];
+
+    for (var i = 0; i < segments.length; i++) {
+      if (i == 0) {
+        children.add(const Icon(Icons.folder, size: 18));
+      } else {
+        children.add(const Icon(Icons.chevron_right, size: 16));
+      }
+      children.add(
+        Text(
+          segments[i],
+          style: i == segments.length - 1
+              ? theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                )
+              : theme.textTheme.bodySmall,
+        ),
+      );
+    }
+
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 4,
+      runSpacing: 4,
+      children: children,
+    );
+  }
+
+  List<String> _splitPathSegments(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final parts = normalized.split('/');
+    final segments = parts.where((segment) => segment.isNotEmpty).toList();
+    return segments;
+  }
+
+  List<_DirectoryEntry> _buildDirectoryEntries(
+    List<TagDirectoryContent> directories,
+  ) {
+    final root = _DirectoryNode();
+    for (final content in directories) {
+      final segments = _splitPathSegments(content.directory.path);
+      if (segments.isEmpty) {
+        segments.add(content.directory.name);
+      }
+
+      var current = root;
+      for (final segment in segments) {
+        current = current.children.putIfAbsent(
+          segment,
+          () => _DirectoryNode(name: segment),
+        );
+      }
+      current.content = content;
+    }
+
+    final entries = <_DirectoryEntry>[];
+    final sortedRoots = root.children.values.toList()
+      ..sort((a, b) => a.name!.toLowerCase().compareTo(b.name!.toLowerCase()));
+    for (final node in sortedRoots) {
+      _collectDirectoryEntries(node, 0, entries);
+    }
+    return entries;
+  }
+
+  void _collectDirectoryEntries(
+    _DirectoryNode node,
+    int depth,
+    List<_DirectoryEntry> entries,
+  ) {
+    entries.add(_DirectoryEntry(
+      name: node.name!,
+      depth: depth,
+      content: node.content,
+    ));
+
+    final children = node.children.values.toList()
+      ..sort((a, b) => a.name!.toLowerCase().compareTo(b.name!.toLowerCase()));
+    for (final child in children) {
+      _collectDirectoryEntries(child, depth + 1, entries);
+    }
   }
 
   List<MediaEntity> _collectMediaFromSections(
@@ -457,4 +791,26 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ),
     );
   }
+}
+
+class _DirectoryNode {
+  _DirectoryNode({this.name});
+
+  final String? name;
+  final Map<String, _DirectoryNode> children = {};
+  TagDirectoryContent? content;
+}
+
+class _DirectoryEntry {
+  _DirectoryEntry({
+    required this.name,
+    required this.depth,
+    this.content,
+  });
+
+  final String name;
+  final int depth;
+  final TagDirectoryContent? content;
+
+  bool get isSelectable => content != null;
 }
