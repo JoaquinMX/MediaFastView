@@ -227,6 +227,18 @@ class IsarFavoritesDataSource {
         .toList(growable: false);
   }
 
+  /// Convenience accessor returning IDs for all favorited directories.
+  Future<List<String>> getFavoriteDirectoryIds() async {
+    await _ensureReady();
+    final directoryFavorites = await getFavoritesByType(
+      FavoriteItemType.directory,
+      newestFirst: false,
+    );
+    return directoryFavorites
+        .map((favorite) => favorite.itemId)
+        .toList(growable: false);
+  }
+
   Future<List<FavoriteCollection>> _mapModels(
     List<FavoriteModel> favorites,
   ) async {

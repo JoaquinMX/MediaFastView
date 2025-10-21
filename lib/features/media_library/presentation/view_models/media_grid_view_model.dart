@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/bookmark_service.dart';
@@ -13,6 +14,7 @@ import '../../domain/entities/media_entity.dart';
 import '../../data/isar/isar_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
+import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 
 /// Defines the available sort options for media items.
 enum MediaSortOption {
@@ -55,6 +57,7 @@ class MediaLoaded extends MediaState {
     required this.sortOption,
     required this.selectedMediaIds,
     required this.isSelectionMode,
+    required this.showFavoritesOnly,
   });
 
   final List<MediaEntity> media;
@@ -66,6 +69,7 @@ class MediaLoaded extends MediaState {
   final MediaSortOption sortOption;
   final Set<String> selectedMediaIds;
   final bool isSelectionMode;
+  final bool showFavoritesOnly;
 
   MediaLoaded copyWith({
     List<MediaEntity>? media,
@@ -77,6 +81,7 @@ class MediaLoaded extends MediaState {
     MediaSortOption? sortOption,
     Set<String>? selectedMediaIds,
     bool? isSelectionMode,
+    bool? showFavoritesOnly,
   }) {
     return MediaLoaded(
       media: media ?? this.media,
@@ -88,6 +93,7 @@ class MediaLoaded extends MediaState {
       sortOption: sortOption ?? this.sortOption,
       selectedMediaIds: selectedMediaIds ?? this.selectedMediaIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
+      showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
     );
   }
 }
@@ -134,6 +140,28 @@ class MediaViewModel extends StateNotifier<MediaState> {
       gridColumnsProvider,
       (_, next) => _applyColumnUpdate(next),
     );
+    _favoritesSubscription = _ref.listen<FavoritesState>(
+      favoritesViewModelProvider,
+      (previous, next) {
+        final favorites = switch (next) {
+          FavoritesLoaded(:final favorites) => favorites,
+          FavoritesEmpty() => const <String>[],
+          _ => _favoriteMediaIds,
+        };
+        if (!listEquals(favorites, _favoriteMediaIds)) {
+          _favoriteMediaIds = favorites;
+          if (_showFavoritesOnly && _favoriteMediaIds.isEmpty) {
+            _showFavoritesOnly = false;
+            _emitLoadedStateFromCache();
+            return;
+          }
+          if (_showFavoritesOnly) {
+            _emitLoadedStateFromCache();
+          }
+        }
+      },
+      fireImmediately: true,
+    );
     loadMedia();
   }
 
@@ -150,11 +178,15 @@ class MediaViewModel extends StateNotifier<MediaState> {
   Set<String> _selectedMediaIds = <String>{};
   bool _isSelectionMode = false;
   late final UpdateDirectoryAccessUseCase _updateDirectoryAccessUseCase;
+  List<String> _favoriteMediaIds = const <String>[];
+  bool _showFavoritesOnly = false;
+  late final ProviderSubscription<FavoritesState> _favoritesSubscription;
 
   MediaSortOption get currentSortOption => _currentSortOption;
   Set<String> get selectedMediaIds => Set<String>.unmodifiable(_selectedMediaIds);
   bool get isSelectionMode => _isSelectionMode;
   int get selectedMediaCount => _selectedMediaIds.length;
+  bool get showFavoritesOnly => _showFavoritesOnly;
 
   /// Returns tags shared by every selected media item.
   List<String> commonTagIdsForSelection() {
@@ -188,6 +220,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   @override
   void dispose() {
     _gridColumnsSubscription.close();
+    _favoritesSubscription.close();
     super.dispose();
   }
 
@@ -361,7 +394,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         LoggingService.instance.info('Media loaded successfully, setting loaded state');
         _clearSelectionInternal();
         state = MediaLoaded(
-          media: _cachedMedia,
+          media: _applyFavoritesFilter(_cachedMedia),
           searchQuery: '',
           selectedTagIds: const [],
           columns: _ref.read(gridColumnsProvider),
@@ -370,6 +403,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
           sortOption: _currentSortOption,
           selectedMediaIds: const <String>{},
           isSelectionMode: false,
+          showFavoritesOnly: _showFavoritesOnly,
         );
       }
     } catch (e) {
@@ -407,7 +441,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
       :final currentDirectoryName,
       :final sortOption,
     )) {
-      final results = _applySearch(_cachedMedia, query);
+      final filtered = _applyFavoritesFilter(_cachedMedia);
+      final results = _applySearch(filtered, query);
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
@@ -422,6 +457,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         sortOption: sortOption,
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
+        showFavoritesOnly: _showFavoritesOnly,
       );
     }
   }
@@ -467,7 +503,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
       _clearSelectionInternal();
       state = MediaLoaded(
-        media: _cachedMedia,
+        media: _applyFavoritesFilter(_cachedMedia),
         searchQuery: '', // Reset search when filtering
         selectedTagIds: tagIds,
         columns: previousColumns,
@@ -476,6 +512,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         sortOption: _currentSortOption,
         selectedMediaIds: const <String>{},
         isSelectionMode: false,
+        showFavoritesOnly: _showFavoritesOnly,
       );
     } catch (e) {
       // Check if this is a permission-related error
@@ -491,6 +528,18 @@ class MediaViewModel extends StateNotifier<MediaState> {
       }
       _clearSelectionInternal();
     }
+  }
+
+  /// Filters media to only show favorites when [value] is true.
+  void setShowFavoritesOnly(bool value) {
+    if (_showFavoritesOnly == value) {
+      return;
+    }
+    if (value && _favoriteMediaIds.isEmpty) {
+      return;
+    }
+    _showFavoritesOnly = value;
+    _emitLoadedStateFromCache();
   }
 
   /// Sets the number of columns for the grid.
@@ -653,6 +702,19 @@ class MediaViewModel extends StateNotifier<MediaState> {
     return _searchMedia(media, query);
   }
 
+  List<MediaEntity> _applyFavoritesFilter(List<MediaEntity> media) {
+    if (!_showFavoritesOnly) {
+      return List<MediaEntity>.from(media);
+    }
+    if (_favoriteMediaIds.isEmpty) {
+      return const <MediaEntity>[];
+    }
+    final favoritesSet = _favoriteMediaIds.toSet();
+    return media
+        .where((item) => favoritesSet.contains(item.id))
+        .toList(growable: false);
+  }
+
   void _emitLoadedStateFromCache() {
     if (state case MediaLoaded(
       :final searchQuery,
@@ -665,7 +727,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
       _isSelectionMode = selectionMode;
-      final results = _applySearch(_cachedMedia, searchQuery);
+      final filtered = _applyFavoritesFilter(_cachedMedia);
+      final results = _applySearch(filtered, searchQuery);
       state = MediaLoaded(
         media: results,
         searchQuery: searchQuery,
@@ -676,6 +739,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         sortOption: _currentSortOption,
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
+        showFavoritesOnly: _showFavoritesOnly,
       );
     } else if (state is MediaEmpty && _selectedMediaIds.isNotEmpty) {
       _clearSelectionInternal();
@@ -711,6 +775,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         sortOption: sortOption,
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
+        showFavoritesOnly: _showFavoritesOnly,
       );
     }
   }
@@ -731,7 +796,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
       :final currentDirectoryPath,
       :final currentDirectoryName,
     )) {
-      final results = _applySearch(_cachedMedia, searchQuery);
+      final filtered = _applyFavoritesFilter(_cachedMedia);
+      final results = _applySearch(filtered, searchQuery);
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
@@ -746,6 +812,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         sortOption: _currentSortOption,
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
+        showFavoritesOnly: _showFavoritesOnly,
       );
     }
   }
