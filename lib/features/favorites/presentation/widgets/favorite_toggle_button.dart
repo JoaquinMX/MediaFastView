@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../shared/widgets/favorite_toggle_button.dart'
+    as shared;
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../view_models/favorites_view_model.dart';
 
@@ -19,23 +21,17 @@ class FavoriteToggleButton extends ConsumerWidget {
     final hasLoadedFavorites = viewModel.hasLoadedFavorites;
     final isBusy = state is FavoritesLoading && hasLoadedFavorites;
 
-    return IconButton(
-      icon: Icon(
-        isFavorite ? Icons.favorite : Icons.favorite_border,
-        color: isFavorite ? Colors.red : Colors.white,
-      ),
-      onPressed: () async {
-        if (isBusy) {
-          return;
-        }
+    return shared.FavoriteToggleButton(
+      isFavorite: isFavorite,
+      onToggle: () async {
         await viewModel.toggleFavorite(media);
         onToggle?.call(!isFavorite);
       },
-      tooltip: isFavorite ? 'Remove from favorites' : 'Add to favorites',
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withValues(alpha: 0.5),
-        foregroundColor: isFavorite ? Colors.red : Colors.white,
-      ),
+      isBusy: isBusy,
+      showBusyIndicator: true,
+      backgroundColor: Colors.black.withValues(alpha: 0.5),
+      favoriteColor: Colors.red,
+      idleColor: Colors.white,
     );
   }
 }
