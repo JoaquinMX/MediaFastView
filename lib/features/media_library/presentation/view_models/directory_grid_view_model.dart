@@ -1,5 +1,6 @@
 import 'dart:collection';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/error/app_error.dart';
@@ -15,6 +16,7 @@ import '../../domain/use_cases/clear_directories_use_case.dart';
 import '../../domain/use_cases/get_directories_use_case.dart';
 import '../../domain/use_cases/remove_directory_use_case.dart';
 import '../../domain/use_cases/search_directories_use_case.dart';
+import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 
 /// Defines the available sort options for directory listings.
 enum DirectorySortOption {
@@ -53,6 +55,7 @@ class DirectoryLoaded extends DirectoryState {
     required this.sortOption,
     required this.selectedDirectoryIds,
     required this.isSelectionMode,
+    required this.showFavoritesOnly,
   });
 
   final List<DirectoryEntity> directories;
@@ -62,6 +65,7 @@ class DirectoryLoaded extends DirectoryState {
   final DirectorySortOption sortOption;
   final Set<String> selectedDirectoryIds;
   final bool isSelectionMode;
+  final bool showFavoritesOnly;
 
   DirectoryLoaded copyWith({
     List<DirectoryEntity>? directories,
@@ -71,6 +75,7 @@ class DirectoryLoaded extends DirectoryState {
     DirectorySortOption? sortOption,
     Set<String>? selectedDirectoryIds,
     bool? isSelectionMode,
+    bool? showFavoritesOnly,
   }) {
     return DirectoryLoaded(
       directories: directories ?? this.directories,
@@ -81,6 +86,7 @@ class DirectoryLoaded extends DirectoryState {
       selectedDirectoryIds:
           selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
+      showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
     );
   }
 }
@@ -108,6 +114,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
     required this.sortOption,
     required this.selectedDirectoryIds,
     required this.isSelectionMode,
+    required this.showFavoritesOnly,
   });
 
   final List<DirectoryEntity> inaccessibleDirectories;
@@ -118,6 +125,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
   final DirectorySortOption sortOption;
   final Set<String> selectedDirectoryIds;
   final bool isSelectionMode;
+  final bool showFavoritesOnly;
 
   DirectoryPermissionRevoked copyWith({
     List<DirectoryEntity>? inaccessibleDirectories,
@@ -128,6 +136,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
     DirectorySortOption? sortOption,
     Set<String>? selectedDirectoryIds,
     bool? isSelectionMode,
+    bool? showFavoritesOnly,
   }) {
     return DirectoryPermissionRevoked(
       inaccessibleDirectories:
@@ -141,6 +150,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
       selectedDirectoryIds:
           selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
+      showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
     );
   }
 }
@@ -156,6 +166,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     required this.sortOption,
     required this.selectedDirectoryIds,
     required this.isSelectionMode,
+    required this.showFavoritesOnly,
   });
 
   final List<DirectoryEntity> invalidDirectories;
@@ -166,6 +177,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
   final DirectorySortOption sortOption;
   final Set<String> selectedDirectoryIds;
   final bool isSelectionMode;
+  final bool showFavoritesOnly;
 
   DirectoryBookmarkInvalid copyWith({
     List<DirectoryEntity>? invalidDirectories,
@@ -176,6 +188,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
     DirectorySortOption? sortOption,
     Set<String>? selectedDirectoryIds,
     bool? isSelectionMode,
+    bool? showFavoritesOnly,
   }) {
     return DirectoryBookmarkInvalid(
       invalidDirectories: invalidDirectories ?? this.invalidDirectories,
@@ -188,6 +201,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
       selectedDirectoryIds:
           selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
+      showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
     );
   }
 }
@@ -214,6 +228,25 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         _emitFilteredState();
       }
     });
+    _favoritesSubscription =
+        _ref.listen<FavoritesState>(favoritesViewModelProvider, (previous, next) {
+      final favorites = switch (next) {
+        FavoritesLoaded(:final directoryFavorites) => directoryFavorites,
+        FavoritesEmpty() => const <String>[],
+        _ => _favoriteDirectoryIds,
+      };
+      if (!listEquals(favorites, _favoriteDirectoryIds)) {
+        _favoriteDirectoryIds = favorites;
+        if (_showFavoritesOnly && _favoriteDirectoryIds.isEmpty) {
+          _showFavoritesOnly = false;
+          _emitFilteredState();
+          return;
+        }
+        if (_showFavoritesOnly) {
+          _emitFilteredState();
+        }
+      }
+    }, fireImmediately: true);
     loadDirectories();
   }
 
@@ -226,6 +259,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   final LocalDirectoryDataSource _localDirectoryDataSource;
   final PermissionService _permissionService;
   late final ProviderSubscription<int> _gridColumnsSubscription;
+  late final ProviderSubscription<FavoritesState> _favoritesSubscription;
 
   List<DirectoryEntity> _cachedAccessibleDirectories = const [];
   List<DirectoryEntity> _cachedInaccessibleDirectories = const [];
@@ -236,11 +270,14 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   DirectorySortOption _currentSortOption = DirectorySortOption.nameAscending;
   Set<String> _selectedDirectoryIds = <String>{};
   bool _isSelectionMode = false;
+  List<String> _favoriteDirectoryIds = const <String>[];
+  bool _showFavoritesOnly = false;
 
   DirectorySortOption get currentSortOption => _currentSortOption;
   Set<String> get selectedDirectoryIds => Set<String>.unmodifiable(_selectedDirectoryIds);
   bool get isSelectionMode => _isSelectionMode;
   int get selectedDirectoryCount => _selectedDirectoryIds.length;
+  bool get showFavoritesOnly => _showFavoritesOnly;
 
   /// Returns the collection of tag IDs that are common to every selected
   /// directory. When no directories are selected the list will be empty.
@@ -277,6 +314,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   @override
   void dispose() {
     _gridColumnsSubscription.close();
+    _favoritesSubscription.close();
     super.dispose();
   }
 
@@ -581,6 +619,18 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     _emitFilteredState();
   }
 
+  /// Filters directories to show only favorites when [value] is true.
+  void setShowFavoritesOnly(bool value) {
+    if (_showFavoritesOnly == value) {
+      return;
+    }
+    if (value && _favoriteDirectoryIds.isEmpty) {
+      return;
+    }
+    _showFavoritesOnly = value;
+    _emitFilteredState();
+  }
+
   void _updateDirectoryCaches({
     List<DirectoryEntity>? accessible,
     List<DirectoryEntity>? inaccessible,
@@ -601,30 +651,14 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     _currentSearchQuery = '';
     _currentSelectedTagIds = const <String>[];
     _currentColumns = _ref.read(gridColumnsProvider);
+    _showFavoritesOnly = false;
   }
 
   void _emitFilteredState() {
-    final filteredAccessible = _applySearchIfNeeded(
-      _filterDirectoriesByTags(
-        _cachedAccessibleDirectories,
-        _currentSelectedTagIds,
-      ),
-      _currentSearchQuery,
-    );
-    final filteredInaccessible = _applySearchIfNeeded(
-      _filterDirectoriesByTags(
-        _cachedInaccessibleDirectories,
-        _currentSelectedTagIds,
-      ),
-      _currentSearchQuery,
-    );
-    final filteredInvalid = _applySearchIfNeeded(
-      _filterDirectoriesByTags(
-        _cachedInvalidDirectories,
-        _currentSelectedTagIds,
-      ),
-      _currentSearchQuery,
-    );
+    final filteredAccessible = _filterDirectories(_cachedAccessibleDirectories);
+    final filteredInaccessible =
+        _filterDirectories(_cachedInaccessibleDirectories);
+    final filteredInvalid = _filterDirectories(_cachedInvalidDirectories);
 
     final sortedAccessible = _sortDirectories(filteredAccessible);
     final sortedInaccessible = _sortDirectories(filteredInaccessible);
@@ -653,6 +687,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         sortOption: _currentSortOption,
         selectedDirectoryIds: selectionSnapshot,
         isSelectionMode: selectionMode,
+        showFavoritesOnly: _showFavoritesOnly,
       );
       return;
     }
@@ -667,6 +702,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         sortOption: _currentSortOption,
         selectedDirectoryIds: selectionSnapshot,
         isSelectionMode: selectionMode,
+        showFavoritesOnly: _showFavoritesOnly,
       );
       return;
     }
@@ -679,6 +715,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       sortOption: _currentSortOption,
       selectedDirectoryIds: selectionSnapshot,
       isSelectionMode: selectionMode,
+      showFavoritesOnly: _showFavoritesOnly,
     );
   }
 
@@ -690,6 +727,32 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       return directories;
     }
     return _searchDirectoriesUseCase(directories, searchQuery);
+  }
+
+  List<DirectoryEntity> _filterDirectories(
+    List<DirectoryEntity> directories,
+  ) {
+    final tagged = _filterDirectoriesByTags(
+      directories,
+      _currentSelectedTagIds,
+    );
+    final favoritesFiltered = _filterDirectoriesByFavorites(tagged);
+    return _applySearchIfNeeded(favoritesFiltered, _currentSearchQuery);
+  }
+
+  List<DirectoryEntity> _filterDirectoriesByFavorites(
+    List<DirectoryEntity> directories,
+  ) {
+    if (!_showFavoritesOnly) {
+      return directories;
+    }
+    if (_favoriteDirectoryIds.isEmpty) {
+      return const <DirectoryEntity>[];
+    }
+    final favoritesSet = _favoriteDirectoryIds.toSet();
+    return directories
+        .where((directory) => favoritesSet.contains(directory.id))
+        .toList(growable: false);
   }
 
   /// Sets the number of columns for the grid.

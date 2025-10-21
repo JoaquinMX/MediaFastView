@@ -20,11 +20,12 @@ class FavoritesRepositoryImpl implements FavoritesRepository {
 
   @override
   Future<List<String>> getFavoriteMediaIds() async {
-    final favorites = await _favoritesDataSource.getFavorites();
-    return favorites
-        .where((favorite) => favorite.itemType == FavoriteItemType.media)
-        .map((favorite) => favorite.itemId)
-        .toList(growable: false);
+    return _favoritesDataSource.getFavoriteMediaIds();
+  }
+
+  @override
+  Future<List<String>> getFavoriteDirectoryIds() {
+    return _favoritesDataSource.getFavoriteDirectoryIds();
   }
 
   @override

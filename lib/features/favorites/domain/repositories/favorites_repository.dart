@@ -10,6 +10,9 @@ abstract class FavoritesRepository {
   /// Retrieves all favorite media IDs.
   Future<List<String>> getFavoriteMediaIds();
 
+  /// Retrieves all favorite directory IDs.
+  Future<List<String>> getFavoriteDirectoryIds();
+
   /// Adds a media item to favorites.
   Future<void> addFavorite(String mediaId);
 

@@ -274,16 +274,44 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   }
 
   Widget _buildTagFilter(MediaViewModel viewModel, MediaState state) {
-    final selectedTagIds = state is MediaLoaded
-        ? state.selectedTagIds
-        : const <String>[];
+    final selectedTagIds =
+        state is MediaLoaded ? state.selectedTagIds : const <String>[];
+    final showFavoritesOnly =
+        state is MediaLoaded ? state.showFavoritesOnly : viewModel.showFavoritesOnly;
+    final favoritesState = ref.watch(favoritesViewModelProvider);
+    final hasFavoriteMedia = switch (favoritesState) {
+      FavoritesLoaded(:final favorites) => favorites.isNotEmpty,
+      _ => false,
+    };
+    final shouldShowFavoritesChip = hasFavoriteMedia || showFavoritesOnly;
 
     return Container(
       padding: UiSpacing.tagFilterPadding,
-      child: TagFilterChips(
-        selectedTagIds: selectedTagIds,
-        onSelectionChanged: viewModel.filterByTags,
-        maxChipsToShow: UiGrid.maxFilterChips, // Limit to prevent overflow
+      child: Row(
+        children: [
+          if (shouldShowFavoritesChip) ...[
+            FilterChip(
+              label: const Text('Favorites'),
+              avatar: const Icon(Icons.star, color: Colors.amber),
+              selected: showFavoritesOnly,
+              onSelected: (value) {
+                if (!hasFavoriteMedia && value) {
+                  return;
+                }
+                viewModel.setShowFavoritesOnly(value);
+              },
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: TagFilterChips(
+              selectedTagIds: selectedTagIds,
+              onSelectionChanged: viewModel.filterByTags,
+              maxChipsToShow:
+                  UiGrid.maxFilterChips, // Limit to prevent overflow
+            ),
+          ),
+        ],
       ),
     );
   }

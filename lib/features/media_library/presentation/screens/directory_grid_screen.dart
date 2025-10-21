@@ -376,11 +376,18 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
   Widget _buildTagFilter(DirectoryViewModel viewModel) {
     final tagState = ref.watch(tagViewModelProvider);
-    final selectedTagIds = switch (ref.watch(directoryViewModelProvider)) {
+    final directoryState = ref.watch(directoryViewModelProvider);
+    final selectedTagIds = switch (directoryState) {
       DirectoryLoaded(:final selectedTagIds) => selectedTagIds,
       DirectoryPermissionRevoked(:final selectedTagIds) => selectedTagIds,
       DirectoryBookmarkInvalid(:final selectedTagIds) => selectedTagIds,
       _ => const <String>[],
+    };
+    final showFavoritesOnly = switch (directoryState) {
+      DirectoryLoaded(:final showFavoritesOnly) => showFavoritesOnly,
+      DirectoryPermissionRevoked(:final showFavoritesOnly) => showFavoritesOnly,
+      DirectoryBookmarkInvalid(:final showFavoritesOnly) => showFavoritesOnly,
+      _ => viewModel.showFavoritesOnly,
     };
     final normalizedSelectedTagIds = List<String>.from(selectedTagIds);
 
@@ -389,27 +396,56 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       'DirectoryGridScreen: Building tag filter with selectedTagIds: $normalizedSelectedTagIds',
     );
 
+    final favoritesState = ref.watch(favoritesViewModelProvider);
+    final hasFavoriteDirectories = switch (favoritesState) {
+      FavoritesLoaded(:final directoryFavorites) =>
+          directoryFavorites.isNotEmpty,
+      _ => false,
+    };
+
+    final shouldShowFavoritesChip = hasFavoriteDirectories || showFavoritesOnly;
+
     return Container(
       height: UiSizing.tagFilterHeight,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       alignment: Alignment.centerLeft,
-      child: switch (tagState) {
-        TagLoading() => const Center(child: CircularProgressIndicator()),
-        TagError(:final message) => Center(
-            child: Text(
-              'Error loading tags: $message',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+      child: Row(
+        children: [
+          if (shouldShowFavoritesChip) ...[
+            FilterChip(
+              label: const Text('Favorites'),
+              avatar: const Icon(Icons.star, color: Colors.amber),
+              selected: showFavoritesOnly,
+              onSelected: (value) {
+                if (!hasFavoriteDirectories && value) {
+                  return;
+                }
+                viewModel.setShowFavoritesOnly(value);
+              },
             ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: switch (tagState) {
+              TagLoading() => const Center(child: CircularProgressIndicator()),
+              TagError(:final message) => Center(
+                  child: Text(
+                    'Error loading tags: $message',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                  ),
+                ),
+              TagEmpty() => const SizedBox.shrink(),
+              TagLoaded(:final tags) => _buildDirectoryTagFilterStrip(
+                  tags,
+                  normalizedSelectedTagIds,
+                  viewModel,
+                ),
+            },
           ),
-        TagEmpty() => const SizedBox.shrink(),
-        TagLoaded(:final tags) => _buildDirectoryTagFilterStrip(
-            tags,
-            normalizedSelectedTagIds,
-            viewModel,
-          ),
-      },
+        ],
+      ),
     );
   }
 

@@ -28,18 +28,25 @@ class FavoritesLoading extends FavoritesState {
 
 /// Loaded state with favorites data.
 class FavoritesLoaded extends FavoritesState {
-  const FavoritesLoaded({required this.favorites, required this.media});
+  const FavoritesLoaded({
+    required this.favorites,
+    required this.media,
+    required this.directoryFavorites,
+  });
 
   final List<String> favorites;
   final List<MediaEntity> media;
+  final List<String> directoryFavorites;
 
   FavoritesLoaded copyWith({
     List<String>? favorites,
     List<MediaEntity>? media,
+    List<String>? directoryFavorites,
   }) {
     return FavoritesLoaded(
       favorites: favorites ?? this.favorites,
       media: media ?? this.media,
+      directoryFavorites: directoryFavorites ?? this.directoryFavorites,
     );
   }
 }
@@ -140,34 +147,41 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
     state = const FavoritesLoading();
     try {
       final favoriteIds = await _favoritesRepository.getFavoriteMediaIds();
+      final directoryFavoriteIds =
+          await _favoritesRepository.getFavoriteDirectoryIds();
       LoggingService.instance.info(
         'Loaded ${favoriteIds.length} favorite IDs: $favoriteIds',
       );
       if (!mounted) {
         return;
       }
-      if (favoriteIds.isEmpty) {
+      if (favoriteIds.isEmpty && directoryFavoriteIds.isEmpty) {
         LoggingService.instance.info('No favorites found, setting empty state');
         state = const FavoritesEmpty();
         return;
       }
 
       // Get media entities for favorite IDs
-      final media = await _getMediaForFavorites(favoriteIds);
+      final media = favoriteIds.isEmpty
+          ? const <MediaEntity>[]
+          : await _getMediaForFavorites(favoriteIds);
       if (!mounted) {
         return;
       }
-      if (media.isEmpty) {
+      if (media.isEmpty && favoriteIds.isNotEmpty) {
         LoggingService.instance.warning(
-          'No media found for favorite IDs, setting empty state',
+          'No media found for favorite IDs, setting media list empty',
         );
-        state = const FavoritesEmpty();
-      } else {
-        LoggingService.instance.info(
-          'Setting loaded state with ${media.length} media items',
-        );
-        state = FavoritesLoaded(favorites: favoriteIds, media: media);
       }
+      LoggingService.instance.info(
+        'Setting loaded state with ${media.length} media items and '
+        '${directoryFavoriteIds.length} directory favorites',
+      );
+      state = FavoritesLoaded(
+        favorites: favoriteIds,
+        media: media,
+        directoryFavorites: directoryFavoriteIds,
+      );
     } catch (e) {
       LoggingService.instance.error('Error loading favorites: $e');
       if (!mounted) {
@@ -356,10 +370,11 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
   }) {
     final currentState = state;
     if (currentState is FavoritesLoaded) {
-      if (type != FavoriteItemType.media) {
-        return false;
-      }
-      return currentState.favorites.contains(itemId);
+      return switch (type) {
+        FavoriteItemType.media => currentState.favorites.contains(itemId),
+        FavoriteItemType.directory =>
+            currentState.directoryFavorites.contains(itemId),
+      };
     }
     return false;
   }
