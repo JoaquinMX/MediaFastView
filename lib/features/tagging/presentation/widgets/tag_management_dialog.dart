@@ -46,11 +46,11 @@ class TagManagementDialog extends ConsumerWidget {
       onTagToggle: media == null
           ? null
           : (TagEntity tag, bool isSelected) async {
-              if (media!.type == MediaType.directory) {
-                await assignTagUseCase.toggleTagOnDirectory(media!.id, tag);
-              } else {
-                await assignTagUseCase.toggleTagOnMedia(media!.id, tag);
-              }
+              // Directory entries surfaced within the media grid are persisted as media
+              // items, so ensure their tag assignments are updated through the media
+              // repository. Updating via the directory repository would miss these
+              // nested directories, causing the new tag to be lost on reload.
+              await assignTagUseCase.toggleTagOnMedia(media!.id, tag);
               await tagsNotifier.refreshTags();
             },
       showCancelButton: true,
