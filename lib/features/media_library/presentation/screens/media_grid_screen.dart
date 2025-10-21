@@ -18,6 +18,7 @@ import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
 import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
 import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
+import '../../../tagging/presentation/widgets/tag_selectable_chip_strip.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
 import '../view_models/media_grid_view_model.dart';
@@ -281,9 +282,13 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     return Container(
       padding: UiSpacing.tagFilterPadding,
       child: TagFilterChips(
+        // Keep the library tab chips aligned with the horizontal filter strip
+        // shared across the directory and tags flows.
         selectedTagIds: selectedTagIds,
         onSelectionChanged: viewModel.filterByTags,
         maxChipsToShow: UiGrid.maxFilterChips, // Limit to prevent overflow
+        chipVariant: TagChipVariant.filter,
+        chipPadding: UiSpacing.filterChipRight,
       ),
     );
   }

@@ -20,6 +20,8 @@ import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
 import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
+import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
+import '../../../tagging/presentation/widgets/tag_selectable_chip_strip.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../view_models/directory_grid_view_model.dart';
@@ -398,48 +400,29 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     return Container(
       height: UiSizing.tagFilterHeight,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          FilterChip(
-            label: const Text('All'),
-            selected: selectedTagIds.isEmpty,
-            onSelected: (_) {
-              debugPrint(
-                'DirectoryGridScreen: "All" filter chip selected, calling filterByTags with empty list',
-              );
-              viewModel.filterByTags(const []);
-            },
-          ),
-          SizedBox(width: UiSpacing.smallGap),
-          ...tags.map(
-            (tag) => Padding(
-              padding: UiSpacing.filterChipRight,
-              child: FilterChip(
-                label: Text(tag.name),
-                selected: selectedTagIds.contains(tag.id),
-                onSelected: (selected) {
-                  debugPrint(
-                    'DirectoryGridScreen: Tag "${tag.name}" (${tag.id}) chip ${selected ? 'selected' : 'deselected'}',
-                  );
-                  debugPrint(
-                    'DirectoryGridScreen: Current selectedTagIds before change: $selectedTagIds',
-                  );
-                  final newSelected = List<String>.from(selectedTagIds);
-                  if (selected) {
-                    newSelected.add(tag.id);
-                  } else {
-                    newSelected.remove(tag.id);
-                  }
-                  debugPrint(
-                    'DirectoryGridScreen: New selectedTagIds: $newSelected',
-                  );
-                  viewModel.filterByTags(newSelected);
-                },
-              ),
-            ),
-          ),
-        ],
+      child: TagFilterChips(
+        // Share the same horizontal tag filtering strip implementation used
+        // elsewhere to keep selection behaviour consistent and testable.
+        selectedTagIds: selectedTagIds,
+        onSelectionChanged: (newSelection) {
+          debugPrint(
+            'DirectoryGridScreen: Current selectedTagIds before change: $selectedTagIds',
+          );
+          debugPrint('DirectoryGridScreen: New selectedTagIds: $newSelection');
+          viewModel.filterByTags(newSelection);
+        },
+        chipVariant: TagChipVariant.filter,
+        chipPadding: UiSpacing.filterChipRight,
+        onAllChipSelected: (_) {
+          debugPrint(
+            'DirectoryGridScreen: "All" filter chip selected, calling filterByTags with empty list',
+          );
+        },
+        onTagSelectionToggle: (tag, isSelected, _, __) {
+          debugPrint(
+            'DirectoryGridScreen: Tag "${tag.name}" (${tag.id}) chip ${isSelected ? 'selected' : 'deselected'}',
+          );
+        },
       ),
     );
   }
