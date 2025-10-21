@@ -126,7 +126,10 @@ class FileService {
     return path.extension(filePath).toLowerCase();
   }
 
-  /// Determines media type from file extension
+  /// Determines media type from file extension.
+  ///
+  /// Keep the supported extensions in sync with
+  /// [FilesystemMediaDataSource] to ensure consistent media detection.
   String getMediaTypeFromExtension(String filePath) {
     final extension = getFileExtension(filePath);
 
@@ -139,6 +142,19 @@ class FileService {
       case '.webp':
       case '.tiff':
       case '.tif':
+      case '.heic':
+      case '.heif':
+      case '.heics':
+      case '.dng':
+      case '.nef':
+      case '.cr2':
+      case '.cr3':
+      case '.arw':
+      case '.raf':
+      case '.orf':
+      case '.rw2':
+      case '.sr2':
+      case '.pef':
         return 'image';
       case '.mp4':
       case '.avi':
@@ -147,6 +163,7 @@ class FileService {
       case '.wmv':
       case '.flv':
       case '.webm':
+      case '.m4v':
         return 'video';
       case '.txt':
       case '.md':

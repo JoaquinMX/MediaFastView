@@ -37,7 +37,10 @@ class FilesystemMediaDataSource {
   /// Gets the permission service, creating one if not provided
   PermissionService get _permissionSvc => _permissionService ?? PermissionService();
 
-  /// Supported image file extensions
+  /// Supported image file extensions.
+  ///
+  /// Keep these in sync with [FileService.getMediaTypeFromExtension] to ensure
+  /// consistent media detection across the app.
   static const Set<String> _imageExtensions = {
     'jpg',
     'jpeg',
@@ -46,9 +49,26 @@ class FilesystemMediaDataSource {
     'jfif',
     'bmp',
     'webp',
+    'tiff',
+    'tif',
+    'heic',
+    'heif',
+    'heics',
+    'dng',
+    'nef',
+    'cr2',
+    'cr3',
+    'arw',
+    'raf',
+    'orf',
+    'rw2',
+    'sr2',
+    'pef',
   };
 
-  /// Supported video file extensions
+  /// Supported video file extensions.
+  ///
+  /// Keep these in sync with [FileService.getMediaTypeFromExtension].
   static const Set<String> _videoExtensions = {
     'mp4',
     'mov',
@@ -57,6 +77,7 @@ class FilesystemMediaDataSource {
     'wmv',
     'flv',
     'webm',
+    'm4v',
   };
 
   /// Supported text file extensions
