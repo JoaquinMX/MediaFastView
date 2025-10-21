@@ -23,7 +23,7 @@ void main() {
     // Verify that our app shows the main navigation elements
     expect(find.byType(BottomNavigationBar), findsOneWidget);
     expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('Tags'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });
 

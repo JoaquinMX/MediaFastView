@@ -41,7 +41,7 @@ void main() {
       // Verify navigation elements are present
       expect(find.byType(BottomNavigationBar), findsOneWidget);
       expect(find.text('Library'), findsOneWidget);
-      expect(find.text('Favorites'), findsOneWidget);
+      expect(find.text('Tags'), findsOneWidget);
       expect(find.text('Settings'), findsOneWidget);
     });
   });
