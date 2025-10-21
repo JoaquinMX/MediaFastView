@@ -13,6 +13,8 @@ import 'package:media_fast_view/features/media_library/data/models/directory_mod
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 
+import '../../../../helpers/isar_id.dart';
+
 class _FakeIsarDatabase extends IsarDatabase {
   _FakeIsarDatabase()
       : super(
@@ -77,7 +79,7 @@ class _InMemoryFavoriteCollectionStore implements FavoriteCollectionStore {
     String itemId,
     FavoriteItemType type,
   ) async {
-    final favorite = _data[Isar.fastHash('${type.name}::$itemId')];
+    final favorite = _data[isarIdForString('${type.name}::$itemId')];
     return favorite == null ? null : _clone(favorite);
   }
 
@@ -158,7 +160,7 @@ class _InMemoryMediaCollectionStore implements MediaCollectionStore {
 
   @override
   Future<void> put(MediaCollection media) async {
-    _data[Isar.fastHash(media.mediaId)] = _clone(media);
+    _data[isarIdForString(media.mediaId)] = _clone(media);
   }
 
   @override
@@ -200,13 +202,13 @@ class _InMemoryDirectoryCollectionStore implements DirectoryCollectionStore {
 
   @override
   Future<DirectoryCollection?> getByDirectoryId(String directoryId) async {
-    final directory = _data[Isar.fastHash(directoryId)];
+    final directory = _data[isarIdForString(directoryId)];
     return directory == null ? null : _clone(directory);
   }
 
   @override
   Future<void> put(DirectoryCollection directory) async {
-    _data[Isar.fastHash(directory.directoryId)] = _clone(directory);
+    _data[isarIdForString(directory.directoryId)] = _clone(directory);
   }
 
   @override

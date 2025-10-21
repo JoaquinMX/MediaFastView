@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:isar/isar.dart';
 import 'package:media_fast_view/features/media_library/data/isar/media_collection.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
+
+import '../../../../helpers/isar_id.dart';
 
 void main() {
   group('MediaCollection', () {
@@ -29,7 +30,7 @@ void main() {
       expect(collection.tagIds, equals(model.tagIds));
       expect(collection.directoryId, model.directoryId);
       expect(collection.bookmarkData, model.bookmarkData);
-      expect(collection.id, Isar.fastHash(model.id));
+      expect(collection.id, isarIdForString(model.id));
 
       final roundTrip = collection.toModel();
 
