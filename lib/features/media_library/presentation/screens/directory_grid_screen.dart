@@ -19,7 +19,9 @@ import '../../domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
 import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
+import '../../../tagging/presentation/widgets/selectable_tag_chip_strip.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
+import '../../../tagging/presentation/widgets/tag_filter_dialog.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../view_models/directory_grid_view_model.dart';
@@ -380,66 +382,65 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       DirectoryBookmarkInvalid(:final selectedTagIds) => selectedTagIds,
       _ => const <String>[],
     };
+    final normalizedSelectedTagIds = List<String>.from(selectedTagIds);
 
     // Debug logging for tag filter state
     debugPrint(
-      'DirectoryGridScreen: Building tag filter with selectedTagIds: $selectedTagIds',
-    );
-
-    final tags = switch (tagState) {
-      TagLoaded(:final tags) => tags,
-      _ => <TagEntity>[],
-    };
-
-    debugPrint(
-      'DirectoryGridScreen: Available tags: ${tags.map((t) => t.name).toList()}',
+      'DirectoryGridScreen: Building tag filter with selectedTagIds: $normalizedSelectedTagIds',
     );
 
     return Container(
       height: UiSizing.tagFilterHeight,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          FilterChip(
-            label: const Text('All'),
-            selected: selectedTagIds.isEmpty,
-            onSelected: (_) {
-              debugPrint(
-                'DirectoryGridScreen: "All" filter chip selected, calling filterByTags with empty list',
-              );
-              viewModel.filterByTags(const []);
-            },
-          ),
-          SizedBox(width: UiSpacing.smallGap),
-          ...tags.map(
-            (tag) => Padding(
-              padding: UiSpacing.filterChipRight,
-              child: FilterChip(
-                label: Text(tag.name),
-                selected: selectedTagIds.contains(tag.id),
-                onSelected: (selected) {
-                  debugPrint(
-                    'DirectoryGridScreen: Tag "${tag.name}" (${tag.id}) chip ${selected ? 'selected' : 'deselected'}',
-                  );
-                  debugPrint(
-                    'DirectoryGridScreen: Current selectedTagIds before change: $selectedTagIds',
-                  );
-                  final newSelected = List<String>.from(selectedTagIds);
-                  if (selected) {
-                    newSelected.add(tag.id);
-                  } else {
-                    newSelected.remove(tag.id);
-                  }
-                  debugPrint(
-                    'DirectoryGridScreen: New selectedTagIds: $newSelected',
-                  );
-                  viewModel.filterByTags(newSelected);
-                },
-              ),
+      alignment: Alignment.centerLeft,
+      child: switch (tagState) {
+        TagLoading() => const Center(child: CircularProgressIndicator()),
+        TagError(:final message) => Center(
+            child: Text(
+              'Error loading tags: $message',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
             ),
           ),
-        ],
+        TagEmpty() => const SizedBox.shrink(),
+        TagLoaded(:final tags) => _buildDirectoryTagFilterStrip(
+            tags,
+            normalizedSelectedTagIds,
+            viewModel,
+          ),
+      },
+    );
+  }
+
+  Widget _buildDirectoryTagFilterStrip(
+    List<TagEntity> tags,
+    List<String> selectedTagIds,
+    DirectoryViewModel viewModel,
+  ) {
+    debugPrint(
+      'DirectoryGridScreen: Available tags: ${tags.map((t) => t.name).toList()}',
+    );
+
+    return SelectableTagChipStrip(
+      tags: tags,
+      selectedTagIds: selectedTagIds,
+      onSelectionChanged: (newSelection) {
+        debugPrint(
+          'DirectoryGridScreen: Tag selection changed: $newSelection',
+        );
+        viewModel.filterByTags(newSelection);
+      },
+      maxChipsToShow: UiGrid.maxFilterChips,
+      onOverflowPressed: () => TagFilterDialog.show(
+        context,
+        selectedTagIds: selectedTagIds,
+        onSelectionChanged: (newSelection) {
+          debugPrint(
+            'DirectoryGridScreen: Tag selection changed via dialog: $newSelection',
+          );
+          viewModel.filterByTags(newSelection);
+        },
       ),
     );
   }
