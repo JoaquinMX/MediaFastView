@@ -168,12 +168,15 @@ void main() {
         expect(fileService.getMediaTypeFromExtension('photo.jpg'), 'image');
         expect(fileService.getMediaTypeFromExtension('pic.png'), 'image');
         expect(fileService.getMediaTypeFromExtension('anim.gif'), 'image');
+        expect(fileService.getMediaTypeFromExtension('capture.heic'), 'image');
+        expect(fileService.getMediaTypeFromExtension('raw.dng'), 'image');
       });
 
       test('returns video for video extensions', () {
         expect(fileService.getMediaTypeFromExtension('movie.mp4'), 'video');
         expect(fileService.getMediaTypeFromExtension('clip.avi'), 'video');
         expect(fileService.getMediaTypeFromExtension('film.mkv'), 'video');
+        expect(fileService.getMediaTypeFromExtension('export.m4v'), 'video');
       });
 
       test('returns text for text extensions', () {
