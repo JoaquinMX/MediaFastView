@@ -295,7 +295,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       updatedModel = updatedModel.copyWith(name: name);
     }
 
-    if (bookmarkData != normalizedModel.bookmarkData) {
+    if (bookmarkData != null && bookmarkData != normalizedModel.bookmarkData) {
       updatedModel = updatedModel.copyWith(bookmarkData: bookmarkData);
     }
 
