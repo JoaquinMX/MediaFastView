@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:isar/isar.dart';
-import 'package:media_fast_view/features/tagging/data/isar/tag_collection.dart';
 import 'package:media_fast_view/features/media_library/data/models/tag_model.dart';
+import 'package:media_fast_view/features/tagging/data/isar/tag_collection.dart';
+
+import '../../../../helpers/isar_id.dart';
 
 void main() {
   group('TagCollection', () {
@@ -19,7 +20,7 @@ void main() {
       expect(collection.name, model.name);
       expect(collection.color, model.color);
       expect(collection.createdAt, model.createdAt);
-      expect(collection.id, Isar.fastHash(model.id));
+      expect(collection.id, isarIdForString(model.id));
 
       final roundTrip = collection.toModel();
 

@@ -5,6 +5,8 @@ import 'package:media_fast_view/features/media_library/data/isar/directory_colle
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/models/directory_model.dart';
 
+import '../../../../helpers/isar_id.dart';
+
 class _FakeIsarDatabase extends IsarDatabase {
   _FakeIsarDatabase()
       : super(
@@ -47,13 +49,13 @@ class _InMemoryDirectoryCollectionStore implements DirectoryCollectionStore {
 
   @override
   Future<DirectoryCollection?> getByDirectoryId(String directoryId) async {
-    final directory = _data[Isar.fastHash(directoryId)];
+    final directory = _data[isarIdForString(directoryId)];
     return directory != null ? _clone(directory) : null;
   }
 
   @override
   Future<void> put(DirectoryCollection directory) async {
-    _data[Isar.fastHash(directory.directoryId)] = _clone(directory);
+    _data[isarIdForString(directory.directoryId)] = _clone(directory);
   }
 
   @override

@@ -7,10 +7,12 @@ import 'package:media_fast_view/features/media_library/data/isar/isar_media_data
 import 'package:media_fast_view/features/media_library/data/isar/media_collection.dart';
 import 'package:media_fast_view/features/media_library/data/models/directory_model.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
+import 'package:media_fast_view/features/media_library/data/models/tag_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/tagging/data/isar/isar_tag_data_source.dart';
 import 'package:media_fast_view/features/tagging/data/isar/tag_collection.dart';
-import 'package:media_fast_view/features/media_library/data/models/tag_model.dart';
+
+import '../../../../helpers/isar_id.dart';
 
 class _FakeIsarDatabase extends IsarDatabase {
   _FakeIsarDatabase()
@@ -54,14 +56,14 @@ class _InMemoryTagCollectionStore implements TagCollectionStore {
 
   @override
   Future<TagCollection?> getByTagId(String tagId) async {
-    final tag = _data[Isar.fastHash(tagId)];
+    final tag = _data[isarIdForString(tagId)];
     return tag == null ? null : _clone(tag);
   }
 
   @override
   Future<List<TagCollection>> getByTagIds(List<String> tagIds) async {
     return tagIds
-        .map((tagId) => _data[Isar.fastHash(tagId)])
+        .map((tagId) => _data[isarIdForString(tagId)])
         .whereType<TagCollection>()
         .map(_clone)
         .toList(growable: false);
@@ -69,7 +71,7 @@ class _InMemoryTagCollectionStore implements TagCollectionStore {
 
   @override
   Future<void> put(TagCollection tag) async {
-    _data[Isar.fastHash(tag.tagId)] = _clone(tag);
+    _data[tag.id] = _clone(tag);
   }
 
   @override
@@ -109,13 +111,13 @@ class _InMemoryDirectoryCollectionStore implements DirectoryCollectionStore {
 
   @override
   Future<DirectoryCollection?> getByDirectoryId(String directoryId) async {
-    final directory = _data[Isar.fastHash(directoryId)];
+    final directory = _data[isarIdForString(directoryId)];
     return directory == null ? null : _clone(directory);
   }
 
   @override
   Future<void> put(DirectoryCollection directory) async {
-    _data[Isar.fastHash(directory.directoryId)] = _clone(directory);
+    _data[isarIdForString(directory.directoryId)] = _clone(directory);
   }
 
   @override
@@ -171,7 +173,7 @@ class _InMemoryMediaCollectionStore implements MediaCollectionStore {
 
   @override
   Future<void> put(MediaCollection media) async {
-    _data[Isar.fastHash(media.mediaId)] = _clone(media);
+    _data[isarIdForString(media.mediaId)] = _clone(media);
   }
 
   @override
