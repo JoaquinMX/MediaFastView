@@ -29,6 +29,7 @@ import '../../features/media_library/domain/use_cases/get_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/remove_directory_use_case.dart';
 import '../../features/media_library/domain/use_cases/search_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/validate_path_use_case.dart';
+import '../../features/media_library/domain/use_cases/update_directory_access_use_case.dart';
 import '../../features/tagging/domain/use_cases/get_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/assign_tag_use_case.dart';
 import '../../features/tagging/domain/use_cases/create_tag_use_case.dart';
@@ -194,6 +195,11 @@ final removeDirectoryUseCaseProvider = Provider<RemoveDirectoryUseCase>((ref) {
     ref.watch(mediaRepositoryProvider),
     ref.watch(favoritesRepositoryProvider),
   );
+});
+
+final updateDirectoryAccessUseCaseProvider =
+    Provider<UpdateDirectoryAccessUseCase>((ref) {
+  return UpdateDirectoryAccessUseCase(ref.watch(directoryRepositoryProvider));
 });
 
 final clearDirectoriesUseCaseProvider = Provider<ClearDirectoriesUseCase>((ref) {

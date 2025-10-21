@@ -72,11 +72,20 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       }
     }
 
+    String? effectiveBookmarkData = bookmarkData;
+    if (validationResult.renewedBookmarkData != null) {
+      effectiveBookmarkData = validationResult.renewedBookmarkData;
+      await _directoryRepository.updateDirectoryBookmark(
+        directoryId,
+        validationResult.renewedBookmarkData,
+      );
+    }
+
     try {
       final models = await _filesystemDataSource.scanMediaForDirectory(
         directoryPath,
         directoryId,
-        bookmarkData: bookmarkData,
+        bookmarkData: effectiveBookmarkData,
       );
 
       // Merge tags from local storage
