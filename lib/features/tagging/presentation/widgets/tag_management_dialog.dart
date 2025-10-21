@@ -71,7 +71,7 @@ class TagManagementDialog extends ConsumerWidget {
   static Future<void> _confirmDeleteTag(
     BuildContext context,
     TagEntity tag,
-    TagManagementViewModel tagViewModel,
+    TagViewModel tagViewModel,
   ) {
     return showDialog(
       context: context,
