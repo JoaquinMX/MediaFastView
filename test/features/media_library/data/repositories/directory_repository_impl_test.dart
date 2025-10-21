@@ -144,5 +144,36 @@ void main() {
         verify(isarDirectoryDataSource.addDirectory(any)).called(1);
       });
     });
+
+    group('updateDirectoryMetadata', () {
+      test('preserves existing bookmark when new value is not provided', () async {
+        const directoryId = 'dir-1';
+        final existingModel = DirectoryModel(
+          id: directoryId,
+          path: '/test/path',
+          name: 'Original',
+          thumbnailPath: null,
+          tagIds: const ['tag-1'],
+          lastModified: DateTime(2024, 1, 1),
+          bookmarkData: 'existing-bookmark',
+        );
+
+        when(isarDirectoryDataSource.getDirectoryById(directoryId)).thenAnswer(
+          (_) async => existingModel,
+        );
+        when(isarDirectoryDataSource.updateDirectory(any)).thenAnswer((_) async {});
+
+        await repository.updateDirectoryMetadata(
+          directoryId,
+          name: 'Renamed directory',
+        );
+
+        final captured =
+            verify(isarDirectoryDataSource.updateDirectory(captureAny)).captured.single
+                as DirectoryModel;
+
+        expect(captured.bookmarkData, equals(existingModel.bookmarkData));
+      });
+    });
   });
 }
