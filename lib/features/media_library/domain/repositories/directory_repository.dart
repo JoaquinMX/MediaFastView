@@ -36,6 +36,16 @@ abstract class DirectoryRepository {
   /// Updates the bookmark data for a directory.
   Future<void> updateDirectoryBookmark(String directoryId, String? bookmarkData);
 
+  /// Persists a new filesystem path for an existing directory. Implementations
+  /// should ensure related media records continue to reference the updated
+  /// identifier derived from [newPath]. When [bookmarkData] is provided it
+  /// replaces the existing bookmark in the persisted record.
+  Future<void> updateDirectoryLocation(
+    String directoryId,
+    String newPath, {
+    String? bookmarkData,
+  });
+
   /// Clears all stored directory data.
   Future<void> clearAllDirectories();
 }

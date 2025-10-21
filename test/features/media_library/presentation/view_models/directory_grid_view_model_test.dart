@@ -97,6 +97,27 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
       _directories[index] = _directories[index].copyWith(tagIds: tagIds);
     }
   }
+
+  @override
+  Future<void> updateDirectoryLocation(
+    String directoryId,
+    String newPath, {
+    String? bookmarkData,
+  }) async {
+    final index = _directories.indexWhere((dir) => dir.id == directoryId);
+    if (index == -1) {
+      return;
+    }
+
+    final current = _directories[index];
+    final segments = newPath.split('/')..removeWhere((segment) => segment.isEmpty);
+    final inferredName = segments.isNotEmpty ? segments.last : newPath;
+    _directories[index] = current.copyWith(
+      path: newPath,
+      name: inferredName,
+      bookmarkData: bookmarkData ?? current.bookmarkData,
+    );
+  }
 }
 
 class InMemoryMediaRepository implements MediaRepository {

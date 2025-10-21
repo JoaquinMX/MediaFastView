@@ -72,11 +72,34 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       }
     }
 
+    var effectiveBookmarkData = bookmarkData;
+
+    if (validationResult.renewedBookmarkData != null &&
+        validationResult.renewedBookmarkData!.isNotEmpty) {
+      effectiveBookmarkData = validationResult.renewedBookmarkData;
+      try {
+        await _directoryRepository.updateDirectoryBookmark(
+          directoryId,
+          validationResult.renewedBookmarkData,
+        );
+        _permissionService.logPermissionEvent(
+          'repository_bookmark_renewed_persisted',
+          path: directoryPath,
+        );
+      } catch (error) {
+        _permissionService.logPermissionEvent(
+          'repository_bookmark_persist_failed',
+          path: directoryPath,
+          error: error.toString(),
+        );
+      }
+    }
+
     try {
       final models = await _filesystemDataSource.scanMediaForDirectory(
         directoryPath,
         directoryId,
-        bookmarkData: bookmarkData,
+        bookmarkData: effectiveBookmarkData,
       );
 
       // Merge tags from local storage

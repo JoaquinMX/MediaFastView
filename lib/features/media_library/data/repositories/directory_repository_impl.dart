@@ -1,3 +1,5 @@
+import 'package:path/path.dart' as p;
+
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/logging_service.dart';
@@ -258,6 +260,43 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     await _isarDirectoryDataSource.updateDirectory(updatedModel);
   }
 
+  @override
+  Future<void> updateDirectoryLocation(
+    String directoryId,
+    String newPath, {
+    String? bookmarkData,
+  }) async {
+    final model = await _isarDirectoryDataSource.getDirectoryById(directoryId);
+    if (model == null) {
+      LoggingService.instance.warning(
+        'Attempted to update location for unknown directoryId=$directoryId',
+      );
+      return;
+    }
+
+    final normalizedModel = await _ensureStableDirectoryId(model);
+    final newId = generateDirectoryId(newPath);
+    final updatedModel = normalizedModel.copyWith(
+      id: newId,
+      path: newPath,
+      name: _deriveDirectoryName(newPath),
+      bookmarkData: bookmarkData ?? normalizedModel.bookmarkData,
+      lastModified: DateTime.now(),
+    );
+
+    if (newId != normalizedModel.id) {
+      LoggingService.instance.info(
+        'Directory ${normalizedModel.id} moved to new path $newPath. Updating identifier to $newId.',
+      );
+      await _isarMediaDataSource.migrateDirectoryId(normalizedModel.id, newId);
+      await _isarDirectoryDataSource.removeDirectory(normalizedModel.id);
+      await _isarDirectoryDataSource.addDirectory(updatedModel);
+      return;
+    }
+
+    await _isarDirectoryDataSource.updateDirectory(updatedModel);
+  }
+
   /// Ensures that stored directory IDs use the shared hashing strategy.
   Future<DirectoryModel> _ensureStableDirectoryId(DirectoryModel model) async {
     final expectedId = generateDirectoryId(model.path);
@@ -399,5 +438,14 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       // Fall back to stored path
       return _modelToEntity(model);
     }
+  }
+
+  String _deriveDirectoryName(String directoryPath) {
+    final trimmed = directoryPath.trim();
+    final basename = p.basename(trimmed);
+    if (basename.isEmpty) {
+      return trimmed;
+    }
+    return basename;
   }
 }

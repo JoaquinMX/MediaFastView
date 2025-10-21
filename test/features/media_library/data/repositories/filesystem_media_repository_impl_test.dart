@@ -180,4 +180,50 @@ void main() {
       verify(directoryRepository.getDirectories()).called(1);
     });
   });
+
+  group('getMediaForDirectoryPath', () {
+    test('persists renewed bookmark data before scanning', () async {
+      const originalBookmark = 'stale-bookmark';
+      const renewedBookmark = 'renewed-bookmark';
+      const directoryPath = '/bookmark/test';
+      final directoryId = generateDirectoryId(directoryPath);
+
+      when(
+        filesystemDataSource.validateDirectoryAccess(
+          directoryPath,
+          bookmarkData: originalBookmark,
+        ),
+      ).thenAnswer(
+        (_) async => const PermissionValidationResult(
+          canAccess: true,
+          requiresRecovery: false,
+          renewedBookmarkData: renewedBookmark,
+        ),
+      );
+      when(
+        filesystemDataSource.scanMediaForDirectory(
+          any,
+          any,
+          bookmarkData: anyNamed('bookmarkData'),
+        ),
+      ).thenAnswer((_) async => <MediaModel>[]);
+      when(directoryRepository.updateDirectoryBookmark(any, any)).thenAnswer((_) async {});
+
+      await repository.getMediaForDirectoryPath(
+        directoryPath,
+        bookmarkData: originalBookmark,
+      );
+
+      verify(
+        directoryRepository.updateDirectoryBookmark(directoryId, renewedBookmark),
+      ).called(1);
+      verify(
+        filesystemDataSource.scanMediaForDirectory(
+          directoryPath,
+          directoryId,
+          bookmarkData: renewedBookmark,
+        ),
+      ).called(1);
+    });
+  });
 }

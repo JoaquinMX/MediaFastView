@@ -8,6 +8,7 @@ import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/use_cases/get_media_use_case.dart';
+import '../../domain/use_cases/update_directory_access_use_case.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../data/isar/isar_media_data_source.dart';
 import '../../data/models/media_model.dart';
@@ -121,12 +122,14 @@ class MediaViewModel extends StateNotifier<MediaState> {
     this._params, {
     required GetMediaUseCase getMediaUseCase,
     required IsarMediaDataSource mediaDataSource,
+    required UpdateDirectoryAccessUseCase updateDirectoryAccessUseCase,
   }) : super(const MediaLoading()) {
     _directoryPath = _params.directoryPath;
     _directoryName = _params.directoryName;
     _bookmarkData = _params.bookmarkData;
     _getMediaUseCase = getMediaUseCase;
     _mediaDataSource = mediaDataSource;
+    _updateDirectoryAccessUseCase = updateDirectoryAccessUseCase;
     _gridColumnsSubscription = _ref.listen<int>(
       gridColumnsProvider,
       (_, next) => _applyColumnUpdate(next),
@@ -137,10 +140,11 @@ class MediaViewModel extends StateNotifier<MediaState> {
   final Ref _ref;
   late final GetMediaUseCase _getMediaUseCase;
   late final IsarMediaDataSource _mediaDataSource;
+  late final UpdateDirectoryAccessUseCase _updateDirectoryAccessUseCase;
   final MediaViewModelParams _params;
-  late final String _directoryPath;
-  late final String _directoryName;
-  late final String? _bookmarkData;
+  late String _directoryPath;
+  late String _directoryName;
+  String? _bookmarkData;
   late final ProviderSubscription<int> _gridColumnsSubscription;
   List<MediaEntity> _cachedMedia = const [];
   MediaSortOption _currentSortOption = MediaSortOption.nameAscending;
@@ -513,6 +517,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     LoggingService.instance.info(
       'Attempting to recover permissions for directory: $_directoryPath',
     );
+    final previousPath = _directoryPath;
     if (_params.onPermissionRecoveryNeeded == null) {
       LoggingService.instance.warning(
         'No permission recovery callback provided',
@@ -565,6 +570,21 @@ class MediaViewModel extends StateNotifier<MediaState> {
             'Failed to create bookmark for recovered directory: $e',
           );
           // Continue without bookmark - it's not critical for basic functionality
+        }
+
+        try {
+          await _updateDirectoryAccessUseCase.updateLocation(
+            previousPath: previousPath,
+            updatedPath: _directoryPath,
+            bookmarkData: _bookmarkData,
+          );
+          LoggingService.instance.info(
+            'Persisted recovered directory path/bookmark for $_directoryPath',
+          );
+        } catch (error) {
+          LoggingService.instance.error(
+            'Failed to persist recovered directory metadata: $error',
+          );
         }
 
         await loadMedia();
@@ -775,6 +795,8 @@ final mediaViewModelProvider = StateNotifierProvider.autoDispose
         params,
         getMediaUseCase: ref.watch(getMediaUseCaseProvider),
         mediaDataSource: ref.watch(isarMediaDataSourceProvider),
+        updateDirectoryAccessUseCase:
+            ref.watch(updateDirectoryAccessUseCaseProvider),
       ),
     );
 

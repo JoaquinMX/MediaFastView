@@ -144,5 +144,79 @@ void main() {
         verify(isarDirectoryDataSource.addDirectory(any)).called(1);
       });
     });
+
+    group('updateDirectoryLocation', () {
+      test('migrates records when directory path changes', () async {
+        const originalPath = '/old/path';
+        final originalId = generateDirectoryId(originalPath);
+        const newPath = '/new/path';
+        final newId = generateDirectoryId(newPath);
+        final existingModel = DirectoryModel(
+          id: originalId,
+          path: originalPath,
+          name: 'old',
+          thumbnailPath: null,
+          tagIds: const ['tag-a'],
+          lastModified: DateTime(2024, 1, 1),
+          bookmarkData: 'old-bookmark',
+        );
+
+        when(isarDirectoryDataSource.getDirectoryById(originalId)).thenAnswer(
+          (_) async => existingModel,
+        );
+        when(isarMediaDataSource.migrateDirectoryId(any, any)).thenAnswer((_) async {});
+        when(isarDirectoryDataSource.removeDirectory(any)).thenAnswer((_) async {});
+        when(isarDirectoryDataSource.addDirectory(any)).thenAnswer((_) async {});
+
+        await repository.updateDirectoryLocation(
+          originalId,
+          newPath,
+          bookmarkData: 'renewed-bookmark',
+        );
+
+        verify(isarMediaDataSource.migrateDirectoryId(originalId, newId)).called(1);
+        verify(isarDirectoryDataSource.removeDirectory(originalId)).called(1);
+        final addedModel = verify(
+          isarDirectoryDataSource.addDirectory(captureAny),
+        ).captured.single as DirectoryModel;
+        expect(addedModel.id, newId);
+        expect(addedModel.path, newPath);
+        expect(addedModel.name, 'path');
+        expect(addedModel.bookmarkData, 'renewed-bookmark');
+        expect(addedModel.tagIds, equals(const ['tag-a']));
+      });
+
+      test('updates bookmark when directory path is unchanged', () async {
+        const path = '/same/path';
+        final id = generateDirectoryId(path);
+        final existingModel = DirectoryModel(
+          id: id,
+          path: path,
+          name: 'path',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 1),
+          bookmarkData: 'old',
+        );
+
+        when(isarDirectoryDataSource.getDirectoryById(id)).thenAnswer(
+          (_) async => existingModel,
+        );
+        when(isarDirectoryDataSource.updateDirectory(any)).thenAnswer((_) async {});
+
+        await repository.updateDirectoryLocation(
+          id,
+          path,
+          bookmarkData: 'new',
+        );
+
+        final updatedModel = verify(
+          isarDirectoryDataSource.updateDirectory(captureAny),
+        ).captured.single as DirectoryModel;
+        expect(updatedModel.id, id);
+        expect(updatedModel.path, path);
+        expect(updatedModel.bookmarkData, 'new');
+      });
+    });
   });
 }

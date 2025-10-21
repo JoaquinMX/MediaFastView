@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
@@ -9,6 +11,7 @@ import '../../../../../lib/features/favorites/domain/repositories/favorites_repo
 import '../../../../../lib/features/media_library/domain/entities/media_entity.dart';
 import '../../../../../lib/features/media_library/domain/repositories/media_repository.dart';
 import '../../../../../lib/features/media_library/domain/use_cases/get_media_use_case.dart';
+import '../../../../../lib/features/media_library/domain/use_cases/update_directory_access_use_case.dart';
 import '../../../../../lib/features/media_library/presentation/view_models/media_grid_view_model.dart';
 import '../../../../../lib/shared/providers/repository_providers.dart';
 
@@ -130,17 +133,24 @@ class InMemoryFavoritesRepository implements FavoritesRepository {
 
 class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
 
+class _MockUpdateDirectoryAccessUseCase extends Mock
+    implements UpdateDirectoryAccessUseCase {}
+
 ProviderContainer _createMediaTestContainer({
   required IsarMediaDataSource mediaDataSource,
   required InMemoryMediaRepository mediaRepository,
   required GetMediaUseCase getMediaUseCase,
   required InMemoryFavoritesRepository favoritesRepository,
+  required UpdateDirectoryAccessUseCase updateDirectoryAccessUseCase,
 }) {
   return ProviderContainer(
     overrides: [
       favoritesRepositoryProvider.overrideWith((ref) {
         return FavoritesRepositoryNotifier(favoritesRepository);
       }),
+      updateDirectoryAccessUseCaseProvider.overrideWithValue(
+        updateDirectoryAccessUseCase,
+      ),
       mediaViewModelProvider.overrideWithProvider((params) {
         return StateNotifierProvider.autoDispose<MediaViewModel, MediaState>(
           (ref) => MediaViewModel(
@@ -148,6 +158,7 @@ ProviderContainer _createMediaTestContainer({
             params,
             getMediaUseCase: getMediaUseCase,
             mediaDataSource: mediaDataSource,
+            updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
           ),
         );
       }),
@@ -162,6 +173,7 @@ void main() {
   late InMemoryMediaRepository mediaRepository;
   late InMemoryFavoritesRepository favoritesRepository;
   late GetMediaUseCase getMediaUseCase;
+  late _MockUpdateDirectoryAccessUseCase updateDirectoryAccessUseCase;
   const params = MediaViewModelParams(
     directoryPath: '/dir1',
     directoryName: 'Directory 1',
@@ -206,6 +218,20 @@ void main() {
       ),
     ]);
     getMediaUseCase = GetMediaUseCase(mediaRepository);
+    updateDirectoryAccessUseCase = _MockUpdateDirectoryAccessUseCase();
+    when(
+      updateDirectoryAccessUseCase.updateLocation(
+        previousPath: anyNamed('previousPath'),
+        updatedPath: anyNamed('updatedPath'),
+        bookmarkData: anyNamed('bookmarkData'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      updateDirectoryAccessUseCase.updateBookmark(
+        directoryPath: anyNamed('directoryPath'),
+        bookmarkData: anyNamed('bookmarkData'),
+      ),
+    ).thenAnswer((_) async {});
   });
 
   test('toggleMediaSelection toggles selection state', () async {
@@ -214,6 +240,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 
@@ -241,6 +268,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 
@@ -264,6 +292,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 
@@ -287,6 +316,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 
@@ -303,6 +333,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 
@@ -341,4 +372,39 @@ void main() {
     expect(state.selectedMediaIds, {'m1', 'm2', 'm3'});
   });
 
+  test('recoverPermissions persists recovered directory metadata', () async {
+    final tempDir = await Directory.systemTemp.createTemp('media-view-model');
+    addTearDown(() => tempDir.delete(recursive: true));
+    final placeholder = File('${tempDir.path}/placeholder.txt');
+    await placeholder.writeAsString('test');
+
+    final recoveryParams = MediaViewModelParams(
+      directoryPath: params.directoryPath,
+      directoryName: params.directoryName,
+      onPermissionRecoveryNeeded: () async => tempDir.path,
+    );
+
+    final container = _createMediaTestContainer(
+      mediaDataSource: mediaCache,
+      mediaRepository: mediaRepository,
+      getMediaUseCase: getMediaUseCase,
+      favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel =
+        container.read(mediaViewModelProvider(recoveryParams).notifier);
+
+    await viewModel.recoverPermissions();
+
+    final capturedBookmark = verify(
+      updateDirectoryAccessUseCase.updateLocation(
+        previousPath: params.directoryPath,
+        updatedPath: tempDir.path,
+        bookmarkData: captureAnyNamed('bookmarkData'),
+      ),
+    ).captured.single as String?;
+    expect(capturedBookmark, isNull);
+  });
 }
