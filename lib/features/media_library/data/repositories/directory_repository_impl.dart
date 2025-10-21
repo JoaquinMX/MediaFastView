@@ -1,3 +1,5 @@
+import 'package:path/path.dart' as p;
+
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/logging_service.dart';
@@ -256,6 +258,54 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     final normalizedModel = await _ensureStableDirectoryId(model);
     final updatedModel = normalizedModel.copyWith(bookmarkData: bookmarkData);
     await _isarDirectoryDataSource.updateDirectory(updatedModel);
+  }
+
+  @override
+  Future<void> updateDirectoryMetadata(
+    String directoryId, {
+    String? path,
+    String? name,
+    String? bookmarkData,
+  }) async {
+    final model = await _isarDirectoryDataSource.getDirectoryById(directoryId);
+    if (model == null) {
+      LoggingService.instance.warning(
+        'Attempted to update directory metadata for unknown id: $directoryId',
+      );
+      return;
+    }
+
+    final normalizedModel = await _ensureStableDirectoryId(model);
+    var updatedModel = normalizedModel;
+    var targetId = normalizedModel.id;
+
+    if (path != null && path.isNotEmpty && path != normalizedModel.path) {
+      targetId = generateDirectoryId(path);
+      final derivedName = p.basename(path);
+      final updatedName = name?.isNotEmpty == true
+          ? name!
+          : (derivedName.isNotEmpty ? derivedName : normalizedModel.name);
+
+      updatedModel = updatedModel.copyWith(
+        id: targetId,
+        path: path,
+        name: updatedName,
+      );
+    } else if (name != null && name.isNotEmpty && name != normalizedModel.name) {
+      updatedModel = updatedModel.copyWith(name: name);
+    }
+
+    if (bookmarkData != normalizedModel.bookmarkData) {
+      updatedModel = updatedModel.copyWith(bookmarkData: bookmarkData);
+    }
+
+    if (targetId != normalizedModel.id) {
+      await _isarMediaDataSource.migrateDirectoryId(normalizedModel.id, targetId);
+      await _isarDirectoryDataSource.removeDirectory(normalizedModel.id);
+      await _isarDirectoryDataSource.addDirectory(updatedModel);
+    } else {
+      await _isarDirectoryDataSource.updateDirectory(updatedModel);
+    }
   }
 
   /// Ensures that stored directory IDs use the shared hashing strategy.

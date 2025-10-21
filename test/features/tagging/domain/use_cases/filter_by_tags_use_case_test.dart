@@ -54,6 +54,16 @@ class _DummyDirectoryRepository implements DirectoryRepository {
   Future<void> updateDirectoryTags(String directoryId, List<String> tagIds) {
     throw UnimplementedError();
   }
+
+  @override
+  Future<void> updateDirectoryMetadata(
+    String directoryId, {
+    String? path,
+    String? name,
+    String? bookmarkData,
+  }) {
+    throw UnimplementedError();
+  }
 }
 
 void main() {

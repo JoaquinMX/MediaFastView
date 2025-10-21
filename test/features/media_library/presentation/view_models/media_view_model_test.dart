@@ -7,8 +7,10 @@ import '../../../../../lib/features/favorites/domain/entities/favorite_entity.da
 import '../../../../../lib/features/favorites/domain/entities/favorite_item_type.dart';
 import '../../../../../lib/features/favorites/domain/repositories/favorites_repository.dart';
 import '../../../../../lib/features/media_library/domain/entities/media_entity.dart';
+import '../../../../../lib/features/media_library/domain/repositories/directory_repository.dart';
 import '../../../../../lib/features/media_library/domain/repositories/media_repository.dart';
 import '../../../../../lib/features/media_library/domain/use_cases/get_media_use_case.dart';
+import '../../../../../lib/features/media_library/domain/use_cases/update_directory_access_use_case.dart';
 import '../../../../../lib/features/media_library/presentation/view_models/media_grid_view_model.dart';
 import '../../../../../lib/shared/providers/repository_providers.dart';
 
@@ -130,11 +132,14 @@ class InMemoryFavoritesRepository implements FavoritesRepository {
 
 class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
 
+class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
+
 ProviderContainer _createMediaTestContainer({
   required IsarMediaDataSource mediaDataSource,
   required InMemoryMediaRepository mediaRepository,
   required GetMediaUseCase getMediaUseCase,
   required InMemoryFavoritesRepository favoritesRepository,
+  required UpdateDirectoryAccessUseCase updateDirectoryAccessUseCase,
 }) {
   return ProviderContainer(
     overrides: [
@@ -148,6 +153,7 @@ ProviderContainer _createMediaTestContainer({
             params,
             getMediaUseCase: getMediaUseCase,
             mediaDataSource: mediaDataSource,
+            updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
           ),
         );
       }),
@@ -162,6 +168,8 @@ void main() {
   late InMemoryMediaRepository mediaRepository;
   late InMemoryFavoritesRepository favoritesRepository;
   late GetMediaUseCase getMediaUseCase;
+  late UpdateDirectoryAccessUseCase updateDirectoryAccessUseCase;
+  late _MockDirectoryRepository directoryRepository;
   const params = MediaViewModelParams(
     directoryPath: '/dir1',
     directoryName: 'Directory 1',
@@ -173,6 +181,18 @@ void main() {
     when(mediaCache.removeMediaForDirectory(any)).thenAnswer((_) async {});
     when(mediaCache.upsertMedia(any)).thenAnswer((_) async {});
     favoritesRepository = InMemoryFavoritesRepository();
+    directoryRepository = _MockDirectoryRepository();
+    when(
+      directoryRepository.updateDirectoryMetadata(
+        any,
+        path: anyNamed('path'),
+        name: anyNamed('name'),
+        bookmarkData: anyNamed('bookmarkData'),
+      ),
+    ).thenAnswer((_) async {});
+    updateDirectoryAccessUseCase = UpdateDirectoryAccessUseCase(
+      directoryRepository,
+    );
     mediaRepository = InMemoryMediaRepository([
       MediaEntity(
         id: 'm1',
@@ -214,6 +234,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 
@@ -241,6 +262,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 
@@ -264,6 +286,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 
@@ -287,6 +310,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 
@@ -303,6 +327,7 @@ void main() {
       mediaRepository: mediaRepository,
       getMediaUseCase: getMediaUseCase,
       favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
     );
     addTearDown(container.dispose);
 

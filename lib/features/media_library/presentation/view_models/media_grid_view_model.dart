@@ -8,6 +8,7 @@ import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/use_cases/get_media_use_case.dart';
+import '../../domain/use_cases/update_directory_access_use_case.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../data/isar/isar_media_data_source.dart';
 import '../../data/models/media_model.dart';
@@ -121,12 +122,14 @@ class MediaViewModel extends StateNotifier<MediaState> {
     this._params, {
     required GetMediaUseCase getMediaUseCase,
     required IsarMediaDataSource mediaDataSource,
+    required UpdateDirectoryAccessUseCase updateDirectoryAccessUseCase,
   }) : super(const MediaLoading()) {
     _directoryPath = _params.directoryPath;
     _directoryName = _params.directoryName;
     _bookmarkData = _params.bookmarkData;
     _getMediaUseCase = getMediaUseCase;
     _mediaDataSource = mediaDataSource;
+    _updateDirectoryAccessUseCase = updateDirectoryAccessUseCase;
     _gridColumnsSubscription = _ref.listen<int>(
       gridColumnsProvider,
       (_, next) => _applyColumnUpdate(next),
@@ -138,14 +141,15 @@ class MediaViewModel extends StateNotifier<MediaState> {
   late final GetMediaUseCase _getMediaUseCase;
   late final IsarMediaDataSource _mediaDataSource;
   final MediaViewModelParams _params;
-  late final String _directoryPath;
-  late final String _directoryName;
-  late final String? _bookmarkData;
+  late String _directoryPath;
+  late String _directoryName;
+  late String? _bookmarkData;
   late final ProviderSubscription<int> _gridColumnsSubscription;
   List<MediaEntity> _cachedMedia = const [];
   MediaSortOption _currentSortOption = MediaSortOption.nameAscending;
   Set<String> _selectedMediaIds = <String>{};
   bool _isSelectionMode = false;
+  late final UpdateDirectoryAccessUseCase _updateDirectoryAccessUseCase;
 
   MediaSortOption get currentSortOption => _currentSortOption;
   Set<String> get selectedMediaIds => Set<String>.unmodifiable(_selectedMediaIds);
@@ -543,6 +547,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
           );
         }
 
+        final originalDirectoryId = directoryId;
+
         // Update the directory path and reload
         _directoryPath = selectedPath;
         _directoryName = selectedPath
@@ -566,6 +572,13 @@ class MediaViewModel extends StateNotifier<MediaState> {
           );
           // Continue without bookmark - it's not critical for basic functionality
         }
+
+        await _updateDirectoryAccessUseCase(
+          directoryId: originalDirectoryId,
+          newPath: _directoryPath,
+          newName: _directoryName,
+          bookmarkData: _bookmarkData,
+        );
 
         await loadMedia();
         LoggingService.instance.info(
@@ -775,6 +788,8 @@ final mediaViewModelProvider = StateNotifierProvider.autoDispose
         params,
         getMediaUseCase: ref.watch(getMediaUseCaseProvider),
         mediaDataSource: ref.watch(isarMediaDataSourceProvider),
+        updateDirectoryAccessUseCase:
+            ref.watch(updateDirectoryAccessUseCaseProvider),
       ),
     );
 

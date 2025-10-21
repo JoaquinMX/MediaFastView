@@ -97,6 +97,26 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
       _directories[index] = _directories[index].copyWith(tagIds: tagIds);
     }
   }
+
+  @override
+  Future<void> updateDirectoryMetadata(
+    String directoryId, {
+    String? path,
+    String? name,
+    String? bookmarkData,
+  }) async {
+    final index = _directories.indexWhere((dir) => dir.id == directoryId);
+    if (index == -1) {
+      return;
+    }
+
+    final existing = _directories[index];
+    _directories[index] = existing.copyWith(
+      path: path ?? existing.path,
+      name: name ?? existing.name,
+      bookmarkData: bookmarkData ?? existing.bookmarkData,
+    );
+  }
 }
 
 class InMemoryMediaRepository implements MediaRepository {

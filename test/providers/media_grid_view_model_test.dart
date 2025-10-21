@@ -6,22 +6,37 @@ import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
+import 'package:media_fast_view/features/media_library/domain/use_cases/get_media_use_case.dart';
+import 'package:media_fast_view/features/media_library/domain/use_cases/update_directory_access_use_case.dart';
 import 'package:media_fast_view/features/media_library/presentation/view_models/media_grid_view_model.dart';
+import 'package:media_fast_view/shared/providers/repository_providers.dart';
 
 class _MockMediaRepository extends Mock implements MediaRepository {}
 
 class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
 
+class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
+
 void main() {
   late _MockMediaRepository mockMediaRepository;
   late _MockIsarMediaDataSource mockMediaDataSource;
+  late _MockDirectoryRepository mockDirectoryRepository;
   late ProviderContainer container;
 
   setUp(() {
     mockMediaRepository = _MockMediaRepository();
     mockMediaDataSource = _MockIsarMediaDataSource();
-    container = ProviderContainer();
+    mockDirectoryRepository = _MockDirectoryRepository();
+    when(
+      mockDirectoryRepository.updateDirectoryMetadata(
+        any,
+        path: anyNamed('path'),
+        name: anyNamed('name'),
+        bookmarkData: anyNamed('bookmarkData'),
+      ),
+    ).thenAnswer((_) async {});
   });
 
   tearDown(() {
@@ -34,6 +49,7 @@ void main() {
     final testDirectoryId = sha256.convert(utf8.encode(testDirectoryPath)).toString();
 
     late MediaViewModel viewModel;
+    late MediaViewModelParams params;
 
     setUp(() {
       // Mock successful scan returning sample media
@@ -70,14 +86,23 @@ void main() {
       when(mockMediaDataSource.upsertMedia(any)).thenAnswer((_) async {});
       when(mockMediaDataSource.getMedia()).thenAnswer((_) async => []);
 
-      viewModel = MediaViewModel(
-        MediaViewModelParams(
-          directoryPath: testDirectoryPath,
-          directoryName: testDirectoryName,
-        ),
-        mediaRepository: mockMediaRepository,
-        mediaDataSource: mockMediaDataSource,
+      container = ProviderContainer(
+        overrides: [
+          getMediaUseCaseProvider.overrideWithValue(
+            GetMediaUseCase(mockMediaRepository),
+          ),
+          isarMediaDataSourceProvider.overrideWithValue(mockMediaDataSource),
+          updateDirectoryAccessUseCaseProvider.overrideWithValue(
+            UpdateDirectoryAccessUseCase(mockDirectoryRepository),
+          ),
+        ],
       );
+
+      params = const MediaViewModelParams(
+        directoryPath: testDirectoryPath,
+        directoryName: testDirectoryName,
+      );
+      viewModel = container.read(mediaViewModelProvider(params).notifier);
     });
 
     test('initial state is MediaLoading', () {
@@ -102,6 +127,7 @@ void main() {
     });
 
     test('loadMedia with empty results transitions to MediaEmpty', () async {
+      container.dispose();
       final emptyMock = _MockMediaRepository();
       final emptyDataSourceMock = _MockIsarMediaDataSource();
       when(
@@ -109,39 +135,54 @@ void main() {
       ).thenAnswer((_) async => []);
       when(emptyDataSourceMock.removeMediaForDirectory(any)).thenAnswer((_) async {});
       when(emptyDataSourceMock.upsertMedia(any)).thenAnswer((_) async {});
+      when(emptyDataSourceMock.getMedia()).thenAnswer((_) async => []);
 
-      final emptyViewModel = MediaViewModel(
-        MediaViewModelParams(
-          directoryPath: testDirectoryPath,
-          directoryName: testDirectoryName,
-        ),
-        mediaRepository: emptyMock,
-        mediaDataSource: emptyDataSourceMock,
+      container = ProviderContainer(
+        overrides: [
+          getMediaUseCaseProvider.overrideWithValue(
+            GetMediaUseCase(emptyMock),
+          ),
+          isarMediaDataSourceProvider.overrideWithValue(emptyDataSourceMock),
+          updateDirectoryAccessUseCaseProvider.overrideWithValue(
+            UpdateDirectoryAccessUseCase(mockDirectoryRepository),
+          ),
+        ],
       );
-      await emptyViewModel.loadMedia();
+      viewModel = container.read(mediaViewModelProvider(params).notifier);
 
-      expect(emptyViewModel.state, isA<MediaEmpty>());
+      await viewModel.loadMedia();
+
+      expect(viewModel.state, isA<MediaEmpty>());
     });
 
     test('loadMedia with error transitions to MediaError', () async {
+      container.dispose();
       final errorMock = _MockMediaRepository();
       final errorDataSourceMock = _MockIsarMediaDataSource();
       when(
         errorMock.getMediaForDirectoryPath(any, bookmarkData: anyNamed('bookmarkData')),
       ).thenThrow(Exception('Scan failed'));
+      when(errorDataSourceMock.removeMediaForDirectory(any)).thenAnswer((_) async {});
+      when(errorDataSourceMock.upsertMedia(any)).thenAnswer((_) async {});
+      when(errorDataSourceMock.getMedia()).thenAnswer((_) async => []);
 
-      final errorViewModel = MediaViewModel(
-        MediaViewModelParams(
-          directoryPath: testDirectoryPath,
-          directoryName: testDirectoryName,
-        ),
-        mediaRepository: errorMock,
-        mediaDataSource: errorDataSourceMock,
+      container = ProviderContainer(
+        overrides: [
+          getMediaUseCaseProvider.overrideWithValue(
+            GetMediaUseCase(errorMock),
+          ),
+          isarMediaDataSourceProvider.overrideWithValue(errorDataSourceMock),
+          updateDirectoryAccessUseCaseProvider.overrideWithValue(
+            UpdateDirectoryAccessUseCase(mockDirectoryRepository),
+          ),
+        ],
       );
-      await errorViewModel.loadMedia();
+      viewModel = container.read(mediaViewModelProvider(params).notifier);
 
-      expect(errorViewModel.state, isA<MediaError>());
-      final errorState = errorViewModel.state as MediaError;
+      await viewModel.loadMedia();
+
+      expect(viewModel.state, isA<MediaError>());
+      final errorState = viewModel.state as MediaError;
       expect(errorState.message, contains('Scan failed'));
     });
 

@@ -36,6 +36,15 @@ abstract class DirectoryRepository {
   /// Updates the bookmark data for a directory.
   Future<void> updateDirectoryBookmark(String directoryId, String? bookmarkData);
 
+  /// Updates persisted metadata for a directory, allowing callers to refresh
+  /// the stored path, display name, and bookmark in a single operation.
+  Future<void> updateDirectoryMetadata(
+    String directoryId, {
+    String? path,
+    String? name,
+    String? bookmarkData,
+  });
+
   /// Clears all stored directory data.
   Future<void> clearAllDirectories();
 }

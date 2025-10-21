@@ -44,6 +44,19 @@ void main() {
     when(isarMediaDataSource.updateMediaTags(any, any)).thenAnswer((_) async {});
     when(isarMediaDataSource.removeMediaForDirectory(any)).thenAnswer((_) async {});
     when(isarMediaDataSource.migrateDirectoryId(any, any)).thenAnswer((_) async {});
+    when(
+      filesystemDataSource.validateDirectoryAccess(
+        any,
+        bookmarkData: anyNamed('bookmarkData'),
+      ),
+    ).thenAnswer(
+      (_) async => const PermissionValidationResult(
+        canAccess: true,
+        requiresRecovery: false,
+      ),
+    );
+    when(directoryRepository.updateDirectoryBookmark(any, any))
+        .thenAnswer((_) async {});
 
     repository = FilesystemMediaRepositoryImpl(
       bookmarkService,
@@ -52,6 +65,51 @@ void main() {
       permissionService: permissionService,
       filesystemDataSource: filesystemDataSource,
     );
+  });
+
+  group('getMediaForDirectoryPath', () {
+    test('persists renewed bookmarks before scanning', () async {
+      const directoryPath = '/test/renew';
+      final directoryId = generateDirectoryId(directoryPath);
+      const refreshedBookmark = 'renewed-bookmark';
+
+      when(
+        filesystemDataSource.validateDirectoryAccess(
+          any,
+          bookmarkData: anyNamed('bookmarkData'),
+        ),
+      ).thenAnswer(
+        (_) async => const PermissionValidationResult(
+          canAccess: true,
+          requiresRecovery: false,
+          renewedBookmarkData: refreshedBookmark,
+        ),
+      );
+
+      when(
+        filesystemDataSource.scanMediaForDirectory(
+          any,
+          any,
+          bookmarkData: anyNamed('bookmarkData'),
+        ),
+      ).thenAnswer((_) async => <MediaModel>[]);
+
+      await repository.getMediaForDirectoryPath(
+        directoryPath,
+        bookmarkData: 'stale-bookmark',
+      );
+
+      verify(
+        directoryRepository.updateDirectoryBookmark(directoryId, refreshedBookmark),
+      ).called(1);
+      verify(
+        filesystemDataSource.scanMediaForDirectory(
+          directoryPath,
+          directoryId,
+          bookmarkData: refreshedBookmark,
+        ),
+      ).called(1);
+    });
   });
 
   group('getMediaById', () {
