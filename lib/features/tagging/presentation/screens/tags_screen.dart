@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -91,6 +93,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       selectedSections,
       state.filterMode,
     );
+    final directoryContents = _collectDirectoriesFromSections(
+      selectedSections,
+      state.filterMode,
+    );
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
@@ -114,6 +120,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               state.selectedTagIds.length,
             ),
             const SizedBox(height: 12),
+            if (directoryContents.isNotEmpty) ...[
+              _buildDirectoryCarousel(directoryContents),
+              const SizedBox(height: 16),
+            ],
             if (aggregatedMedia.isEmpty)
               _buildNoResultsMessage()
             else
@@ -326,6 +336,190 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         .where((entry) => entry.value == requiredMatches)
         .map((entry) => mediaById[entry.key]!)
         .toList();
+  }
+
+  List<TagDirectoryContent> _collectDirectoriesFromSections(
+    List<TagSection> sections,
+    TagFilterMode filterMode,
+  ) {
+    if (sections.isEmpty) {
+      return const <TagDirectoryContent>[];
+    }
+
+    final directoriesById = <String, TagDirectoryContent>{};
+    final occurrenceCount = <String, int>{};
+
+    for (final section in sections) {
+      final seenInSection = <String>{};
+      for (final directoryContent in section.directories) {
+        final directoryId = directoryContent.directory.id;
+        final existing = directoriesById[directoryId];
+
+        final filteredMedia = directoryContent.media
+            .where((media) => media.type != MediaType.directory)
+            .toList();
+
+        if (existing == null) {
+          directoriesById[directoryId] = TagDirectoryContent(
+            directory: directoryContent.directory,
+            media: filteredMedia,
+          );
+        } else {
+          final mergedMedia = <String, MediaEntity>{
+            for (final media in existing.media) media.id: media,
+          };
+          for (final media in filteredMedia) {
+            mergedMedia[media.id] = media;
+          }
+          directoriesById[directoryId] = TagDirectoryContent(
+            directory: directoryContent.directory,
+            media: mergedMedia.values.toList(),
+          );
+        }
+
+        if (seenInSection.add(directoryId)) {
+          occurrenceCount.update(
+            directoryId,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+        }
+      }
+    }
+
+    if (!filterMode.matchesAll) {
+      return directoriesById.values.toList();
+    }
+
+    final requiredMatches = sections.length;
+    return occurrenceCount.entries
+        .where((entry) => entry.value == requiredMatches)
+        .map((entry) => directoriesById[entry.key]!)
+        .toList();
+  }
+
+  Widget _buildDirectoryCarousel(List<TagDirectoryContent> directories) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Directories',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 180,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: directories.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final directoryContent = directories[index];
+              return _buildDirectoryCarouselItem(directoryContent);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDirectoryCarouselItem(TagDirectoryContent directoryContent) {
+    final theme = Theme.of(context);
+    final hasMedia = directoryContent.media.isNotEmpty;
+    final thumbnailPath = directoryContent.directory.thumbnailPath;
+
+    Widget buildPreview() {
+      if (thumbnailPath == null) {
+        return _buildDirectoryFallback();
+      }
+
+      try {
+        final file = File(thumbnailPath);
+        if (!file.existsSync()) {
+          return _buildDirectoryFallback();
+        }
+        return Image.file(
+          file,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildDirectoryFallback(),
+        );
+      } catch (_) {
+        return _buildDirectoryFallback();
+      }
+    }
+
+    final preview = buildPreview();
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: preview),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                directoryContent.directory.name,
+                style: theme.textTheme.titleSmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                hasMedia
+                    ? '${directoryContent.media.length} item${directoryContent.media.length == 1 ? '' : 's'}'
+                    : 'No media',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    return SizedBox(
+      width: 180,
+      child: Card(
+        elevation: 2,
+        clipBehavior: Clip.antiAlias,
+        child: hasMedia
+            ? InkWell(
+                onTap: () => _openDirectoryInFullScreen(directoryContent),
+                child: content,
+              )
+            : content,
+      ),
+    );
+  }
+
+  Widget _buildDirectoryFallback() {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: const Center(
+        child: Icon(Icons.folder, size: 48),
+      ),
+    );
+  }
+
+  void _openDirectoryInFullScreen(TagDirectoryContent directoryContent) {
+    if (directoryContent.media.isEmpty) {
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FullScreenViewerScreen(
+          directoryPath: directoryContent.directory.path,
+          bookmarkData: directoryContent.directory.bookmarkData,
+          initialMediaId: directoryContent.media.first.id,
+          mediaList: directoryContent.media,
+        ),
+      ),
+    );
   }
 
   Widget _buildFilterModeToggle(
