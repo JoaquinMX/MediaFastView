@@ -91,6 +91,12 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       selectedSections,
       state.filterMode,
     );
+    final directoryEntries =
+        _collectDirectoryEntries(selectedSections);
+    final displayedMedia = aggregatedMedia
+        .where((media) => media.type != MediaType.directory)
+        .toList();
+    final hasDirectoryMedia = directoryEntries.isNotEmpty;
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
@@ -108,16 +114,23 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             _buildSelectionPlaceholder()
           else ...[
             _buildSelectionSummary(
-              aggregatedMedia,
+              displayedMedia,
+              directoryEntries,
               viewModel,
               state.filterMode,
               state.selectedTagIds.length,
             ),
             const SizedBox(height: 12),
-            if (aggregatedMedia.isEmpty)
-              _buildNoResultsMessage()
+            if (hasDirectoryMedia) ...[
+              _buildDirectoryAccordions(directoryEntries, gridColumns),
+              const SizedBox(height: 24),
+            ],
+            if (displayedMedia.isEmpty)
+              (hasDirectoryMedia
+                  ? const SizedBox.shrink()
+                  : _buildNoResultsMessage())
             else
-              _buildMediaGrid(aggregatedMedia, aggregatedMedia, gridColumns),
+              _buildMediaGrid(displayedMedia, displayedMedia, gridColumns),
           ],
         ],
       ),
@@ -220,6 +233,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
   Widget _buildSelectionSummary(
     List<MediaEntity> aggregatedMedia,
+    List<_DirectoryAccordionEntry> directories,
     TagsViewModel viewModel,
     TagFilterMode filterMode,
     int selectedTagCount,
@@ -228,6 +242,16 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final filterDescription = filterMode.matchesAll
         ? 'Matching all selected tags'
         : 'Matching any selected tag';
+    final mediaCount = aggregatedMedia.length;
+    final directoryCount = directories.length;
+    final summaryBuffer = StringBuffer(
+      'Showing $mediaCount media item${mediaCount == 1 ? '' : 's'}',
+    );
+    if (directoryCount > 0) {
+      summaryBuffer.write(
+        ' • $directoryCount director${directoryCount == 1 ? 'y' : 'ies'}',
+      );
+    }
 
     return Row(
       children: [
@@ -236,8 +260,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Showing ${aggregatedMedia.length} '
-                'item${aggregatedMedia.length == 1 ? '' : 's'}',
+                summaryBuffer.toString(),
                 style: theme.textTheme.titleMedium,
               ),
               const SizedBox(height: 4),
@@ -326,6 +349,65 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         .where((entry) => entry.value == requiredMatches)
         .map((entry) => mediaById[entry.key]!)
         .toList();
+  }
+
+  List<_DirectoryAccordionEntry> _collectDirectoryEntries(
+    List<TagSection> sections,
+  ) {
+    final entries = <_DirectoryAccordionEntry>[];
+    for (final section in sections) {
+      for (final directory in section.directories) {
+        if (directory.media.isEmpty) {
+          continue;
+        }
+        entries.add(
+          _DirectoryAccordionEntry(section: section, directory: directory),
+        );
+      }
+    }
+    return entries;
+  }
+
+  Widget _buildDirectoryAccordions(
+    List<_DirectoryAccordionEntry> directories,
+    int gridColumns,
+  ) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Directories',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        ...directories.map((entry) {
+          final directory = entry.directory;
+          final section = entry.section;
+          final itemCount = directory.media.length;
+          final subtitleText = '${section.name} • '
+              '$itemCount item${itemCount == 1 ? '' : 's'}';
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            elevation: 1,
+            child: ExpansionTile(
+              leading: const Icon(Icons.folder),
+              title: Text(directory.directory.name),
+              subtitle: Text(subtitleText),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: [
+                _buildMediaGrid(
+                  directory.media,
+                  directory.media,
+                  gridColumns,
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
   }
 
   Widget _buildFilterModeToggle(
@@ -457,4 +539,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ),
     );
   }
+}
+
+class _DirectoryAccordionEntry {
+  const _DirectoryAccordionEntry({
+    required this.section,
+    required this.directory,
+  });
+
+  final TagSection section;
+  final TagDirectoryContent directory;
 }
