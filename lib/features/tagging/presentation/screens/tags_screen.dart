@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
+import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/widgets/media_grid_item.dart';
 import '../../../media_library/presentation/widgets/column_selector_popup.dart';
@@ -91,6 +92,11 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       selectedSections,
       state.filterMode,
     );
+    final directoryQuickActions = _collectDirectoryQuickActions(
+      selectedSections,
+      state.filterMode,
+      aggregatedMedia,
+    );
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
@@ -113,6 +119,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               state.filterMode,
               state.selectedTagIds.length,
             ),
+            if (directoryQuickActions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _buildDirectoryQuickActions(directoryQuickActions),
+            ],
             const SizedBox(height: 12),
             if (aggregatedMedia.isEmpty)
               _buildNoResultsMessage()
@@ -328,6 +338,147 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         .toList();
   }
 
+  List<TagDirectoryContent> _collectDirectoryQuickActions(
+    List<TagSection> sections,
+    TagFilterMode filterMode,
+    List<MediaEntity> aggregatedMedia,
+  ) {
+    if (sections.isEmpty) {
+      return const [];
+    }
+
+    final aggregations = <String, _AggregatedDirectoryMedia>{};
+    final allowedIds = aggregatedMedia.map((media) => media.id).toSet();
+
+    for (final section in sections) {
+      final seenInSection = <String>{};
+      for (final directoryContent in section.directories) {
+        if (directoryContent.media.isEmpty) {
+          continue;
+        }
+
+        final directoryId = directoryContent.directory.id;
+        final aggregation = aggregations.putIfAbsent(
+          directoryId,
+          () => _AggregatedDirectoryMedia(directoryContent.directory),
+        );
+
+        aggregation.addMedia(directoryContent.media);
+        if (seenInSection.add(directoryId)) {
+          aggregation.incrementOccurrence();
+        }
+      }
+    }
+
+    if (aggregations.isEmpty) {
+      return const [];
+    }
+
+    final requiredMatches = filterMode.matchesAll ? sections.length : 1;
+    final directories = <TagDirectoryContent>[];
+
+    for (final aggregation in aggregations.values) {
+      if (aggregation.isEmpty) {
+        continue;
+      }
+
+      if (filterMode.matchesAll &&
+          aggregation.occurrenceCount < requiredMatches) {
+        continue;
+      }
+
+      final content = aggregation.toDirectoryContent(allowedIds: allowedIds);
+      if (content.media.isEmpty) {
+        continue;
+      }
+      directories.add(content);
+    }
+
+    directories.sort(
+      (a, b) => a.directory.name.toLowerCase().compareTo(
+            b.directory.name.toLowerCase(),
+          ),
+    );
+
+    return directories;
+  }
+
+  Widget _buildDirectoryQuickActions(
+    List<TagDirectoryContent> directories,
+  ) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Quick actions by directory',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: directories.map((content) {
+            final mediaList = List<MediaEntity>.unmodifiable(content.media);
+            final itemCount = mediaList.length;
+
+            return SizedBox(
+              width: 280,
+              child: Card(
+                elevation: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        content.directory.name,
+                        style: theme.textTheme.titleMedium,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$itemCount item${itemCount == 1 ? '' : 's'}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.folder_open),
+                              label: const Text('Open folder'),
+                              onPressed: () =>
+                                  _openFullScreen(mediaList, mediaList.first),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: FilledButton.icon(
+                              icon: const Icon(Icons.slideshow),
+                              label: const Text('Play slideshow'),
+                              onPressed: () => _startSlideshow(mediaList),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildFilterModeToggle(
     TagsLoaded state,
     TagsViewModel viewModel,
@@ -455,6 +606,46 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       MaterialPageRoute(
         builder: (context) => SlideshowScreen(mediaList: media),
       ),
+    );
+  }
+}
+
+class _AggregatedDirectoryMedia {
+  _AggregatedDirectoryMedia(this.directory);
+
+  final DirectoryEntity directory;
+  final Map<String, MediaEntity> _mediaById = {};
+  int occurrenceCount = 0;
+  List<MediaEntity>? _cachedMedia;
+
+  void addMedia(List<MediaEntity> media) {
+    for (final mediaItem in media) {
+      _mediaById[mediaItem.id] = mediaItem;
+    }
+    _cachedMedia = null;
+  }
+
+  void incrementOccurrence() {
+    occurrenceCount++;
+  }
+
+  bool get isEmpty => _mediaById.isEmpty;
+
+  List<MediaEntity> _buildMedia() {
+    final mediaList = _mediaById.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return mediaList;
+  }
+
+  TagDirectoryContent toDirectoryContent({Set<String>? allowedIds}) {
+    _cachedMedia ??= _buildMedia();
+    final media = allowedIds == null
+        ? _cachedMedia!
+        : _cachedMedia!.where((item) => allowedIds.contains(item.id)).toList();
+
+    return TagDirectoryContent(
+      directory: directory,
+      media: media,
     );
   }
 }
