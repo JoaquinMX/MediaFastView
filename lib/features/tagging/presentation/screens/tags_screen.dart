@@ -91,6 +91,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       selectedSections,
       state.filterMode,
     );
+    final directoryAccordions = _buildDirectoryAccordions(
+      selectedSections,
+      gridColumns,
+    );
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
@@ -114,10 +118,12 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               state.selectedTagIds.length,
             ),
             const SizedBox(height: 12),
-            if (aggregatedMedia.isEmpty)
-              _buildNoResultsMessage()
-            else
+            ...directoryAccordions,
+            if (aggregatedMedia.isNotEmpty) ...[
+              const SizedBox(height: 16),
               _buildMediaGrid(aggregatedMedia, aggregatedMedia, gridColumns),
+            ] else if (directoryAccordions.isEmpty)
+              _buildNoResultsMessage(),
           ],
         ],
       ),
@@ -448,6 +454,62 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildDirectoryAccordions(
+    List<TagSection> sections,
+    int gridColumns,
+  ) {
+    final theme = Theme.of(context);
+    final tiles = <Widget>[];
+
+    for (final section in sections) {
+      for (final directoryContent in section.directories) {
+        final media = directoryContent.media;
+        if (media.isEmpty) {
+          continue;
+        }
+
+        final directory = directoryContent.directory;
+        final itemCount = media.length;
+
+        tiles.add(
+          Card(
+            key: ValueKey('${section.id}-${directory.id}'),
+            elevation: 1,
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ExpansionTile(
+              leading: const Icon(Icons.folder),
+              title: Text(directory.name),
+              subtitle: Text(
+                '${section.name} • $itemCount '
+                'item${itemCount == 1 ? '' : 's'}',
+                style: theme.textTheme.bodySmall,
+              ),
+              childrenPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              maintainState: true,
+              children: [
+                _buildMediaGrid(media, media, gridColumns),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    if (tiles.isEmpty) {
+      return const [];
+    }
+
+    return [
+      Text(
+        'Directories',
+        style: theme.textTheme.titleMedium,
+      ),
+      const SizedBox(height: 8),
+      ...tiles,
+    ];
   }
 
   void _startSlideshow(List<MediaEntity> media) {
