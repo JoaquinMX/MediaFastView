@@ -298,3 +298,25 @@ final directoryPreviewProvider = FutureProvider.family<String?, String>((
   }
   return null;
 });
+
+final directoryPreviewStripProvider =
+    FutureProvider.family<List<String>, String>((ref, directoryPath) async {
+  debugPrint('Getting directory preview strip for: $directoryPath');
+  final fileService = ref.watch(fileServiceProvider);
+  try {
+    final contents = await fileService.getDirectoryContents(directoryPath);
+    final imageFiles = contents
+        .whereType<File>()
+        .where(
+          (entity) =>
+              fileService.getMediaTypeFromExtension(entity.path) == 'image',
+        )
+        .take(5)
+        .map((entity) => entity.path)
+        .toList();
+    return imageFiles;
+  } catch (e) {
+    debugPrint('Error getting preview strip for $directoryPath: $e');
+  }
+  return const <String>[];
+});
