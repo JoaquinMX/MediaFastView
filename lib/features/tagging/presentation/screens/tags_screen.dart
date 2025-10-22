@@ -10,6 +10,7 @@ import '../../../media_library/presentation/widgets/media_grid_item.dart';
 import '../../../media_library/presentation/widgets/column_selector_popup.dart';
 import '../../domain/enums/tag_filter_mode.dart';
 import '../view_models/tags_view_model.dart';
+import '../widgets/tag_directory_chip.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 
 class TagsScreen extends ConsumerStatefulWidget {
@@ -91,6 +92,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       selectedSections,
       state.filterMode,
     );
+    final selectedDirectories =
+        _collectDirectoriesFromSections(selectedSections);
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
@@ -114,6 +117,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               state.selectedTagIds.length,
             ),
             const SizedBox(height: 12),
+            if (selectedDirectories.isNotEmpty) ...[
+              _buildDirectorySection(selectedDirectories),
+              const SizedBox(height: 24),
+            ],
             if (aggregatedMedia.isEmpty)
               _buildNoResultsMessage()
             else
@@ -328,6 +335,41 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         .toList();
   }
 
+  List<TagDirectoryContent> _collectDirectoriesFromSections(
+    List<TagSection> sections,
+  ) {
+    if (sections.isEmpty) {
+      return const <TagDirectoryContent>[];
+    }
+
+    final map = <String, TagDirectoryContent>{};
+    for (final section in sections) {
+      for (final directoryContent in section.directories) {
+        map.update(
+          directoryContent.directory.id,
+          (existing) {
+            final merged = <String, MediaEntity>{
+              for (final media in existing.media) media.id: media,
+              for (final media in directoryContent.media) media.id: media,
+            };
+            return TagDirectoryContent(
+              directory: directoryContent.directory,
+              media: merged.values.toList(),
+            );
+          },
+          ifAbsent: () => TagDirectoryContent(
+            directory: directoryContent.directory,
+            media: List<MediaEntity>.from(directoryContent.media),
+          ),
+        );
+      }
+    }
+
+    final directories = map.values.toList()
+      ..sort((a, b) => a.directory.name.compareTo(b.directory.name));
+    return directories;
+  }
+
   Widget _buildFilterModeToggle(
     TagsLoaded state,
     TagsViewModel viewModel,
@@ -345,6 +387,36 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           'When enabled, media must include every selected tag.',
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      ),
+    );
+  }
+
+  Widget _buildDirectorySection(List<TagDirectoryContent> directories) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Directories', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: directories
+                  .map(
+                    (content) => TagDirectoryChip(
+                      directory: content.directory,
+                      mediaCount: content.media.length,
+                      onTap: () => _openDirectoryFullScreen(content),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -438,6 +510,18 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   }
 
   void _openFullScreen(List<MediaEntity> mediaList, MediaEntity media) {
+    if (media.type == MediaType.directory) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => FullScreenViewerScreen(
+            directoryPath: media.path,
+            bookmarkData: media.bookmarkData,
+          ),
+        ),
+      );
+      return;
+    }
+
     final directoryPath = p.dirname(media.path);
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -445,6 +529,20 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           directoryPath: directoryPath,
           initialMediaId: media.id,
           mediaList: mediaList,
+        ),
+      ),
+    );
+  }
+
+  void _openDirectoryFullScreen(TagDirectoryContent directoryContent) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FullScreenViewerScreen(
+          directoryPath: directoryContent.directory.path,
+          bookmarkData: directoryContent.directory.bookmarkData,
+          initialMediaId: directoryContent.media.isNotEmpty
+              ? directoryContent.media.first.id
+              : null,
         ),
       ),
     );
