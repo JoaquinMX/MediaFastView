@@ -44,6 +44,7 @@ import '../../features/media_library/data/repositories/tag_repository_impl.dart'
 import '../../features/tagging/data/isar/isar_tag_data_source.dart';
 import '../../features/media_library/domain/repositories/tag_repository.dart';
 import '../../features/favorites/data/isar/isar_favorites_data_source.dart';
+import '../utils/tag_lookup.dart';
 
 // Isar database provider
 final isarDatabaseProvider = Provider<IsarDatabase>((ref) {
@@ -129,6 +130,10 @@ final tagRepositoryProvider =
         );
       },
     );
+
+final tagLookupProvider = Provider<TagLookup>((ref) {
+  return TagLookup(ref.watch(tagRepositoryProvider));
+});
 
 final favoritesRepositoryProvider =
     StateNotifierProvider.autoDispose<
