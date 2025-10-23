@@ -1,4 +1,5 @@
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../tagging/domain/entities/tag_entity.dart';
 
 /// Sealed class representing the state of the full-screen media viewer
 sealed class FullScreenState {
@@ -26,6 +27,8 @@ class FullScreenLoaded extends FullScreenState {
     required this.currentPosition,
     required this.totalDuration,
     required this.isFavorite,
+    required this.currentMediaTags,
+    required this.shortcutTags,
   });
 
   final List<MediaEntity> mediaList;
@@ -36,6 +39,8 @@ class FullScreenLoaded extends FullScreenState {
   final Duration currentPosition;
   final Duration totalDuration;
   final bool isFavorite;
+  final List<TagEntity> currentMediaTags;
+  final List<TagEntity> shortcutTags;
 
   MediaEntity get currentMedia => mediaList[currentIndex];
 
@@ -48,6 +53,8 @@ class FullScreenLoaded extends FullScreenState {
     Duration? currentPosition,
     Duration? totalDuration,
     bool? isFavorite,
+    List<TagEntity>? currentMediaTags,
+    List<TagEntity>? shortcutTags,
   }) {
     return FullScreenLoaded(
       mediaList: mediaList ?? this.mediaList,
@@ -58,6 +65,8 @@ class FullScreenLoaded extends FullScreenState {
       currentPosition: currentPosition ?? this.currentPosition,
       totalDuration: totalDuration ?? this.totalDuration,
       isFavorite: isFavorite ?? this.isFavorite,
+      currentMediaTags: currentMediaTags ?? this.currentMediaTags,
+      shortcutTags: shortcutTags ?? this.shortcutTags,
     );
   }
 }

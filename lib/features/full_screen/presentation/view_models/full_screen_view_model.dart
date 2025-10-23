@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
@@ -5,10 +6,17 @@ import 'package:video_player/video_player.dart';
 import '../../../favorites/domain/repositories/favorites_repository.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../tagging/domain/entities/tag_entity.dart';
+import '../../../tagging/domain/use_cases/assign_tag_use_case.dart';
+import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
+import '../../../tagging/presentation/view_models/tags_view_model.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
+import '../../../../shared/utils/tag_cache_refresher.dart';
+import '../../../../shared/utils/tag_lookup.dart';
+import '../../../../shared/utils/tag_usage_ranker.dart';
 import '../../domain/use_cases/load_media_for_viewing_use_case.dart';
 import '../../domain/entities/viewer_state_entity.dart';
 import '../../../../core/services/logging_service.dart';
@@ -19,13 +27,22 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     this._loadMediaUseCase,
     this._favoritesViewModel,
     this._favoritesRepository,
-    VideoPlaybackSettings playbackSettings,
-  )   : _playbackSettings = playbackSettings,
+    this._assignTagUseCase,
+    this._tagLookup,
+    this._tagCacheRefresher,
+    VideoPlaybackSettings playbackSettings, {
+    TagUsageRanker? tagUsageRanker,
+  })  : _playbackSettings = playbackSettings,
+        _tagUsageRanker = tagUsageRanker ?? const TagUsageRanker(),
         super(const FullScreenInitial());
 
   final LoadMediaForViewingUseCase _loadMediaUseCase;
   final FavoritesViewModel _favoritesViewModel;
   final FavoritesRepository _favoritesRepository;
+  final AssignTagUseCase _assignTagUseCase;
+  final TagLookup _tagLookup;
+  final TagCacheRefresher _tagCacheRefresher;
+  final TagUsageRanker _tagUsageRanker;
 
   VideoPlayerController? _videoController;
   VideoPlaybackSettings _playbackSettings;
@@ -85,6 +102,9 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
       _loopOverridden = false;
 
+      final currentTags = await _tagLookup.getTagsByIds(currentMedia.tagIds);
+      final shortcutTags = await _buildShortcutTags(finalMediaList);
+
       Future(() {
         state = FullScreenLoaded(
           mediaList: finalMediaList,
@@ -95,6 +115,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
           currentPosition: Duration.zero,
           totalDuration: Duration.zero,
           isFavorite: isFavorite,
+          currentMediaTags: currentTags,
+          shortcutTags: shortcutTags,
         );
       });
 
@@ -155,6 +177,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       final newIndex = currentState.currentIndex + 1;
       final nextMedia = currentState.mediaList[newIndex];
       final isFavorite = await _favoritesRepository.isFavorite(nextMedia.id);
+      final nextTags = await _tagLookup.getTagsByIds(nextMedia.tagIds);
 
       state = currentState.copyWith(
         currentIndex: newIndex,
@@ -165,6 +188,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
             nextMedia.type == MediaType.video && _playbackSettings.autoplayVideos,
         isLooping:
             nextMedia.type == MediaType.video && _playbackSettings.loopVideos,
+        currentMediaTags: nextTags,
       );
 
       _loopOverridden = false;
@@ -187,6 +211,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       final isFavorite = await _favoritesRepository.isFavorite(
         previousMedia.id,
       );
+      final previousTags = await _tagLookup.getTagsByIds(previousMedia.tagIds);
 
       state = currentState.copyWith(
         currentIndex: newIndex,
@@ -197,6 +222,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
             _playbackSettings.autoplayVideos,
         isLooping: previousMedia.type == MediaType.video &&
             _playbackSettings.loopVideos,
+        currentMediaTags: previousTags,
       );
 
       _loopOverridden = false;
@@ -205,6 +231,99 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       if (previousMedia.type == MediaType.video) {
         await _initializeVideoController(previousMedia);
       }
+    }
+  }
+
+  /// Toggles a [tag] assignment for the currently selected media item.
+  Future<TagMutationResult> toggleTagOnCurrentMedia(TagEntity tag) async {
+    final currentState = state;
+    if (currentState is! FullScreenLoaded) {
+      return const TagMutationResult(TagMutationOutcome.unchanged);
+    }
+
+    final media = currentState.currentMedia;
+    final hasTag = media.tagIds.contains(tag.id);
+
+    try {
+      if (hasTag) {
+        await _assignTagUseCase.removeTagFromMedia(media.id, tag);
+      } else {
+        await _assignTagUseCase.assignTagToMedia(media.id, tag);
+      }
+
+      final updatedTagIds = hasTag
+          ? media.tagIds.where((id) => id != tag.id).toList(growable: false)
+          : [...media.tagIds, tag.id];
+
+      final updatedMedia = media.copyWith(tagIds: List<String>.unmodifiable(updatedTagIds));
+      final updatedMediaList = [...currentState.mediaList];
+      updatedMediaList[currentState.currentIndex] = updatedMedia;
+
+      final resolvedTags = await _tagLookup.getTagsByIds(updatedTagIds);
+      final shortcutTags = await _buildShortcutTags(updatedMediaList);
+
+      state = currentState.copyWith(
+        mediaList: updatedMediaList,
+        currentMediaTags: resolvedTags,
+        shortcutTags: shortcutTags,
+      );
+
+      await _refreshTagCaches();
+
+      return hasTag
+          ? const TagMutationResult(TagMutationOutcome.removed)
+          : const TagMutationResult(TagMutationOutcome.added);
+    } catch (error, stackTrace) {
+      LoggingService.instance.error('Failed to toggle tag on media: $error');
+      LoggingService.instance.debug('Toggle tag stack trace: $stackTrace');
+      throw Exception('Failed to update tag "${tag.name}": $error');
+    }
+  }
+
+  /// Replaces the current media's tag assignments with [tagIds].
+  Future<TagUpdateResult> setTagsForCurrentMedia(List<String> tagIds) async {
+    final currentState = state;
+    if (currentState is! FullScreenLoaded) {
+      return const TagUpdateResult(addedCount: 0, removedCount: 0);
+    }
+
+    final media = currentState.currentMedia;
+    final sanitizedTagIds = LinkedHashSet<String>.from(
+      tagIds.where((id) => id.isNotEmpty),
+    );
+    final updatedTagIds = List<String>.unmodifiable(sanitizedTagIds);
+    final previousTagSet = media.tagIds.toSet();
+    final newTagSet = sanitizedTagIds;
+
+    try {
+      await _assignTagUseCase.setTagsForMedia([media.id], updatedTagIds);
+
+      final updatedMedia = media.copyWith(tagIds: updatedTagIds);
+      final updatedMediaList = [...currentState.mediaList];
+      updatedMediaList[currentState.currentIndex] = updatedMedia;
+
+      final resolvedTags = await _tagLookup.getTagsByIds(updatedTagIds);
+      final shortcutTags = await _buildShortcutTags(updatedMediaList);
+
+      state = currentState.copyWith(
+        mediaList: updatedMediaList,
+        currentMediaTags: resolvedTags,
+        shortcutTags: shortcutTags,
+      );
+
+      await _refreshTagCaches();
+
+      final addedCount = newTagSet.difference(previousTagSet).length;
+      final removedCount = previousTagSet.difference(newTagSet).length;
+
+      return TagUpdateResult(
+        addedCount: addedCount,
+        removedCount: removedCount,
+      );
+    } catch (error, stackTrace) {
+      LoggingService.instance.error('Failed to set tags for media: $error');
+      LoggingService.instance.debug('Set tags stack trace: $stackTrace');
+      throw Exception('Failed to save tags: $error');
     }
   }
 
@@ -313,6 +432,49 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     state = currentState.copyWith(isPlaying: isPlaying);
   }
 
+  Future<List<TagEntity>> _buildShortcutTags(
+    List<MediaEntity> mediaList,
+  ) async {
+    final rankedTagIds = _tagUsageRanker.rank(mediaList);
+    if (rankedTagIds.isEmpty) {
+      return const <TagEntity>[];
+    }
+
+    final resolvedTags = await _tagLookup.getTagsByIds(rankedTagIds);
+    if (resolvedTags.isEmpty) {
+      return const <TagEntity>[];
+    }
+
+    final tagsById = {
+      for (final tag in resolvedTags) tag.id: tag,
+    };
+
+    return [
+      for (final tagId in rankedTagIds)
+        if (tagsById.containsKey(tagId)) tagsById[tagId]!,
+    ];
+  }
+
+  Future<void> _refreshTagCaches() async {
+    try {
+      await _tagLookup.refresh();
+    } catch (error, stackTrace) {
+      LoggingService.instance
+          .error('Failed to refresh tag lookup cache: $error');
+      LoggingService.instance
+          .debug('Tag lookup refresh stack trace: $stackTrace');
+    }
+
+    try {
+      await _tagCacheRefresher.refresh();
+    } catch (error, stackTrace) {
+      LoggingService.instance
+          .error('Failed to refresh tag view models: $error');
+      LoggingService.instance
+          .debug('Tag cache refresh stack trace: $stackTrace');
+    }
+  }
+
   /// Initialize video controller for the given media
   Future<void> _initializeVideoController(MediaEntity media) async {
     // Dispose existing controller
@@ -368,6 +530,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
     final targetMedia = currentState.mediaList[index];
     final isFavorite = await _favoritesRepository.isFavorite(targetMedia.id);
+    final targetTags = await _tagLookup.getTagsByIds(targetMedia.tagIds);
 
     state = currentState.copyWith(
       currentIndex: index,
@@ -378,6 +541,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
           targetMedia.type == MediaType.video && _playbackSettings.autoplayVideos,
       isLooping:
           targetMedia.type == MediaType.video && _playbackSettings.loopVideos,
+      currentMediaTags: targetTags,
     );
 
     _loopOverridden = false;
@@ -403,6 +567,26 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   }
 }
 
+/// Outcome of a tag toggle operation.
+enum TagMutationOutcome { added, removed, unchanged }
+
+/// Result describing the outcome of a single tag toggle.
+class TagMutationResult {
+  const TagMutationResult(this.outcome);
+
+  final TagMutationOutcome outcome;
+}
+
+/// Summary describing how many tags were added or removed by a batch update.
+class TagUpdateResult {
+  const TagUpdateResult({required this.addedCount, required this.removedCount});
+
+  final int addedCount;
+  final int removedCount;
+
+  bool get hasChanges => addedCount > 0 || removedCount > 0;
+}
+
 /// Provider for FullScreenViewModel
 final fullScreenViewModelProvider =
     StateNotifierProvider.autoDispose<FullScreenViewModel, FullScreenState>(
@@ -411,6 +595,9 @@ final fullScreenViewModelProvider =
       ref.watch(loadMediaForViewingUseCaseProvider),
       ref.read(favoritesViewModelProvider.notifier),
       ref.watch(favoritesRepositoryProvider),
+      ref.watch(assignTagUseCaseProvider),
+      ref.watch(tagLookupProvider),
+      ref.watch(tagCacheRefresherProvider),
       ref.read(videoPlaybackSettingsProvider),
     );
 

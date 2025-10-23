@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/view_models/tags_view_model.dart';
+import '../../../tagging/presentation/widgets/tag_chip.dart';
 import '../../domain/entities/viewer_state_entity.dart';
 import '../view_models/full_screen_view_model.dart';
 import '../widgets/full_screen_image_viewer.dart';
@@ -16,6 +18,7 @@ import '../../../../shared/widgets/media_playback_controls.dart';
 import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
+import '../../../../shared/widgets/tag_selection_dialog.dart';
 
 /// Full-screen media viewer screen
 class FullScreenViewerScreen extends ConsumerStatefulWidget {
@@ -138,6 +141,17 @@ class _FullScreenViewerScreenState
                       ),
                     ],
                   ),
+                ),
+              ),
+
+              Positioned(
+                top: 72,
+                left: 16,
+                right: 16,
+                child: SafeArea(
+                  top: true,
+                  bottom: false,
+                  child: _buildTagOverlay(state),
                 ),
               ),
 
@@ -332,6 +346,75 @@ class _FullScreenViewerScreenState
     );
   }
 
+  Widget _buildTagOverlay(FullScreenLoaded state) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final chipWidgets = <Widget>[];
+    if (state.currentMediaTags.isEmpty) {
+      chipWidgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            'No tags assigned',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    } else {
+      for (final tag in state.currentMediaTags) {
+        chipWidgets.add(
+          TagChip(
+            key: ValueKey('fullscreen_tag_${tag.id}'),
+            tag: tag,
+            selected: true,
+            compact: true,
+            onTap: () => _handleTagChipTapped(tag),
+          ),
+        );
+        chipWidgets.add(const SizedBox(width: 8));
+      }
+      if (chipWidgets.isNotEmpty) {
+        chipWidgets.removeLast();
+      }
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.45),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white24),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: chipWidgets),
+              ),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: () => _openTagSelectionDialog(state),
+              icon: const Icon(Icons.sell, size: 18),
+              label: const Text('Manage'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: BorderSide(color: Colors.white.withOpacity(0.4)),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showMediaInfo(MediaEntity media) {
     showDialog(
       context: context,
@@ -396,6 +479,132 @@ class _FullScreenViewerScreenState
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _handleTagChipTapped(TagEntity tag) async {
+    try {
+      final result = await _viewModel.toggleTagOnCurrentMedia(tag);
+      if (!mounted) {
+        return;
+      }
+
+      final message = switch (result.outcome) {
+        TagMutationOutcome.added => 'Added "${tag.name}"',
+        TagMutationOutcome.removed => 'Removed "${tag.name}"',
+        TagMutationOutcome.unchanged => 'No changes to "${tag.name}"',
+      };
+      _showTagFeedback(message);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showTagFeedback('Failed to update "${tag.name}": $error', isError: true);
+    }
+  }
+
+  Future<void> _openTagSelectionDialog(FullScreenLoaded state) async {
+    final result = await showDialog<TagUpdateResult>(
+      context: context,
+      builder: (context) => TagSelectionDialog<TagUpdateResult>(
+        title: 'Manage Tags',
+        assignmentTargetLabel: state.currentMedia.name,
+        initialSelectedTagIds: state.currentMedia.tagIds,
+        confirmLabel: 'Save',
+        onConfirm: (selection) => _viewModel.setTagsForCurrentMedia(selection),
+      ),
+    );
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    String message;
+    if (!result.hasChanges) {
+      message = 'No tag changes';
+    } else if (result.addedCount > 0 && result.removedCount > 0) {
+      message =
+          'Added ${result.addedCount} ${_pluralize("tag", result.addedCount)}, removed ${result.removedCount} ${_pluralize("tag", result.removedCount)}';
+    } else if (result.addedCount > 0) {
+      message =
+          'Added ${result.addedCount} ${_pluralize("tag", result.addedCount)}';
+    } else {
+      message =
+          'Removed ${result.removedCount} ${_pluralize("tag", result.removedCount)}';
+    }
+
+    _showTagFeedback(message);
+  }
+
+  void _showTagFeedback(String message, {bool isError = false}) {
+    if (!mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final colorScheme = Theme.of(context).colorScheme;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? colorScheme.error : colorScheme.primary,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _handleTagShortcut(TagEntity tag) async {
+    await _handleTagChipTapped(tag);
+  }
+
+  String _pluralize(String noun, int count) => count == 1 ? noun : '${noun}s';
+
+  bool _isPrimaryModifierPressed(Set<LogicalKeyboardKey> pressed) {
+    return pressed.contains(LogicalKeyboardKey.controlLeft) ||
+        pressed.contains(LogicalKeyboardKey.controlRight) ||
+        pressed.contains(LogicalKeyboardKey.metaLeft) ||
+        pressed.contains(LogicalKeyboardKey.metaRight);
+  }
+
+  bool _isAltPressed(Set<LogicalKeyboardKey> pressed) {
+    return pressed.contains(LogicalKeyboardKey.altLeft) ||
+        pressed.contains(LogicalKeyboardKey.altRight);
+  }
+
+  int? _digitLogicalKeyToIndex(LogicalKeyboardKey key) {
+    switch (key) {
+      case LogicalKeyboardKey.digit1:
+      case LogicalKeyboardKey.numpad1:
+        return 0;
+      case LogicalKeyboardKey.digit2:
+      case LogicalKeyboardKey.numpad2:
+        return 1;
+      case LogicalKeyboardKey.digit3:
+      case LogicalKeyboardKey.numpad3:
+        return 2;
+      case LogicalKeyboardKey.digit4:
+      case LogicalKeyboardKey.numpad4:
+        return 3;
+      case LogicalKeyboardKey.digit5:
+      case LogicalKeyboardKey.numpad5:
+        return 4;
+      case LogicalKeyboardKey.digit6:
+      case LogicalKeyboardKey.numpad6:
+        return 5;
+      case LogicalKeyboardKey.digit7:
+      case LogicalKeyboardKey.numpad7:
+        return 6;
+      case LogicalKeyboardKey.digit8:
+      case LogicalKeyboardKey.numpad8:
+        return 7;
+      case LogicalKeyboardKey.digit9:
+      case LogicalKeyboardKey.numpad9:
+        return 8;
+      case LogicalKeyboardKey.digit0:
+      case LogicalKeyboardKey.numpad0:
+        return 9;
+      default:
+        return null;
+    }
   }
 
   Widget _buildVideoContent(MediaEntity media) {
@@ -470,6 +679,15 @@ class _FullScreenViewerScreenState
 
     final state = ref.read(fullScreenViewModelProvider);
     if (state is! FullScreenLoaded) return KeyEventResult.ignored;
+
+    final pressedKeys = HardwareKeyboard.instance.logicalKeysPressed;
+    if (_isPrimaryModifierPressed(pressedKeys) && _isAltPressed(pressedKeys)) {
+      final shortcutIndex = _digitLogicalKeyToIndex(event.logicalKey);
+      if (shortcutIndex != null && shortcutIndex < state.shortcutTags.length) {
+        unawaited(_handleTagShortcut(state.shortcutTags[shortcutIndex]));
+        return KeyEventResult.handled;
+      }
+    }
 
     switch (event.logicalKey) {
       case LogicalKeyboardKey.escape:
