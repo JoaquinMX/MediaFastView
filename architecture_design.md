@@ -41,6 +41,7 @@ lib/
 │   ├── media_library/          # Directory and media management
 │   ├── tagging/                # Tagging system
 │   ├── favorites/              # Favorites functionality
+│   ├── settings/               # App-wide preferences
 │   └── full_screen/            # Full-screen viewing
 ├── core/
 │   ├── utils/                  # Utility functions
@@ -99,9 +100,19 @@ lib/
 │   │       │   ├── media_model.dart
 │   │       │   └── tag_model.dart
 │   │       ├── data_sources/
-│   │       │   ├── local_directory_data_source.dart
-│   │       │   ├── local_media_data_source.dart
-│   │       │   └── shared_preferences_data_source.dart
+│   │       │   ├── filesystem_media_data_source.dart
+│   │       │   └── local_directory_data_source.dart
+│   │       ├── isar/
+│   │       │   ├── directory_collection.dart
+│   │       │   ├── isar_directory_data_source.dart
+│   │       │   ├── isar_media_data_source.dart
+│   │       │   └── media_collection.dart
+│   │       ├── ../favorites/data/isar/
+│   │       │   ├── favorite_collection.dart
+│   │       │   └── isar_favorites_data_source.dart
+│   │       └── ../tagging/data/isar/
+│   │           ├── isar_tag_data_source.dart
+│   │           └── tag_collection.dart
 │   │       └── repositories/
 │   │           ├── directory_repository_impl.dart
 │   │           ├── media_repository_impl.dart
@@ -125,8 +136,9 @@ lib/
 │   │   └── data/
 │   │       ├── models/
 │   │       │   └── tag_model.dart
-│   │       ├── data_sources/
-│   │       │   └── shared_preferences_data_source.dart
+│   │       ├── isar/
+│   │       │   ├── isar_tag_data_source.dart
+│   │       │   └── tag_collection.dart
 │   │       └── repositories/
 │   │           └── tag_repository_impl.dart
 │   ├── favorites/
@@ -151,10 +163,15 @@ lib/
 │   │   └── data/
 │   │       ├── models/
 │   │       │   └── favorite_model.dart
-│   │       ├── data_sources/
-│   │       │   └── shared_preferences_data_source.dart
+│   │       ├── isar/
+│   │       │   ├── favorite_collection.dart
+│   │       │   └── isar_favorites_data_source.dart
 │   │       └── repositories/
 │   │           └── favorites_repository_impl.dart
+│   ├── settings/
+│   │   └── presentation/
+│   │       └── screens/
+│   │           └── settings_screen.dart
 │   ├── shared/
 │   │   └── widgets/
 │   │       ├── media_playback_controls.dart
@@ -188,9 +205,10 @@ lib/
 │               └── media_viewer_repository_impl.dart
 ├── core/
 │   ├── utils/
+│   │   ├── batch_update_result.dart
 │   │   ├── file_utils.dart
 │   │   ├── path_utils.dart
-│   │   └── thumbnail_generator.dart
+│   │   └── retry_utils.dart
 │   ├── services/
 │   │   ├── file_service.dart
 │   │   ├── permission_service.dart
