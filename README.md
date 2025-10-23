@@ -5,15 +5,15 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 ## Overview
 
 - **Platform focus**: Desktop-first experience for macOS with support for iOS builds. Security-scoped bookmarks keep directory access stable across launches.
-- **Feature-based clean architecture**: Presentation, domain, and data layers are split by feature (media library, tagging, favorites, full screen) and coordinated with Riverpod view models.
-- **Rich browsing experience**: Directory and media grids offer search, tag filtering, column density controls, and quick entry into a full-screen viewer with keyboard shortcuts and video controls.
-- **Stateful persistence**: Isar persists user selections (directories, tags, favorites) while filesystem scans keep metadata fresh.
+- **Feature-based clean architecture**: Presentation, domain, and data layers are split by feature (media library, tagging, favorites, full screen, settings) and coordinated with Riverpod view models.
+- **Rich browsing experience**: Directory and media grids offer drag-and-drop intake, search, tag filtering, column density controls, and quick entry into a full-screen viewer with keyboard shortcuts and video controls.
+- **Stateful persistence**: Isar persists user selections (directories, tags, favorites) while filesystem scans keep metadata fresh and permission recovery keeps access stable across relaunches.
 
 ## Key Capabilities
 
-- Add folders, validate access permissions, and generate security-scoped bookmarks for macOS (`lib/features/media_library`).
+- Add folders via picker or drag-and-drop, validate access permissions, recover lost bookmarks, and generate security-scoped bookmarks for macOS (`lib/features/media_library`).
 - Scan directories for images, videos, and text documents with lazy metadata caching (`lib/features/media_library/data/data_sources`).
-- Manage a dual tagging system that applies to both directories and individual media (`lib/features/tagging`).
+- Manage a dual tagging system that applies to both directories and individual media with tag-driven library views (`lib/features/tagging`).
 - Toggle favorites, start slideshows, and browse starred items in a dedicated screen (`lib/features/favorites`).
 - Open any media item in an immersive full-screen viewer with playback controls and keyboard navigation (`lib/features/full_screen`).
 
@@ -28,12 +28,15 @@ lib/
 │   ├── media_library/
 │   ├── tagging/
 │   ├── favorites/
-│   └── full_screen/
-├── shared/          # Cross-cutting providers, widgets, utils
+│   ├── full_screen/
+│   └── settings/
+├── shared/
+│   ├── providers/   # Dependency injection wiring shared across features
+│   └── ...          # Cross-cutting widgets, utils, theme extensions
 └── main.dart        # App bootstrap and top-level wiring
 ```
 
-Each feature contains `data`, `domain`, and `presentation` layers. Riverpod `StateNotifier` view models orchestrate use cases and repositories, keeping UI reactive and testable.
+Each feature contains `data`, `domain`, and `presentation` layers. Riverpod `StateNotifier` view models orchestrate use cases and repositories, while shared provider modules (`lib/shared/providers`) centralize dependency injection for navigation and data access, keeping UI reactive and testable.
 
 ## Getting Started
 
@@ -58,12 +61,16 @@ Widget and integration test scaffolds live under `test/`. Add coverage for new v
 
 ## Roadmap & Known Gaps
 
-- Align directory IDs across layers; current mix of `path.hashCode` in add_directory_use_case.dart:16 and local_directory_data_source.dart:170 vs SHA-256 ids in filesystem_media_repository_impl.dart:47-269 breaks tag assignment, favorites cleanup, and directory lookups.
-- Replace placeholder tag filter data and wire DirectoryGrid into the tag system; directories never persist tagIds and TagManagementDialog toggles fail because directoryRepository.getDirectoryById() can't resolve SHA ids (directory_grid_screen.dart:130, assign_tag_use_case.dart:17, tag_management_dialog.dart:239).
-- Persist recovered paths/bookmarks back to DirectoryRepository when permissions are re-granted; MediaViewModel only updates local state, so reopening the directory breaks again (media_grid_view_model.dart:300-333).
-- Extend RemoveDirectoryUseCase to purge cached media metadata via IsarMediaDataSource.removeMediaForDirectory(); otherwise stale IDs linger for favorites/tag lookups (remove_directory_use_case.dart:40-63, lib/features/media_library/data/isar/isar_media_data_source.dart).
-- Preserve grid layout preferences when filtering/sorting; filterByTags replaces state with MediaLoading and resets columns to 3, undoing user changes (media_grid_view_model.dart:205-244).
-- Loosen drag-and-drop directory detection; the current suffix check skips valid macOS bundle directories like *.photoslibrary (directory_grid_screen.dart:124-127).
+- Inline tag editing within the full-screen viewer, including keyboard shortcuts for quick tagging.
+- Smart tag suggestions that leverage EXIF/video metadata and existing usage patterns to speed up labeling.
+- Support for hierarchical (parent/child) tags that apply to both directories and individual media.
+- Saved smart collections that remember complex tag filters for one-click access from the library.
+- A timeline/gallery mode that groups tagged media by capture date and tag for storytelling.
+- Tag density heatmaps over directory tiles to spotlight under- or over-tagged locations.
+- Side-by-side compare mode that locks views to selected tags for curation reviews.
+- Video chapter tagging so viewers can jump between tagged segments inside long clips.
+- Tag-driven slideshow presets with custom transitions, durations, and media ordering.
+- A bulk tagging review queue for newly imported directories to streamline first-pass annotation.
 
 
 ## Additional Documentation
