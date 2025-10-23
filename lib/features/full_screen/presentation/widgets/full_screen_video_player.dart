@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../core/services/logging_service.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 
 /// Full-screen video player widget
@@ -32,16 +34,25 @@ class FullScreenVideoPlayer extends StatefulWidget {
 
 class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   VideoPlayerController? _controller;
+  Future<void>? _initialization;
 
   @override
   void initState() {
     super.initState();
-    _initializePlayer();
+    unawaited(_initializePlayer(widget.media));
   }
 
   @override
   void didUpdateWidget(FullScreenVideoPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (widget.media.id != oldWidget.media.id ||
+        widget.media.path != oldWidget.media.path) {
+      unawaited(
+        _initializePlayer(widget.media, recreateController: true),
+      );
+      return;
+    }
 
     // Update controller settings when widget properties change
     if (_controller != null) {
@@ -61,27 +72,76 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     }
   }
 
-  Future<void> _initializePlayer() async {
-    _controller = VideoPlayerController.file(File(widget.media.path));
+  Future<void> _initializePlayer(MediaEntity media,
+      {bool recreateController = false}) async {
+    if (_initialization != null) {
+      await _initialization;
+    }
 
+    final future = _performInitialization(media,
+        recreateController: recreateController);
+    _initialization = future;
     try {
-      await _controller!.initialize();
-      _controller!.setVolume(widget.isMuted ? 0.0 : 1.0);
-      _controller!.setLooping(widget.isLooping);
-
-      // Add listeners
-      _controller!.addListener(_onVideoUpdate);
-
-      if (widget.isPlaying) {
-        _controller!.play();
+      await future;
+    } finally {
+      if (identical(_initialization, future)) {
+        _initialization = null;
       }
+    }
+  }
 
-      if (mounted) {
-        setState(() {});
+  Future<void> _performInitialization(MediaEntity media,
+      {bool recreateController = false}) async {
+    if (recreateController || _controller == null) {
+      await _disposeController();
+
+      final controller = VideoPlayerController.file(File(media.path));
+
+      try {
+        await controller.initialize();
+        controller.setVolume(widget.isMuted ? 0.0 : 1.0);
+        controller.setLooping(widget.isLooping);
+        controller.addListener(_onVideoUpdate);
+
+        if (widget.isPlaying) {
+          await controller.play();
+        }
+
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+
+        widget.onDurationUpdate(controller.value.duration);
+        widget.onPositionUpdate(controller.value.position);
+        widget.onPlayingStateUpdate(controller.value.isPlaying);
+
+        setState(() {
+          _controller = controller;
+        });
+      } catch (error, stackTrace) {
+        LoggingService.instance.error(
+          'Failed to initialize video controller for ${media.path}: $error',
+        );
+        LoggingService.instance.debug(
+          'Video initialization stack trace: $stackTrace',
+        );
+        await controller.dispose();
       }
-    } catch (e) {
-      // Handle initialization error
-      debugPrint('Video initialization error: $e');
+      return;
+    }
+
+    // Controller already exists; ensure state matches widget configuration.
+    if (widget.isMuted) {
+      _controller!.setVolume(0.0);
+    } else {
+      _controller!.setVolume(1.0);
+    }
+    _controller!.setLooping(widget.isLooping);
+    if (widget.isPlaying) {
+      _controller!.play();
+    } else {
+      _controller!.pause();
     }
   }
 
@@ -99,8 +159,7 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
 
   @override
   void dispose() {
-    _controller?.removeListener(_onVideoUpdate);
-    _controller?.dispose();
+    unawaited(_disposeController());
     super.dispose();
   }
 
@@ -112,7 +171,7 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     try {
       await _controller!.seekTo(position);
     } catch (e) {
-      debugPrint('Video seek error: $e');
+      LoggingService.instance.error('Video seek error: $e');
     }
   }
 
@@ -130,5 +189,30 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
         child: VideoPlayer(_controller!),
       ),
     );
+  }
+
+  Future<void> _disposeController() async {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+
+    controller.removeListener(_onVideoUpdate);
+    _controller = null;
+
+    if (mounted) {
+      setState(() {});
+    }
+
+    try {
+      await controller.dispose();
+    } catch (error, stackTrace) {
+      LoggingService.instance.error(
+        'Failed to dispose video controller for ${widget.media.path}: $error',
+      );
+      LoggingService.instance.debug(
+        'Video dispose stack trace: $stackTrace',
+      );
+    }
   }
 }

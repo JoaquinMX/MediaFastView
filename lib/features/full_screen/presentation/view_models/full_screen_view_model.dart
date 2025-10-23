@@ -1,7 +1,5 @@
 import 'dart:collection';
-import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:video_player/video_player.dart';
 
 import '../../../favorites/domain/repositories/favorites_repository.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
@@ -44,7 +42,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   final TagCacheRefresher _tagCacheRefresher;
   final TagUsageRanker _tagUsageRanker;
 
-  VideoPlayerController? _videoController;
   VideoPlaybackSettings _playbackSettings;
   bool _loopOverridden = false;
 
@@ -120,10 +117,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         );
       });
 
-      // Initialize video controller if current media is video
-      if (isVideo) {
-        await _initializeVideoController(currentMedia);
-      }
     } catch (e) {
       LoggingService.instance.error('Error during initialization: $e');
       // Check if this is a permission-related error
@@ -193,10 +186,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
       _loopOverridden = false;
 
-      // Initialize new media if video
-      if (nextMedia.type == MediaType.video) {
-        await _initializeVideoController(nextMedia);
-      }
     }
   }
 
@@ -227,10 +216,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
       _loopOverridden = false;
 
-      // Initialize new media if video
-      if (previousMedia.type == MediaType.video) {
-        await _initializeVideoController(previousMedia);
-      }
     }
   }
 
@@ -333,12 +318,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     if (currentState is! FullScreenLoaded) return;
 
     if (currentState.currentMedia.type == MediaType.video) {
-      if (currentState.isPlaying) {
-        _videoController?.pause();
-      } else {
-        _videoController?.play();
-      }
-
       state = currentState.copyWith(isPlaying: !currentState.isPlaying);
     }
   }
@@ -350,7 +329,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
     if (currentState.currentMedia.type == MediaType.video) {
       final newMuted = !currentState.isMuted;
-      _videoController?.setVolume(newMuted ? 0.0 : 1.0);
       state = currentState.copyWith(isMuted: newMuted);
     }
   }
@@ -362,7 +340,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
     if (currentState.currentMedia.type == MediaType.video) {
       final newLooping = !currentState.isLooping;
-      _videoController?.setLooping(newLooping);
       state = currentState.copyWith(isLooping: newLooping);
       _loopOverridden = true;
     }
@@ -378,7 +355,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     if (currentState is FullScreenLoaded &&
         currentState.currentMedia.type == MediaType.video &&
         currentState.isLooping != settings.loopVideos) {
-      _videoController?.setLooping(settings.loopVideos);
       state = currentState.copyWith(isLooping: settings.loopVideos);
     }
   }
@@ -389,7 +365,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     if (currentState is! FullScreenLoaded) return;
 
     if (currentState.currentMedia.type == MediaType.video) {
-      _videoController?.seekTo(position);
       state = currentState.copyWith(currentPosition: position);
     }
   }
@@ -475,52 +450,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     }
   }
 
-  /// Initialize video controller for the given media
-  Future<void> _initializeVideoController(MediaEntity media) async {
-    // Dispose existing controller
-    if (_videoController != null) {
-      await _videoController!.dispose();
-      _videoController = null;
-    }
-
-    // Create new controller
-    _videoController = VideoPlayerController.file(File(media.path));
-
-    // Initialize the controller
-    await _videoController!.initialize();
-
-    // Add listener for updates
-    _videoController!.addListener(_onVideoControllerUpdate);
-
-    // Set initial state values
-    final currentState = state;
-    if (currentState is FullScreenLoaded) {
-      _videoController!.setLooping(currentState.isLooping);
-      _videoController!.setVolume(currentState.isMuted ? 0.0 : 1.0);
-    }
-
-    if (_playbackSettings.autoplayVideos) {
-      await _videoController!.play();
-      final autoplayState = state;
-      if (autoplayState is FullScreenLoaded) {
-        state = autoplayState.copyWith(isPlaying: true);
-      }
-    }
-  }
-
-  /// Listener for video controller updates
-  void _onVideoControllerUpdate() {
-    if (_videoController == null) return;
-
-    final position = _videoController!.value.position;
-    final duration = _videoController!.value.duration;
-    final isPlaying = _videoController!.value.isPlaying;
-
-    updateVideoPosition(position);
-    updateVideoDuration(duration);
-    updatePlayingState(isPlaying);
-  }
-
   /// Go to specific media by index
   Future<void> goToMedia(int index) async {
     final currentState = state;
@@ -546,16 +475,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
     _loopOverridden = false;
 
-    // Initialize new media if video
-    if (targetMedia.type == MediaType.video) {
-      await _initializeVideoController(targetMedia);
-    }
-  }
-
-  @override
-  void dispose() {
-    _videoController?.dispose();
-    super.dispose();
   }
 
   /// Helper method to check if an error is permission-related.
