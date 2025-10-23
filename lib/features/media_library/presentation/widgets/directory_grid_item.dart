@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/ui_constants.dart';
@@ -132,8 +134,8 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                                 color:
                                     Theme.of(context).colorScheme.surfaceContainerHighest,
                                 child: widget.directory.thumbnailPath != null
-                                    ? Image.asset(
-                                        widget.directory.thumbnailPath!,
+                                    ? Image.file(
+                                        File(widget.directory.thumbnailPath!),
                                         fit: BoxFit.cover,
                                         errorBuilder: (context, error, stackTrace) =>
                                             _buildPlaceholder(),
