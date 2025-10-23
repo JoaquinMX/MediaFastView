@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -123,6 +124,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       // Initialize video controller if current media is video
       if (isVideo) {
         await _initializeVideoController(currentMedia);
+      } else {
+        await _disposeVideoController();
       }
     } catch (e) {
       LoggingService.instance.error('Error during initialization: $e');
@@ -196,6 +199,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       // Initialize new media if video
       if (nextMedia.type == MediaType.video) {
         await _initializeVideoController(nextMedia);
+      } else {
+        await _disposeVideoController();
       }
     }
   }
@@ -230,6 +235,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       // Initialize new media if video
       if (previousMedia.type == MediaType.video) {
         await _initializeVideoController(previousMedia);
+      } else {
+        await _disposeVideoController();
       }
     }
   }
@@ -477,35 +484,80 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
   /// Initialize video controller for the given media
   Future<void> _initializeVideoController(MediaEntity media) async {
-    // Dispose existing controller
-    if (_videoController != null) {
-      await _videoController!.dispose();
-      _videoController = null;
-    }
+    try {
+      await _disposeVideoController();
 
-    // Create new controller
-    _videoController = VideoPlayerController.file(File(media.path));
+      LoggingService.instance.debug('Initializing video controller', {
+        'mediaId': media.id,
+        'path': media.path,
+      });
 
-    // Initialize the controller
-    await _videoController!.initialize();
+      final controller = VideoPlayerController.file(File(media.path));
+      _videoController = controller;
 
-    // Add listener for updates
-    _videoController!.addListener(_onVideoControllerUpdate);
+      await controller.initialize();
+      controller.addListener(_onVideoControllerUpdate);
 
-    // Set initial state values
-    final currentState = state;
-    if (currentState is FullScreenLoaded) {
-      _videoController!.setLooping(currentState.isLooping);
-      _videoController!.setVolume(currentState.isMuted ? 0.0 : 1.0);
-    }
+      final currentState = state;
+      if (currentState is FullScreenLoaded) {
+        controller
+          ..setLooping(currentState.isLooping)
+          ..setVolume(currentState.isMuted ? 0.0 : 1.0);
+      }
 
-    if (_playbackSettings.autoplayVideos) {
-      await _videoController!.play();
-      final autoplayState = state;
-      if (autoplayState is FullScreenLoaded) {
-        state = autoplayState.copyWith(isPlaying: true);
+      _onVideoControllerUpdate();
+
+      if (_playbackSettings.autoplayVideos) {
+        await controller.play();
+        final autoplayState = state;
+        if (autoplayState is FullScreenLoaded) {
+          state = autoplayState.copyWith(isPlaying: true);
+        }
+      }
+    } catch (error, stackTrace) {
+      LoggingService.instance.error('Failed to initialize video controller: $error', {
+        'path': media.path,
+      });
+      LoggingService.instance
+          .debug('Video controller init stack trace: $stackTrace');
+
+      await _disposeVideoController();
+
+      final currentState = state;
+      if (currentState is FullScreenLoaded) {
+        state = currentState.copyWith(
+          isPlaying: false,
+          currentPosition: Duration.zero,
+          totalDuration: Duration.zero,
+        );
       }
     }
+  }
+
+  Future<void> _disposeVideoController() async {
+    final controller = _videoController;
+    if (controller == null) {
+      return;
+    }
+
+    LoggingService.instance.debug('Disposing video controller', {
+      'isInitialized': controller.value.isInitialized,
+    });
+
+    controller.removeListener(_onVideoControllerUpdate);
+    try {
+      await controller.pause();
+    } catch (_) {
+      // Ignore pause errors when controller is not ready.
+    }
+
+    try {
+      await controller.dispose();
+    } catch (error) {
+      LoggingService.instance.error('Error disposing video controller: $error');
+    }
+
+    _videoController = null;
   }
 
   /// Listener for video controller updates
@@ -549,12 +601,14 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     // Initialize new media if video
     if (targetMedia.type == MediaType.video) {
       await _initializeVideoController(targetMedia);
+    } else {
+      await _disposeVideoController();
     }
   }
 
   @override
   void dispose() {
-    _videoController?.dispose();
+    unawaited(_disposeVideoController());
     super.dispose();
   }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -43,37 +44,44 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   void didUpdateWidget(FullScreenVideoPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Update controller settings when widget properties change
-    if (_controller != null) {
+    if (widget.media.path != oldWidget.media.path) {
+      _reloadForNewMedia();
+      return;
+    }
+
+    final controller = _controller;
+    if (controller != null) {
       if (widget.isMuted != oldWidget.isMuted) {
-        _controller!.setVolume(widget.isMuted ? 0.0 : 1.0);
+        controller.setVolume(widget.isMuted ? 0.0 : 1.0);
       }
       if (widget.isLooping != oldWidget.isLooping) {
-        _controller!.setLooping(widget.isLooping);
+        controller.setLooping(widget.isLooping);
       }
       if (widget.isPlaying != oldWidget.isPlaying) {
         if (widget.isPlaying) {
-          _controller!.play();
+          controller.play();
         } else {
-          _controller!.pause();
+          controller.pause();
         }
       }
     }
   }
 
   Future<void> _initializePlayer() async {
-    _controller = VideoPlayerController.file(File(widget.media.path));
-
+    final controller = VideoPlayerController.file(File(widget.media.path));
+    _controller = controller;
     try {
-      await _controller!.initialize();
-      _controller!.setVolume(widget.isMuted ? 0.0 : 1.0);
-      _controller!.setLooping(widget.isLooping);
+      await controller.initialize();
+      controller.setVolume(widget.isMuted ? 0.0 : 1.0);
+      controller.setLooping(widget.isLooping);
 
-      // Add listeners
-      _controller!.addListener(_onVideoUpdate);
+      controller.addListener(_onVideoUpdate);
+      _onVideoUpdate();
 
       if (widget.isPlaying) {
-        _controller!.play();
+        await controller.play();
+      } else if (controller.value.isPlaying) {
+        await controller.pause();
       }
 
       if (mounted) {
@@ -82,6 +90,9 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     } catch (e) {
       // Handle initialization error
       debugPrint('Video initialization error: $e');
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 
@@ -97,10 +108,38 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     widget.onPlayingStateUpdate(isPlaying);
   }
 
+  Future<void> _disposeController() async {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+
+    controller.removeListener(_onVideoUpdate);
+    try {
+      await controller.pause();
+    } catch (_) {
+      // Ignored: pausing may fail if controller is not ready.
+    }
+
+    try {
+      await controller.dispose();
+    } catch (e) {
+      debugPrint('Video controller dispose error: $e');
+    }
+
+    _controller = null;
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _reloadForNewMedia() {
+    unawaited(_disposeController().then((_) => _initializePlayer()));
+  }
+
   @override
   void dispose() {
-    _controller?.removeListener(_onVideoUpdate);
-    _controller?.dispose();
+    unawaited(_disposeController());
     super.dispose();
   }
 
