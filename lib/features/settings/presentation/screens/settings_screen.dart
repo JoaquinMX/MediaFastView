@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../features/media_library/presentation/view_models/directory_grid_view_model.dart';
 import '../../../../features/favorites/presentation/view_models/favorites_view_model.dart';
+import '../../../../shared/providers/delete_from_source_provider.dart';
 import '../../../../shared/providers/theme_provider.dart';
 import '../../../../shared/providers/thumbnail_caching_provider.dart';
 import '../../../../shared/providers/video_playback_settings_provider.dart';
@@ -21,6 +22,9 @@ class SettingsScreen extends ConsumerWidget {
     final playbackSettings = ref.watch(videoPlaybackSettingsProvider);
     final playbackSettingsNotifier =
         ref.read(videoPlaybackSettingsProvider.notifier);
+    final deleteFromSourceEnabled = ref.watch(deleteFromSourceProvider);
+    final deleteFromSourceNotifier =
+        ref.read(deleteFromSourceProvider.notifier);
 
     return Scaffold(
       appBar: const CustomAppBar(
@@ -46,6 +50,10 @@ class SettingsScreen extends ConsumerWidget {
           _buildThumbnailCachingSetting(
             isThumbnailCachingEnabled,
             thumbnailCachingNotifier,
+          ),
+          _buildDeleteFromSourceSetting(
+            deleteFromSourceEnabled,
+            deleteFromSourceNotifier,
           ),
           _buildClearCacheTile(context, ref),
           _buildClearFavoritesTile(context, ref),
@@ -100,6 +108,25 @@ class SettingsScreen extends ConsumerWidget {
         value: isEnabled,
         onChanged: (bool value) {
           notifier.setThumbnailCaching(value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildDeleteFromSourceSetting(
+    bool isEnabled,
+    DeleteFromSourceNotifier notifier,
+  ) {
+    return ListTile(
+      title: const Text('Delete From Source'),
+      subtitle: const Text(
+        'When enabled, delete operations remove the original files or directories '
+        'from disk. When disabled, files remain on disk.',
+      ),
+      trailing: Switch(
+        value: isEnabled,
+        onChanged: (bool value) {
+          notifier.setDeleteFromSource(value);
         },
       ),
     );
