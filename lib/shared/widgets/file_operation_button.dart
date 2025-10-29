@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/media_library/domain/entities/media_entity.dart';
 import '../../features/media_library/presentation/view_models/file_operations_view_model.dart';
+import '../providers/delete_from_source_provider.dart';
 import 'confirmation_dialog.dart';
 import 'file_operation_progress_dialog.dart';
 
@@ -22,6 +23,7 @@ class FileOperationButton extends ConsumerWidget {
     final fileOperationsViewModel = ref.read(
       fileOperationsViewModelProvider.notifier,
     );
+    final deleteFromSourceEnabled = ref.watch(deleteFromSourceProvider);
 
     // Show progress dialog when operation is in progress
     ref.listen<FileOperationsState>(fileOperationsViewModelProvider, (
@@ -55,16 +57,41 @@ class FileOperationButton extends ConsumerWidget {
 
     return IconButton(
       icon: const Icon(Icons.delete, color: Colors.red),
-      onPressed: () =>
-          _showDeleteConfirmation(context, fileOperationsViewModel),
+      onPressed: () => _handleDeletePressed(
+        context,
+        fileOperationsViewModel,
+        deleteFromSourceEnabled,
+      ),
       tooltip: 'Delete',
     );
   }
 
-  void _showDeleteConfirmation(
+  void _handleDeletePressed(
     BuildContext context,
     FileOperationsViewModel viewModel,
+    bool deleteFromSourceEnabled,
   ) {
+    if (!deleteFromSourceEnabled) {
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Delete From Source Disabled'),
+          content: const Text(
+            'Deleting files from their original location is currently disabled. '
+            'Enable "Delete From Source" in Settings > Data Management to allow '
+            'files and directories to be removed from disk.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final isDirectory = media.type == MediaType.directory;
     final itemType = isDirectory ? 'directory' : 'file';
 
@@ -79,9 +106,15 @@ class FileOperationButton extends ConsumerWidget {
       confirmColor: Colors.red,
       onConfirm: () {
         if (isDirectory) {
-          viewModel.deleteDirectory(media.path);
+          viewModel.deleteDirectory(
+            media.path,
+            deleteFromSource: deleteFromSourceEnabled,
+          );
         } else {
-          viewModel.deleteFile(media.path);
+          viewModel.deleteFile(
+            media.path,
+            deleteFromSource: deleteFromSourceEnabled,
+          );
         }
       },
     );

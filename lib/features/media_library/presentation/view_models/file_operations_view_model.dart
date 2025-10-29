@@ -43,7 +43,17 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
   final ValidatePathUseCase _validatePathUseCase;
 
   /// Deletes a file
-  Future<void> deleteFile(String filePath) async {
+  Future<void> deleteFile(
+    String filePath, {
+    required bool deleteFromSource,
+  }) async {
+    if (!deleteFromSource) {
+      state = const FileOperationsError(
+        'Delete from source is disabled in settings.',
+      );
+      return;
+    }
+
     state = const FileOperationsLoading();
     try {
       await _deleteFileUseCase(filePath);
@@ -54,7 +64,17 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
   }
 
   /// Deletes a directory recursively
-  Future<void> deleteDirectory(String directoryPath) async {
+  Future<void> deleteDirectory(
+    String directoryPath, {
+    required bool deleteFromSource,
+  }) async {
+    if (!deleteFromSource) {
+      state = const FileOperationsError(
+        'Delete from source is disabled in settings.',
+      );
+      return;
+    }
+
     state = const FileOperationsLoading();
     try {
       await _deleteDirectoryUseCase(directoryPath);
