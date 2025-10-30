@@ -48,18 +48,20 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
     required bool deleteFromSource,
   }) async {
     if (!deleteFromSource) {
-      state = const FileOperationsError(
-        'Delete from source is disabled in settings.',
+      _emitState(
+        const FileOperationsError(
+          'Delete from source is disabled in settings.',
+        ),
       );
       return;
     }
 
-    state = const FileOperationsLoading();
+    _emitState(const FileOperationsLoading());
     try {
       await _deleteFileUseCase(filePath);
-      state = FileOperationsSuccess('File deleted successfully');
+      _emitState(const FileOperationsSuccess('File deleted successfully'));
     } catch (e) {
-      state = FileOperationsError(e.toString());
+      _emitState(FileOperationsError(e.toString()));
     }
   }
 
@@ -69,18 +71,22 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
     required bool deleteFromSource,
   }) async {
     if (!deleteFromSource) {
-      state = const FileOperationsError(
-        'Delete from source is disabled in settings.',
+      _emitState(
+        const FileOperationsError(
+          'Delete from source is disabled in settings.',
+        ),
       );
       return;
     }
 
-    state = const FileOperationsLoading();
+    _emitState(const FileOperationsLoading());
     try {
       await _deleteDirectoryUseCase(directoryPath);
-      state = FileOperationsSuccess('Directory deleted successfully');
+      _emitState(
+        const FileOperationsSuccess('Directory deleted successfully'),
+      );
     } catch (e) {
-      state = FileOperationsError(e.toString());
+      _emitState(FileOperationsError(e.toString()));
     }
   }
 
@@ -95,7 +101,14 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
 
   /// Resets the state to initial
   void reset() {
-    state = const FileOperationsInitial();
+    _emitState(const FileOperationsInitial());
+  }
+
+  void _emitState(FileOperationsState newState) {
+    if (!mounted) {
+      return;
+    }
+    state = newState;
   }
 }
 
