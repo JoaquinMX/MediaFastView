@@ -20,9 +20,6 @@ class FileOperationButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fileOperationsViewModel = ref.read(
-      fileOperationsViewModelProvider.notifier,
-    );
     final deleteFromSourceEnabled = ref.watch(deleteFromSourceProvider);
 
     // Show progress dialog when operation is in progress
@@ -42,7 +39,7 @@ class FileOperationButton extends ConsumerWidget {
           context,
         ).showSnackBar(SnackBar(content: Text(next.message)));
         onOperationComplete?.call();
-        fileOperationsViewModel.reset();
+        ref.read(fileOperationsViewModelProvider.notifier).reset();
       } else if (next is FileOperationsError) {
         Navigator.of(context).pop(); // Close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
@@ -51,7 +48,7 @@ class FileOperationButton extends ConsumerWidget {
             backgroundColor: Colors.red,
           ),
         );
-        fileOperationsViewModel.reset();
+        ref.read(fileOperationsViewModelProvider.notifier).reset();
       }
     });
 
@@ -59,7 +56,7 @@ class FileOperationButton extends ConsumerWidget {
       icon: const Icon(Icons.delete, color: Colors.red),
       onPressed: () => _handleDeletePressed(
         context,
-        fileOperationsViewModel,
+        ref,
         deleteFromSourceEnabled,
       ),
       tooltip: 'Delete',
@@ -68,7 +65,7 @@ class FileOperationButton extends ConsumerWidget {
 
   void _handleDeletePressed(
     BuildContext context,
-    FileOperationsViewModel viewModel,
+    WidgetRef ref,
     bool deleteFromSourceEnabled,
   ) {
     if (!deleteFromSourceEnabled) {
@@ -105,6 +102,9 @@ class FileOperationButton extends ConsumerWidget {
       confirmText: 'Delete',
       confirmColor: Colors.red,
       onConfirm: () {
+        final viewModel = ref.read(
+          fileOperationsViewModelProvider.notifier,
+        );
         if (isDirectory) {
           viewModel.deleteDirectory(
             media.path,
