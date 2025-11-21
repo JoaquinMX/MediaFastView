@@ -25,6 +25,21 @@ enum MediaSortOption {
   sizeDescending,
 }
 
+/// Filter options for controlling the types of media shown in the grid.
+enum MediaTypeFilter {
+  all,
+  imagesOnly,
+  videosOnly,
+}
+
+extension MediaTypeFilterX on MediaTypeFilter {
+  String get label => switch (this) {
+        MediaTypeFilter.all => 'All media',
+        MediaTypeFilter.imagesOnly => 'Images only',
+        MediaTypeFilter.videosOnly => 'Videos only',
+      };
+}
+
 extension MediaSortOptionX on MediaSortOption {
   String get label => switch (this) {
     MediaSortOption.nameAscending => 'Name (A-Z)',
@@ -51,6 +66,7 @@ class MediaLoaded extends MediaState {
     required this.media,
     required this.searchQuery,
     required this.selectedTagIds,
+    required this.mediaTypeFilter,
     required this.columns,
     required this.currentDirectoryPath,
     required this.currentDirectoryName,
@@ -63,6 +79,7 @@ class MediaLoaded extends MediaState {
   final List<MediaEntity> media;
   final String searchQuery;
   final List<String> selectedTagIds;
+  final MediaTypeFilter mediaTypeFilter;
   final int columns;
   final String currentDirectoryPath;
   final String currentDirectoryName;
@@ -75,6 +92,7 @@ class MediaLoaded extends MediaState {
     List<MediaEntity>? media,
     String? searchQuery,
     List<String>? selectedTagIds,
+    MediaTypeFilter? mediaTypeFilter,
     int? columns,
     String? currentDirectoryPath,
     String? currentDirectoryName,
@@ -87,6 +105,7 @@ class MediaLoaded extends MediaState {
       media: media ?? this.media,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
+      mediaTypeFilter: mediaTypeFilter ?? this.mediaTypeFilter,
       columns: columns ?? this.columns,
       currentDirectoryPath: currentDirectoryPath ?? this.currentDirectoryPath,
       currentDirectoryName: currentDirectoryName ?? this.currentDirectoryName,
@@ -181,12 +200,14 @@ class MediaViewModel extends StateNotifier<MediaState> {
   List<String> _favoriteMediaIds = const <String>[];
   bool _showFavoritesOnly = false;
   late final ProviderSubscription<FavoritesState> _favoritesSubscription;
+  MediaTypeFilter _mediaTypeFilter = MediaTypeFilter.all;
 
   MediaSortOption get currentSortOption => _currentSortOption;
   Set<String> get selectedMediaIds => Set<String>.unmodifiable(_selectedMediaIds);
   bool get isSelectionMode => _isSelectionMode;
   int get selectedMediaCount => _selectedMediaIds.length;
   bool get showFavoritesOnly => _showFavoritesOnly;
+  MediaTypeFilter get mediaTypeFilter => _mediaTypeFilter;
 
   /// Returns tags shared by every selected media item.
   List<String> commonTagIdsForSelection() {
@@ -393,10 +414,12 @@ class MediaViewModel extends StateNotifier<MediaState> {
       } else {
         LoggingService.instance.info('Media loaded successfully, setting loaded state');
         _clearSelectionInternal();
+        final filtered = _applyAllFilters(_cachedMedia);
         state = MediaLoaded(
-          media: _applyFavoritesFilter(_cachedMedia),
+          media: filtered,
           searchQuery: '',
           selectedTagIds: const [],
+          mediaTypeFilter: _mediaTypeFilter,
           columns: _ref.read(gridColumnsProvider),
           currentDirectoryPath: _directoryPath,
           currentDirectoryName: _directoryName,
@@ -441,8 +464,10 @@ class MediaViewModel extends StateNotifier<MediaState> {
       :final currentDirectoryName,
       :final sortOption,
     )) {
-      final filtered = _applyFavoritesFilter(_cachedMedia);
-      final results = _applySearch(filtered, query);
+      final results = _applyAllFilters(
+        _cachedMedia,
+        searchQuery: query,
+      );
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
@@ -451,6 +476,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         media: results,
         searchQuery: query,
         selectedTagIds: selectedTagIds,
+        mediaTypeFilter: _mediaTypeFilter,
         columns: columns,
         currentDirectoryPath: currentDirectoryPath,
         currentDirectoryName: currentDirectoryName,
@@ -502,10 +528,12 @@ class MediaViewModel extends StateNotifier<MediaState> {
       _cachedMedia = _sortMedia(media, _currentSortOption);
 
       _clearSelectionInternal();
+      final filtered = _applyAllFilters(_cachedMedia);
       state = MediaLoaded(
-        media: _applyFavoritesFilter(_cachedMedia),
+        media: filtered,
         searchQuery: '', // Reset search when filtering
         selectedTagIds: tagIds,
+        mediaTypeFilter: _mediaTypeFilter,
         columns: previousColumns,
         currentDirectoryPath: _directoryPath,
         currentDirectoryName: _directoryName,
@@ -539,6 +567,15 @@ class MediaViewModel extends StateNotifier<MediaState> {
       return;
     }
     _showFavoritesOnly = value;
+    _emitLoadedStateFromCache();
+  }
+
+  /// Filters the grid to a specific media type.
+  void setMediaTypeFilter(MediaTypeFilter filter) {
+    if (_mediaTypeFilter == filter) {
+      return;
+    }
+    _mediaTypeFilter = filter;
     _emitLoadedStateFromCache();
   }
 
@@ -702,6 +739,18 @@ class MediaViewModel extends StateNotifier<MediaState> {
     return _searchMedia(media, query);
   }
 
+  List<MediaEntity> _applyTypeFilter(List<MediaEntity> media) {
+    return switch (_mediaTypeFilter) {
+      MediaTypeFilter.all => List<MediaEntity>.from(media),
+      MediaTypeFilter.imagesOnly => media
+          .where((item) => item.type == MediaType.image)
+          .toList(growable: false),
+      MediaTypeFilter.videosOnly => media
+          .where((item) => item.type == MediaType.video)
+          .toList(growable: false),
+    };
+  }
+
   List<MediaEntity> _applyFavoritesFilter(List<MediaEntity> media) {
     if (!_showFavoritesOnly) {
       return List<MediaEntity>.from(media);
@@ -713,6 +762,15 @@ class MediaViewModel extends StateNotifier<MediaState> {
     return media
         .where((item) => favoritesSet.contains(item.id))
         .toList(growable: false);
+  }
+
+  List<MediaEntity> _applyAllFilters(
+    List<MediaEntity> media, {
+    String searchQuery = '',
+  }) {
+    final mediaTypeFiltered = _applyTypeFilter(media);
+    final favoritesFiltered = _applyFavoritesFilter(mediaTypeFiltered);
+    return _applySearch(favoritesFiltered, searchQuery);
   }
 
   void _emitLoadedStateFromCache() {
@@ -727,12 +785,15 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
       _isSelectionMode = selectionMode;
-      final filtered = _applyFavoritesFilter(_cachedMedia);
-      final results = _applySearch(filtered, searchQuery);
+      final results = _applyAllFilters(
+        _cachedMedia,
+        searchQuery: searchQuery,
+      );
       state = MediaLoaded(
         media: results,
         searchQuery: searchQuery,
         selectedTagIds: selectedTagIds,
+        mediaTypeFilter: _mediaTypeFilter,
         columns: columns,
         currentDirectoryPath: currentDirectoryPath,
         currentDirectoryName: currentDirectoryName,
@@ -758,6 +819,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     if (state case MediaLoaded(:final media,
         :final searchQuery,
         :final selectedTagIds,
+        :final mediaTypeFilter,
         :final currentDirectoryPath,
         :final currentDirectoryName,
         :final sortOption)) {
@@ -769,6 +831,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         media: media,
         searchQuery: searchQuery,
         selectedTagIds: selectedTagIds,
+        mediaTypeFilter: mediaTypeFilter,
         columns: columns,
         currentDirectoryPath: currentDirectoryPath,
         currentDirectoryName: currentDirectoryName,
@@ -796,8 +859,10 @@ class MediaViewModel extends StateNotifier<MediaState> {
       :final currentDirectoryPath,
       :final currentDirectoryName,
     )) {
-      final filtered = _applyFavoritesFilter(_cachedMedia);
-      final results = _applySearch(filtered, searchQuery);
+      final results = _applyAllFilters(
+        _cachedMedia,
+        searchQuery: searchQuery,
+      );
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
@@ -806,6 +871,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         media: results,
         searchQuery: searchQuery,
         selectedTagIds: selectedTagIds,
+        mediaTypeFilter: _mediaTypeFilter,
         columns: columns,
         currentDirectoryPath: currentDirectoryPath,
         currentDirectoryName: currentDirectoryName,

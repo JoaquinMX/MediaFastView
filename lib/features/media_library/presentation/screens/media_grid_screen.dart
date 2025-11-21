@@ -278,6 +278,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         state is MediaLoaded ? state.selectedTagIds : const <String>[];
     final showFavoritesOnly =
         state is MediaLoaded ? state.showFavoritesOnly : viewModel.showFavoritesOnly;
+    final mediaTypeFilter =
+        state is MediaLoaded ? state.mediaTypeFilter : viewModel.mediaTypeFilter;
     final favoritesState = ref.watch(favoritesViewModelProvider);
     final hasFavoriteMedia = switch (favoritesState) {
       FavoritesLoaded(:final favorites) => favorites.isNotEmpty,
@@ -289,6 +291,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       padding: UiSpacing.tagFilterPadding,
       child: Row(
         children: [
+          _buildMediaTypeFilterPicker(mediaTypeFilter, viewModel),
+          const SizedBox(width: 12),
           if (shouldShowFavoritesChip) ...[
             FilterChip(
               label: const Text('Favorites'),
@@ -313,6 +317,37 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMediaTypeFilterPicker(
+    MediaTypeFilter selectedFilter,
+    MediaViewModel viewModel,
+  ) {
+    return SegmentedButton<MediaTypeFilter>(
+      selected: {selectedFilter},
+      onSelectionChanged: (selection) {
+        if (selection.isNotEmpty) {
+          viewModel.setMediaTypeFilter(selection.first);
+        }
+      },
+      segments: const [
+        ButtonSegment(
+          value: MediaTypeFilter.all,
+          label: Text('All'),
+          icon: Icon(Icons.filter_alt),
+        ),
+        ButtonSegment(
+          value: MediaTypeFilter.imagesOnly,
+          label: Text('Images'),
+          icon: Icon(Icons.photo),
+        ),
+        ButtonSegment(
+          value: MediaTypeFilter.videosOnly,
+          label: Text('Videos'),
+          icon: Icon(Icons.videocam),
+        ),
+      ],
     );
   }
 
