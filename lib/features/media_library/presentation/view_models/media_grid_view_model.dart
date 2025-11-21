@@ -35,6 +35,17 @@ extension MediaSortOptionX on MediaSortOption {
   };
 }
 
+/// Filter options for limiting visible media types.
+enum MediaTypeFilter { all, images, videos }
+
+extension MediaTypeFilterX on MediaTypeFilter {
+  String get label => switch (this) {
+        MediaTypeFilter.all => 'All media',
+        MediaTypeFilter.images => 'Images only',
+        MediaTypeFilter.videos => 'Videos only',
+      };
+}
+
 /// Sealed class representing the state of the media grid.
 sealed class MediaState {
   const MediaState();
@@ -58,6 +69,7 @@ class MediaLoaded extends MediaState {
     required this.selectedMediaIds,
     required this.isSelectionMode,
     required this.showFavoritesOnly,
+    required this.mediaTypeFilter,
   });
 
   final List<MediaEntity> media;
@@ -70,6 +82,7 @@ class MediaLoaded extends MediaState {
   final Set<String> selectedMediaIds;
   final bool isSelectionMode;
   final bool showFavoritesOnly;
+  final MediaTypeFilter mediaTypeFilter;
 
   MediaLoaded copyWith({
     List<MediaEntity>? media,
@@ -82,6 +95,7 @@ class MediaLoaded extends MediaState {
     Set<String>? selectedMediaIds,
     bool? isSelectionMode,
     bool? showFavoritesOnly,
+    MediaTypeFilter? mediaTypeFilter,
   }) {
     return MediaLoaded(
       media: media ?? this.media,
@@ -94,6 +108,7 @@ class MediaLoaded extends MediaState {
       selectedMediaIds: selectedMediaIds ?? this.selectedMediaIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
+      mediaTypeFilter: mediaTypeFilter ?? this.mediaTypeFilter,
     );
   }
 }
@@ -181,12 +196,14 @@ class MediaViewModel extends StateNotifier<MediaState> {
   List<String> _favoriteMediaIds = const <String>[];
   bool _showFavoritesOnly = false;
   late final ProviderSubscription<FavoritesState> _favoritesSubscription;
+  MediaTypeFilter _mediaTypeFilter = MediaTypeFilter.all;
 
   MediaSortOption get currentSortOption => _currentSortOption;
   Set<String> get selectedMediaIds => Set<String>.unmodifiable(_selectedMediaIds);
   bool get isSelectionMode => _isSelectionMode;
   int get selectedMediaCount => _selectedMediaIds.length;
   bool get showFavoritesOnly => _showFavoritesOnly;
+  MediaTypeFilter get mediaTypeFilter => _mediaTypeFilter;
 
   /// Returns tags shared by every selected media item.
   List<String> commonTagIdsForSelection() {
@@ -394,7 +411,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         LoggingService.instance.info('Media loaded successfully, setting loaded state');
         _clearSelectionInternal();
         state = MediaLoaded(
-          media: _applyFavoritesFilter(_cachedMedia),
+          media: _applyActiveFilters(_cachedMedia, searchQuery: ''),
           searchQuery: '',
           selectedTagIds: const [],
           columns: _ref.read(gridColumnsProvider),
@@ -404,6 +421,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
           selectedMediaIds: const <String>{},
           isSelectionMode: false,
           showFavoritesOnly: _showFavoritesOnly,
+          mediaTypeFilter: _mediaTypeFilter,
         );
       }
     } catch (e) {
@@ -441,8 +459,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       :final currentDirectoryName,
       :final sortOption,
     )) {
-      final filtered = _applyFavoritesFilter(_cachedMedia);
-      final results = _applySearch(filtered, query);
+      final results = _applyActiveFilters(_cachedMedia, searchQuery: query);
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
@@ -458,6 +475,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
+        mediaTypeFilter: _mediaTypeFilter,
       );
     }
   }
@@ -503,7 +521,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
       _clearSelectionInternal();
       state = MediaLoaded(
-        media: _applyFavoritesFilter(_cachedMedia),
+        media: _applyActiveFilters(_cachedMedia, searchQuery: ''),
         searchQuery: '', // Reset search when filtering
         selectedTagIds: tagIds,
         columns: previousColumns,
@@ -513,6 +531,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: const <String>{},
         isSelectionMode: false,
         showFavoritesOnly: _showFavoritesOnly,
+        mediaTypeFilter: _mediaTypeFilter,
       );
     } catch (e) {
       // Check if this is a permission-related error
@@ -539,6 +558,15 @@ class MediaViewModel extends StateNotifier<MediaState> {
       return;
     }
     _showFavoritesOnly = value;
+    _emitLoadedStateFromCache();
+  }
+
+  /// Filters media to only show the selected media type.
+  void setMediaTypeFilter(MediaTypeFilter filter) {
+    if (_mediaTypeFilter == filter) {
+      return;
+    }
+    _mediaTypeFilter = filter;
     _emitLoadedStateFromCache();
   }
 
@@ -715,6 +743,38 @@ class MediaViewModel extends StateNotifier<MediaState> {
         .toList(growable: false);
   }
 
+  List<MediaEntity> _applyMediaTypeFilter(List<MediaEntity> media) {
+    switch (_mediaTypeFilter) {
+      case MediaTypeFilter.all:
+        return List<MediaEntity>.from(media);
+      case MediaTypeFilter.images:
+        return media
+            .where(
+              (item) =>
+                  item.type == MediaType.image || item.type == MediaType.directory,
+            )
+            .toList(growable: false);
+      case MediaTypeFilter.videos:
+        return media
+            .where(
+              (item) =>
+                  item.type == MediaType.video || item.type == MediaType.directory,
+            )
+            .toList(growable: false);
+    }
+  }
+
+  List<MediaEntity> _applyActiveFilters(
+    List<MediaEntity> media, {
+    String? searchQuery,
+  }) {
+    final favoritesFiltered = _applyFavoritesFilter(media);
+    final typeFiltered = _applyMediaTypeFilter(favoritesFiltered);
+    final query = searchQuery ??
+        (state is MediaLoaded ? (state as MediaLoaded).searchQuery : '');
+    return _applySearch(typeFiltered, query);
+  }
+
   void _emitLoadedStateFromCache() {
     if (state case MediaLoaded(
       :final searchQuery,
@@ -727,8 +787,10 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
       _isSelectionMode = selectionMode;
-      final filtered = _applyFavoritesFilter(_cachedMedia);
-      final results = _applySearch(filtered, searchQuery);
+      final results = _applyActiveFilters(
+        _cachedMedia,
+        searchQuery: searchQuery,
+      );
       state = MediaLoaded(
         media: results,
         searchQuery: searchQuery,
@@ -740,6 +802,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
+        mediaTypeFilter: _mediaTypeFilter,
       );
     } else if (state is MediaEmpty && _selectedMediaIds.isNotEmpty) {
       _clearSelectionInternal();
@@ -776,6 +839,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
+        mediaTypeFilter: _mediaTypeFilter,
       );
     }
   }
@@ -796,8 +860,10 @@ class MediaViewModel extends StateNotifier<MediaState> {
       :final currentDirectoryPath,
       :final currentDirectoryName,
     )) {
-      final filtered = _applyFavoritesFilter(_cachedMedia);
-      final results = _applySearch(filtered, searchQuery);
+      final results = _applyActiveFilters(
+        _cachedMedia,
+        searchQuery: searchQuery,
+      );
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
       final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
@@ -813,6 +879,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
+        mediaTypeFilter: _mediaTypeFilter,
       );
     }
   }

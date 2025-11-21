@@ -278,6 +278,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         state is MediaLoaded ? state.selectedTagIds : const <String>[];
     final showFavoritesOnly =
         state is MediaLoaded ? state.showFavoritesOnly : viewModel.showFavoritesOnly;
+    final mediaTypeFilter =
+        state is MediaLoaded ? state.mediaTypeFilter : viewModel.mediaTypeFilter;
     final favoritesState = ref.watch(favoritesViewModelProvider);
     final hasFavoriteMedia = switch (favoritesState) {
       FavoritesLoaded(:final favorites) => favorites.isNotEmpty,
@@ -289,6 +291,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       padding: UiSpacing.tagFilterPadding,
       child: Row(
         children: [
+          _MediaTypeFilterDropdown(
+            selectedFilter: mediaTypeFilter,
+            onChanged: viewModel.setMediaTypeFilter,
+          ),
+          const SizedBox(width: 12),
           if (shouldShowFavoritesChip) ...[
             FilterChip(
               label: const Text('Favorites'),
@@ -831,6 +838,38 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _MediaTypeFilterDropdown extends StatelessWidget {
+  const _MediaTypeFilterDropdown({
+    required this.selectedFilter,
+    required this.onChanged,
+  });
+
+  final MediaTypeFilter selectedFilter;
+  final ValueChanged<MediaTypeFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonHideUnderline(
+      child: DropdownButton<MediaTypeFilter>(
+        value: selectedFilter,
+        onChanged: (value) {
+          if (value != null) {
+            onChanged(value);
+          }
+        },
+        items: MediaTypeFilter.values
+            .map(
+              (filter) => DropdownMenuItem(
+                value: filter,
+                child: Text(filter.label),
+              ),
+            )
+            .toList(),
+      ),
+    );
   }
 }
 

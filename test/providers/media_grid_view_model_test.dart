@@ -120,6 +120,7 @@ void main() {
       expect(loadedState.columns, 3);
       expect(loadedState.currentDirectoryPath, testDirectoryPath);
       expect(loadedState.currentDirectoryName, testDirectoryName);
+      expect(loadedState.mediaTypeFilter, MediaTypeFilter.all);
 
       // Verify interactions
       verify(mockMediaRepository.getMediaForDirectoryPath(testDirectoryPath, bookmarkData: null)).called(1);
@@ -205,6 +206,26 @@ void main() {
       final loadedState = viewModel.state as MediaLoaded;
       expect(loadedState.media.length, 0);
       expect(loadedState.searchQuery, 'nonexistent');
+    });
+
+    test('setMediaTypeFilter filters visible media types', () async {
+      await viewModel.loadMedia();
+
+      viewModel.setMediaTypeFilter(MediaTypeFilter.videos);
+
+      expect(viewModel.state, isA<MediaLoaded>());
+      var loadedState = viewModel.state as MediaLoaded;
+      expect(loadedState.mediaTypeFilter, MediaTypeFilter.videos);
+      expect(loadedState.media, hasLength(1));
+      expect(loadedState.media.first.type, MediaType.video);
+
+      viewModel.setMediaTypeFilter(MediaTypeFilter.images);
+
+      expect(viewModel.state, isA<MediaLoaded>());
+      loadedState = viewModel.state as MediaLoaded;
+      expect(loadedState.mediaTypeFilter, MediaTypeFilter.images);
+      expect(loadedState.media, hasLength(1));
+      expect(loadedState.media.first.type, MediaType.image);
     });
 
     test('setColumns updates columns in state', () async {
