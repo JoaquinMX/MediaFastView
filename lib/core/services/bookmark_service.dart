@@ -8,6 +8,8 @@ class BookmarkService {
   static const MethodChannel _channel = MethodChannel(
     'com.joaquinmx.media_fast_view/bookmarks',
   );
+  static bool get _supportsSecurityScopedBookmarks =>
+      Platform.isMacOS || Platform.isIOS;
   static const String _createBookmark = 'createBookmark';
   static const String _selectDirectoryAndCreateBookmark =
       'selectDirectoryAndCreateBookmark';
@@ -25,9 +27,9 @@ class BookmarkService {
   /// Returns base64 encoded bookmark data on success
   Future<String> createBookmark(String directoryPath) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsSecurityScopedBookmarks) {
         throw UnsupportedError(
-          'Bookmark operations are only supported on macOS',
+          'Bookmark operations are only supported on macOS/iOS',
         );
       }
 
@@ -58,9 +60,9 @@ class BookmarkService {
     String? initialDirectoryPath,
   }) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsSecurityScopedBookmarks) {
         throw UnsupportedError(
-          'Bookmark operations are only supported on macOS',
+          'Bookmark operations are only supported on macOS/iOS',
         );
       }
 
@@ -100,9 +102,9 @@ class BookmarkService {
   /// Note: The caller is responsible for calling stopAccessingBookmark when done
   Future<String> resolveBookmark(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsSecurityScopedBookmarks) {
         throw UnsupportedError(
-          'Bookmark operations are only supported on macOS',
+          'Bookmark operations are only supported on macOS/iOS',
         );
       }
 
@@ -128,7 +130,7 @@ class BookmarkService {
   /// Takes base64 encoded bookmark data
   Future<void> stopAccessingBookmark(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsSecurityScopedBookmarks) {
         return; // No-op on non-macOS platforms
       }
 
@@ -148,9 +150,9 @@ class BookmarkService {
   /// Takes base64 encoded bookmark data and returns true if valid
   Future<bool> isBookmarkValid(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsSecurityScopedBookmarks) {
         throw UnsupportedError(
-          'Bookmark operations are only supported on macOS',
+          'Bookmark operations are only supported on macOS/iOS',
         );
       }
 
@@ -173,9 +175,9 @@ class BookmarkService {
   /// Returns the resolved path
   Future<String> startAccessingBookmark(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsSecurityScopedBookmarks) {
         throw UnsupportedError(
-          'Bookmark operations are only supported on macOS',
+          'Bookmark operations are only supported on macOS/iOS',
         );
       }
 

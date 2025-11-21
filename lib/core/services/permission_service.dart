@@ -47,6 +47,8 @@ class PermissionService {
       : _bookmarkService = bookmarkService ?? BookmarkService.instance;
 
   final BookmarkService _bookmarkService;
+  static bool get _supportsSecurityScopedBookmarks =>
+      Platform.isMacOS || Platform.isIOS;
 
   /// Checks if storage permission is granted
   Future<bool> hasStoragePermission() async {
@@ -98,10 +100,10 @@ class PermissionService {
   /// Validates bookmark data for macOS security-scoped access
   Future<BookmarkValidationResult> validateBookmark(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsSecurityScopedBookmarks) {
         return const BookmarkValidationResult(
           isValid: false,
-          reason: 'Bookmarks only supported on macOS',
+          reason: 'Bookmarks only supported on macOS/iOS',
         );
       }
 
@@ -148,61 +150,61 @@ class PermissionService {
     try {
       logPermissionEvent('directory_access_recovery_start', path: directoryPath);
 
-      if (!Platform.isMacOS) {
-        // Fallback to file picker for non-macOS platforms
-        final selectedDirectory = await FilePicker.platform.getDirectoryPath(
-          dialogTitle: 'Re-select Directory for Access Recovery',
-          initialDirectory: directoryPath,
+      if (_supportsSecurityScopedBookmarks) {
+        // On macOS/iOS, use the security-scoped bookmark approach
+        final result = await _bookmarkService.selectDirectoryAndCreateBookmark(
+          initialDirectoryPath: directoryPath,
         );
 
-        if (selectedDirectory == null) {
-          logPermissionEvent('directory_access_recovery_cancelled', path: directoryPath);
-          return null;
-        }
+        final selectedPath = result['directoryPath'] as String?;
+        final bookmarkData = result['bookmarkData'] as String?;
 
-        // Validate that the selected directory is accessible
-        final accessStatus = await checkDirectoryAccess(selectedDirectory);
-        if (accessStatus != PermissionStatus.granted) {
-          logPermissionEvent(
-            'directory_access_recovery_failed',
-            path: selectedDirectory,
-            error: 'Selected directory not accessible: $accessStatus',
-          );
+        if (selectedPath == null) {
+          logPermissionEvent('directory_access_recovery_cancelled', path: directoryPath);
           return null;
         }
 
         logPermissionEvent(
           'directory_access_recovery_success',
-          path: selectedDirectory,
-          details: 'original: $directoryPath',
+          path: selectedPath,
+          details: 'original: $directoryPath, bookmark_created: true',
         );
 
-        return DirectoryRecoveryResult(directoryPath: selectedDirectory);
+        return DirectoryRecoveryResult(
+          directoryPath: selectedPath,
+          bookmarkData: bookmarkData,
+        );
       }
 
-      // On macOS, use the new bookmark-based approach
-      final result = await _bookmarkService.selectDirectoryAndCreateBookmark(
-        initialDirectoryPath: directoryPath,
+      // Fallback to file picker for platforms without security-scoped bookmarks
+      final selectedDirectory = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Re-select Directory for Access Recovery',
+        initialDirectory: directoryPath,
       );
 
-      final selectedPath = result['directoryPath'] as String?;
-      final bookmarkData = result['bookmarkData'] as String?;
-
-      if (selectedPath == null) {
+      if (selectedDirectory == null) {
         logPermissionEvent('directory_access_recovery_cancelled', path: directoryPath);
+        return null;
+      }
+
+      // Validate that the selected directory is accessible
+      final accessStatus = await checkDirectoryAccess(selectedDirectory);
+      if (accessStatus != PermissionStatus.granted) {
+        logPermissionEvent(
+          'directory_access_recovery_failed',
+          path: selectedDirectory,
+          error: 'Selected directory not accessible: $accessStatus',
+        );
         return null;
       }
 
       logPermissionEvent(
         'directory_access_recovery_success',
-        path: selectedPath,
-        details: 'original: $directoryPath, bookmark_created: true',
+        path: selectedDirectory,
+        details: 'original: $directoryPath',
       );
 
-      return DirectoryRecoveryResult(
-        directoryPath: selectedPath,
-        bookmarkData: bookmarkData,
-      );
+      return DirectoryRecoveryResult(directoryPath: selectedDirectory);
     } catch (e) {
       logPermissionEvent(
         'directory_access_recovery_error',
@@ -216,7 +218,7 @@ class PermissionService {
   /// Attempts to renew an expired bookmark by re-creating it
   Future<String?> renewBookmark(String expiredBookmarkData, String directoryPath) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsSecurityScopedBookmarks) {
         return null;
       }
 
