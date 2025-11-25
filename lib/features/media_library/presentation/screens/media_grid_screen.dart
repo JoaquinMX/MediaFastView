@@ -23,6 +23,7 @@ import '../../domain/entities/media_entity.dart';
 import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
+import '../widgets/media_type_filter_chips.dart';
 
 /// Screen for displaying media in a customizable grid layout.
 class MediaGridScreen extends ConsumerStatefulWidget {
@@ -278,6 +279,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         state is MediaLoaded ? state.selectedTagIds : const <String>[];
     final showFavoritesOnly =
         state is MediaLoaded ? state.showFavoritesOnly : viewModel.showFavoritesOnly;
+    final activeMediaTypes =
+        state is MediaLoaded ? state.activeMediaTypes : viewModel.activeMediaTypes;
     final favoritesState = ref.watch(favoritesViewModelProvider);
     final hasFavoriteMedia = switch (favoritesState) {
       FavoritesLoaded(:final favorites) => favorites.isNotEmpty,
@@ -287,9 +290,16 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
     return Container(
       padding: UiSpacing.tagFilterPadding,
-      child: Row(
+      width: double.infinity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          MediaTypeFilterChips(
+            selectedTypes: activeMediaTypes,
+            onSelectionChanged: viewModel.updateMediaTypeFilters,
+          ),
           if (shouldShowFavoritesChip) ...[
+            const SizedBox(height: 8),
             FilterChip(
               label: const Text('Favorites'),
               avatar: const Icon(Icons.star, color: Colors.amber),
@@ -301,15 +311,13 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                 viewModel.setShowFavoritesOnly(value);
               },
             ),
-            const SizedBox(width: 12),
           ],
-          Expanded(
-            child: TagFilterChips(
-              selectedTagIds: selectedTagIds,
-              onSelectionChanged: viewModel.filterByTags,
-              maxChipsToShow:
-                  UiGrid.maxFilterChips, // Limit to prevent overflow
-            ),
+          const SizedBox(height: 12),
+          TagFilterChips(
+            selectedTagIds: selectedTagIds,
+            onSelectionChanged: viewModel.filterByTags,
+            maxChipsToShow:
+                UiGrid.maxFilterChips, // Limit to prevent overflow
           ),
         ],
       ),
