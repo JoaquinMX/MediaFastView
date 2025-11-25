@@ -278,6 +278,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         state is MediaLoaded ? state.selectedTagIds : const <String>[];
     final showFavoritesOnly =
         state is MediaLoaded ? state.showFavoritesOnly : viewModel.showFavoritesOnly;
+    final visibleMediaTypes =
+        state is MediaLoaded ? state.visibleMediaTypes : viewModel.visibleMediaTypes;
     final favoritesState = ref.watch(favoritesViewModelProvider);
     final hasFavoriteMedia = switch (favoritesState) {
       FavoritesLoaded(:final favorites) => favorites.isNotEmpty,
@@ -287,33 +289,78 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
     return Container(
       padding: UiSpacing.tagFilterPadding,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (shouldShowFavoritesChip) ...[
-            FilterChip(
-              label: const Text('Favorites'),
-              avatar: const Icon(Icons.star, color: Colors.amber),
-              selected: showFavoritesOnly,
-              onSelected: (value) {
-                if (!hasFavoriteMedia && value) {
-                  return;
-                }
-                viewModel.setShowFavoritesOnly(value);
-              },
-            ),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: TagFilterChips(
-              selectedTagIds: selectedTagIds,
-              onSelectionChanged: viewModel.filterByTags,
-              maxChipsToShow:
-                  UiGrid.maxFilterChips, // Limit to prevent overflow
-            ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              for (final type in [
+                MediaType.image,
+                MediaType.video,
+                MediaType.directory,
+              ])
+                FilterChip(
+                  label: Text(type.label),
+                  avatar: Icon(_iconForType(type)),
+                  selected: visibleMediaTypes.contains(type),
+                  onSelected: (selected) => _onMediaTypeSelected(
+                    type,
+                    selected,
+                    visibleMediaTypes,
+                    viewModel,
+                  ),
+                ),
+              if (shouldShowFavoritesChip)
+                FilterChip(
+                  label: const Text('Favorites'),
+                  avatar: const Icon(Icons.star, color: Colors.amber),
+                  selected: showFavoritesOnly,
+                  onSelected: (value) {
+                    if (!hasFavoriteMedia && value) {
+                      return;
+                    }
+                    viewModel.setShowFavoritesOnly(value);
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TagFilterChips(
+            selectedTagIds: selectedTagIds,
+            onSelectionChanged: viewModel.filterByTags,
+            maxChipsToShow: UiGrid.maxFilterChips,
           ),
         ],
       ),
     );
+  }
+
+  IconData _iconForType(MediaType type) => switch (type) {
+        MediaType.image => Icons.image_outlined,
+        MediaType.video => Icons.movie_creation_outlined,
+        MediaType.directory => Icons.folder,
+        MediaType.text => Icons.description_outlined,
+      };
+
+  void _onMediaTypeSelected(
+    MediaType type,
+    bool isSelected,
+    Set<MediaType> currentSelection,
+    MediaViewModel viewModel,
+  ) {
+    final updatedSelection = Set<MediaType>.from(currentSelection);
+    if (isSelected) {
+      updatedSelection.add(type);
+    } else {
+      if (updatedSelection.length == 1) {
+        return; // Prevent clearing all types
+      }
+      updatedSelection.remove(type);
+    }
+
+    viewModel.setVisibleMediaTypes(updatedSelection);
   }
 
   Future<void> _assignTagsToSelectedMedia(MediaViewModel viewModel) async {
