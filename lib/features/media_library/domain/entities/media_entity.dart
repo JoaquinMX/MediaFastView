@@ -1,6 +1,15 @@
 /// Enum representing different types of media.
 enum MediaType { image, video, text, directory }
 
+extension MediaTypeX on MediaType {
+  String get label => switch (this) {
+        MediaType.image => 'Images',
+        MediaType.video => 'Videos',
+        MediaType.text => 'Text',
+        MediaType.directory => 'Directories',
+      };
+}
+
 /// Domain entity representing a media item.
 class MediaEntity {
   const MediaEntity({
