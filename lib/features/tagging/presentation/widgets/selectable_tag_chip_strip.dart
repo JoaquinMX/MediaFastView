@@ -15,6 +15,7 @@ class SelectableTagChipStrip extends StatelessWidget {
     required this.tags,
     required this.selectedTagIds,
     required this.onSelectionChanged,
+    this.onTagTapped,
     this.maxChipsToShow,
     this.showAllChip = true,
     this.allChipLabel = 'All',
@@ -30,6 +31,11 @@ class SelectableTagChipStrip extends StatelessWidget {
 
   /// Callback invoked when the selection changes.
   final ValueChanged<List<String>> onSelectionChanged;
+
+  /// Callback invoked when a tag chip is tapped. When provided, selection
+  /// changes are delegated to this callback instead of the internal toggling
+  /// logic, allowing alternative behaviours (e.g. bulk tag assignment).
+  final Future<void> Function(TagEntity tag, bool isSelected)? onTagTapped;
 
   /// Maximum number of chips to render inline before showing an overflow chip.
   final int? maxChipsToShow;
@@ -69,7 +75,9 @@ class SelectableTagChipStrip extends StatelessWidget {
                 tag: tag,
                 selected: selectedTagIds.contains(tag.id),
                 compact: true,
-                onTap: () => _toggleTagSelection(tag.id),
+                onTap: onTagTapped != null
+                    ? () => onTagTapped!(tag, selectedTagIds.contains(tag.id))
+                    : () => _toggleTagSelection(tag.id),
               ),
             ),
           ),

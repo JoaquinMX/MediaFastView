@@ -11,6 +11,7 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/use_cases/get_media_use_case.dart';
 import '../../domain/use_cases/update_directory_access_use_case.dart';
 import '../../domain/entities/media_entity.dart';
+import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../data/isar/isar_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
@@ -218,6 +219,24 @@ class MediaViewModel extends StateNotifier<MediaState> {
         : List<String>.unmodifiable(common);
   }
 
+  /// Returns the union of tag IDs present across the current selection.
+  /// Used to reflect which tags are already applied to at least one item when
+  /// performing bulk tag operations.
+  List<String> tagIdsInSelection() {
+    if (_selectedMediaIds.isEmpty) {
+      return const <String>[];
+    }
+
+    final tagUnion = LinkedHashSet<String>();
+    for (final media in _cachedMedia) {
+      if (_selectedMediaIds.contains(media.id)) {
+        tagUnion.addAll(media.tagIds);
+      }
+    }
+
+    return List<String>.unmodifiable(tagUnion);
+  }
+
   /// Gets the directory ID generated from the directory path.
   String get directoryId {
     final bytes = utf8.encode(_directoryPath);
@@ -291,6 +310,53 @@ class MediaViewModel extends StateNotifier<MediaState> {
       );
     }
 
+    _emitLoadedStateFromCache();
+  }
+
+  /// Toggles [tag] across the current selection. If any selected media already
+  /// has the tag, it will be removed from all selected items; otherwise the tag
+  /// will be added to every selected item.
+  Future<void> toggleTagForSelection(TagEntity tag) async {
+    if (_selectedMediaIds.isEmpty) {
+      return;
+    }
+
+    final selectedMedia = _cachedMedia
+        .where((media) => _selectedMediaIds.contains(media.id))
+        .toList(growable: false);
+
+    if (selectedMedia.isEmpty) {
+      return;
+    }
+
+    final shouldAddTag =
+        !selectedMedia.any((media) => media.tagIds.contains(tag.id));
+    final assignTagUseCase = _ref.read(assignTagUseCaseProvider);
+
+    final updatedMedia = <MediaEntity>[];
+    for (final media in _cachedMedia) {
+      if (!_selectedMediaIds.contains(media.id)) {
+        updatedMedia.add(media);
+        continue;
+      }
+
+      final hasTag = media.tagIds.contains(tag.id);
+      final updatedTagIds = shouldAddTag
+          ? (hasTag ? media.tagIds : [...media.tagIds, tag.id])
+          : media.tagIds.where((id) => id != tag.id).toList(growable: false);
+
+      updatedMedia.add(
+        media.copyWith(tagIds: List<String>.unmodifiable(updatedTagIds)),
+      );
+
+      if (shouldAddTag && !hasTag) {
+        await assignTagUseCase.assignTagToMedia(media.id, tag);
+      } else if (!shouldAddTag && hasTag) {
+        await assignTagUseCase.removeTagFromMedia(media.id, tag);
+      }
+    }
+
+    _cachedMedia = updatedMedia;
     _emitLoadedStateFromCache();
   }
 

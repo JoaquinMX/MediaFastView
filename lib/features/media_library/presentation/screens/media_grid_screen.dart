@@ -129,7 +129,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
               children: [
                 Column(
                   children: [
-                    _buildTagFilter(_viewModel!, state),
+                    _buildTagFilter(
+                      _viewModel!,
+                      state,
+                      isSelectionMode,
+                    ),
                     Expanded(
                       child: switch (state) {
                         MediaLoading() => const Center(
@@ -279,7 +283,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     return 'Toggle Favorites';
   }
 
-  Widget _buildTagFilter(MediaViewModel viewModel, MediaState state) {
+  Widget _buildTagFilter(
+    MediaViewModel viewModel,
+    MediaState state,
+    bool isSelectionMode,
+  ) {
     final selectedTagIds =
         state is MediaLoaded ? state.selectedTagIds : const <String>[];
     final showFavoritesOnly =
@@ -334,9 +342,14 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           ),
           const SizedBox(height: 12),
           TagFilterChips(
-            selectedTagIds: selectedTagIds,
-            onSelectionChanged: viewModel.filterByTags,
+            selectedTagIds:
+                isSelectionMode ? viewModel.tagIdsInSelection() : selectedTagIds,
+            onSelectionChanged:
+                isSelectionMode ? (_) {} : viewModel.filterByTags,
+            onTagTapped:
+                isSelectionMode ? (tag, _) => viewModel.toggleTagForSelection(tag) : null,
             maxChipsToShow: UiGrid.maxFilterChips,
+            showAllButton: !isSelectionMode,
           ),
         ],
       ),
