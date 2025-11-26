@@ -100,6 +100,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       _loopOverridden = false;
 
       final currentTags = await _tagLookup.getTagsByIds(currentMedia.tagIds);
+      final allTags = await _tagLookup.getAllTags();
       final shortcutTags = await _buildShortcutTags(finalMediaList);
 
       Future(() {
@@ -113,6 +114,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
           totalDuration: Duration.zero,
           isFavorite: isFavorite,
           currentMediaTags: currentTags,
+          allTags: allTags,
           shortcutTags: shortcutTags,
         );
       });

@@ -18,7 +18,6 @@ import '../../../../shared/widgets/media_playback_controls.dart';
 import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
-import '../../../../shared/widgets/tag_selection_dialog.dart';
 
 /// Full-screen media viewer screen
 class FullScreenViewerScreen extends ConsumerStatefulWidget {
@@ -351,12 +350,12 @@ class _FullScreenViewerScreenState
     final colorScheme = theme.colorScheme;
 
     final chipWidgets = <Widget>[];
-    if (state.currentMediaTags.isEmpty) {
+    if (state.allTags.isEmpty) {
       chipWidgets.add(
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Text(
-            'No tags assigned',
+            'No tags available',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
@@ -364,12 +363,12 @@ class _FullScreenViewerScreenState
         ),
       );
     } else {
-      for (final tag in state.currentMediaTags) {
+      for (final tag in state.allTags) {
         chipWidgets.add(
           TagChip(
             key: ValueKey('fullscreen_tag_${tag.id}'),
             tag: tag,
-            selected: true,
+            selected: state.currentMedia.tagIds.contains(tag.id),
             compact: true,
             onTap: () => _handleTagChipTapped(tag),
           ),
@@ -396,17 +395,6 @@ class _FullScreenViewerScreenState
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(children: chipWidgets),
-              ),
-            ),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-              onPressed: () => _openTagSelectionDialog(state),
-              icon: const Icon(Icons.sell, size: 18),
-              label: const Text('Manage'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: BorderSide(color: Colors.white.withOpacity(0.4)),
-                visualDensity: VisualDensity.compact,
               ),
             ),
           ],
@@ -502,39 +490,6 @@ class _FullScreenViewerScreenState
     }
   }
 
-  Future<void> _openTagSelectionDialog(FullScreenLoaded state) async {
-    final result = await showDialog<TagUpdateResult>(
-      context: context,
-      builder: (context) => TagSelectionDialog<TagUpdateResult>(
-        title: 'Manage Tags',
-        assignmentTargetLabel: state.currentMedia.name,
-        initialSelectedTagIds: state.currentMedia.tagIds,
-        confirmLabel: 'Save',
-        onConfirm: (selection) => _viewModel.setTagsForCurrentMedia(selection),
-      ),
-    );
-
-    if (!mounted || result == null) {
-      return;
-    }
-
-    String message;
-    if (!result.hasChanges) {
-      message = 'No tag changes';
-    } else if (result.addedCount > 0 && result.removedCount > 0) {
-      message =
-          'Added ${result.addedCount} ${_pluralize("tag", result.addedCount)}, removed ${result.removedCount} ${_pluralize("tag", result.removedCount)}';
-    } else if (result.addedCount > 0) {
-      message =
-          'Added ${result.addedCount} ${_pluralize("tag", result.addedCount)}';
-    } else {
-      message =
-          'Removed ${result.removedCount} ${_pluralize("tag", result.removedCount)}';
-    }
-
-    _showTagFeedback(message);
-  }
-
   void _showTagFeedback(String message, {bool isError = false}) {
     if (!mounted) {
       return;
@@ -555,8 +510,6 @@ class _FullScreenViewerScreenState
   Future<void> _handleTagShortcut(TagEntity tag) async {
     await _handleTagChipTapped(tag);
   }
-
-  String _pluralize(String noun, int count) => count == 1 ? noun : '${noun}s';
 
   bool _isPrimaryModifierPressed(Set<LogicalKeyboardKey> pressed) {
     return pressed.contains(LogicalKeyboardKey.controlLeft) ||

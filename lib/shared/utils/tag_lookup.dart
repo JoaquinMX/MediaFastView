@@ -37,6 +37,12 @@ class TagLookup {
     await _ensureCache();
   }
 
+  /// Returns all available tags, loading them into the cache if necessary.
+  Future<List<TagEntity>> getAllTags() async {
+    await _ensureCache();
+    return _cachedTags ?? const <TagEntity>[];
+  }
+
   Future<void> _ensureCache() async {
     if (_cachedTags != null && _tagsById != null) {
       return;

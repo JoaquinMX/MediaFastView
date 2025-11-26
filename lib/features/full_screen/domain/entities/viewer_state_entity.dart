@@ -28,6 +28,7 @@ class FullScreenLoaded extends FullScreenState {
     required this.totalDuration,
     required this.isFavorite,
     required this.currentMediaTags,
+    required this.allTags,
     required this.shortcutTags,
   });
 
@@ -40,6 +41,7 @@ class FullScreenLoaded extends FullScreenState {
   final Duration totalDuration;
   final bool isFavorite;
   final List<TagEntity> currentMediaTags;
+  final List<TagEntity> allTags;
   final List<TagEntity> shortcutTags;
 
   MediaEntity get currentMedia => mediaList[currentIndex];
@@ -54,6 +56,7 @@ class FullScreenLoaded extends FullScreenState {
     Duration? totalDuration,
     bool? isFavorite,
     List<TagEntity>? currentMediaTags,
+    List<TagEntity>? allTags,
     List<TagEntity>? shortcutTags,
   }) {
     return FullScreenLoaded(
@@ -66,6 +69,7 @@ class FullScreenLoaded extends FullScreenState {
       totalDuration: totalDuration ?? this.totalDuration,
       isFavorite: isFavorite ?? this.isFavorite,
       currentMediaTags: currentMediaTags ?? this.currentMediaTags,
+      allTags: allTags ?? this.allTags,
       shortcutTags: shortcutTags ?? this.shortcutTags,
     );
   }
