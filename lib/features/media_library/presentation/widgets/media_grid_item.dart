@@ -80,7 +80,9 @@ class _MediaGridItemState extends State<MediaGridItem> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('MediaGridItem: Building item for ${widget.media.name}, type: ${widget.media.type}, size: ${MediaQuery.of(context).size}');
+    debugPrint(
+      'MediaGridItem: Building item for ${widget.media.name}, type: ${widget.media.type}, size: ${MediaQuery.of(context).size}',
+    );
     return Consumer(
       builder: (context, ref, child) {
         return VisibilityDetector(
@@ -131,62 +133,70 @@ class _MediaGridItemState extends State<MediaGridItem> {
                       : BorderSide.none,
                 ),
                 child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  children: [
-                    _buildMediaContent(ref),
-                    if (_isHovering) _buildHoverOverlay(),
-                    if (widget.isSelectionMode || widget.isSelected)
-                      Positioned(
-                        top: UiSpacing.extraSmallGap,
-                        left: UiSpacing.extraSmallGap,
-                        child: Semantics(
-                          selected: widget.isSelected,
-                          button: true,
-                          label: widget.isSelected
-                              ? 'Deselect media ${widget.media.name}'
-                              : 'Select media ${widget.media.name}',
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: widget.onSelectionToggle,
-                              borderRadius: BorderRadius.circular(
-                                UiSizing.borderRadiusSmall,
-                              ),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: widget.isSelected
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.surface,
-                                  borderRadius: BorderRadius.circular(
-                                    UiSizing.borderRadiusSmall,
-                                  ),
-                                  border: Border.all(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    children: [
+                      _buildMediaContent(ref),
+                      if (_isHovering) _buildHoverOverlay(),
+                      if (widget.isSelectionMode || widget.isSelected)
+                        Positioned(
+                          top: UiSpacing.extraSmallGap,
+                          left: UiSpacing.extraSmallGap,
+                          child: Semantics(
+                            selected: widget.isSelected,
+                            button: true,
+                            label: widget.isSelected
+                                ? 'Deselect media ${widget.media.name}'
+                                : 'Select media ${widget.media.name}',
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: widget.onSelectionToggle,
+                                borderRadius: BorderRadius.circular(
+                                  UiSizing.borderRadiusSmall,
+                                ),
+                                child: Container(
+                                  decoration: BoxDecoration(
                                     color: widget.isSelected
                                         ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context).colorScheme.outline,
-                                    width: UiSizing.borderWidth / 1.5,
+                                        : Theme.of(context).colorScheme.surface,
+                                    borderRadius: BorderRadius.circular(
+                                      UiSizing.borderRadiusSmall,
+                                    ),
+                                    border: Border.all(
+                                      color: widget.isSelected
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.outline,
+                                      width: UiSizing.borderWidth / 1.5,
+                                    ),
                                   ),
-                                ),
-                                padding:
-                                    EdgeInsets.all(UiSpacing.extraSmallGap / 2),
-                                child: Icon(
-                                  widget.isSelected
-                                      ? Icons.check
-                                      : Icons.circle_outlined,
-                                  size: UiSizing.iconExtraSmall,
-                                  color: widget.isSelected
-                                      ? Theme.of(context).colorScheme.onPrimary
-                                      : Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
+                                  padding: EdgeInsets.all(
+                                    UiSpacing.extraSmallGap / 2,
+                                  ),
+                                  child: Icon(
+                                    widget.isSelected
+                                        ? Icons.check
+                                        : Icons.circle_outlined,
+                                    size: UiSizing.iconExtraSmall,
+                                    color: widget.isSelected
+                                        ? Theme.of(
+                                            context,
+                                          ).colorScheme.onPrimary
+                                        : Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -267,9 +277,10 @@ class _MediaGridItemState extends State<MediaGridItem> {
     );
   }
 
-
   Widget _buildVideoContent() {
-    if (_isHovering && _videoController != null && _videoController!.value.isInitialized) {
+    if (_isHovering &&
+        _videoController != null &&
+        _videoController!.value.isInitialized) {
       return VideoPlayer(_videoController!);
     } else {
       return Container(
@@ -358,12 +369,13 @@ class _MediaGridItemState extends State<MediaGridItem> {
                           ),
                         );
                       },
-                      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                        if (frame == null) {
-                          return _buildLoadingContent();
-                        }
-                        return child;
-                      },
+                      frameBuilder:
+                          (context, child, frame, wasSynchronouslyLoaded) {
+                            if (frame == null) {
+                              return _buildLoadingContent();
+                            }
+                            return child;
+                          },
                     )
                   : Container(
                       color: Theme.of(context).colorScheme.primaryContainer,
