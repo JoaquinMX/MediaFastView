@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/repository_providers.dart';
@@ -82,44 +83,54 @@ class _MediaGridItemState extends State<MediaGridItem> {
     debugPrint('MediaGridItem: Building item for ${widget.media.name}, type: ${widget.media.type}, size: ${MediaQuery.of(context).size}');
     return Consumer(
       builder: (context, ref, child) {
-        return MouseRegion(
-          onEnter: (_) async {
-            setState(() => _isHovering = true);
-            if (widget.media.type == MediaType.video) {
-              await _initializeVideoController();
+        return VisibilityDetector(
+          key: Key('media-grid-${widget.media.id}'),
+          onVisibilityChanged: (info) {
+            if (info.visibleFraction == 0) {
+              _disposeVideoController();
+              if (_isHovering) {
+                setState(() => _isHovering = false);
+              }
             }
           },
-          onExit: (_) async {
-            setState(() => _isHovering = false);
-            await _disposeVideoController();
-          },
-          child: GestureDetector(
-            onTap: widget.onTap,
-            onDoubleTap: widget.onDoubleTap,
-            onLongPress: () {
-              _ensureSelected();
-              widget.onLongPress?.call();
+          child: MouseRegion(
+            onEnter: (_) async {
+              setState(() => _isHovering = true);
+              if (widget.media.type == MediaType.video) {
+                await _initializeVideoController();
+              }
             },
-            onSecondaryTap: () {
-              _ensureSelected();
-              widget.onSecondaryTap?.call();
+            onExit: (_) async {
+              setState(() => _isHovering = false);
+              await _disposeVideoController();
             },
-            child: Card(
-              elevation: _isHovering
-                  ? UiSizing.elevationHigh
-                  : UiSizing.elevationLow,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(
-                  UiSizing.borderRadiusMedium,
+            child: GestureDetector(
+              onTap: widget.onTap,
+              onDoubleTap: widget.onDoubleTap,
+              onLongPress: () {
+                _ensureSelected();
+                widget.onLongPress?.call();
+              },
+              onSecondaryTap: () {
+                _ensureSelected();
+                widget.onSecondaryTap?.call();
+              },
+              child: Card(
+                elevation: _isHovering
+                    ? UiSizing.elevationHigh
+                    : UiSizing.elevationLow,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    UiSizing.borderRadiusMedium,
+                  ),
+                  side: widget.isSelected
+                      ? BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: UiSizing.borderWidth,
+                        )
+                      : BorderSide.none,
                 ),
-                side: widget.isSelected
-                    ? BorderSide(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: UiSizing.borderWidth,
-                      )
-                    : BorderSide.none,
-              ),
-              child: ClipRRect(
+                child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Stack(
                   children: [
