@@ -46,6 +46,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   MediaViewModel? _viewModel;
   final GlobalKey _mediaGridOverlayKey = GlobalKey();
   final Map<String, GlobalKey> _mediaItemKeys = <String, GlobalKey>{};
+  List<MediaEntity> _visibleMediaCache = const [];
   Rect? _mediaSelectionRect;
   Offset? _mediaDragStart;
   bool _isMediaMarqueeActive = false;
@@ -83,6 +84,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final selectedMediaIds = ref.watch(selectedMediaIdsProvider(_params!));
     final isSelectionMode = ref.watch(mediaSelectionModeProvider(_params!));
     final selectedMediaCount = ref.watch(selectedMediaCountProvider(_params!));
+    if (state case MediaLoaded(:final media)) {
+      _visibleMediaCache = media;
+    } else {
+      _visibleMediaCache = const [];
+    }
     final sortOption = state is MediaLoaded
         ? state.sortOption
         : _viewModel?.currentSortOption ?? MediaSortOption.nameAscending;
@@ -806,6 +812,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
             directoryPath: widget.directoryPath,
             initialMediaId: media.id,
             bookmarkData: widget.bookmarkData,
+            mediaList:
+                _visibleMediaCache.isNotEmpty ? _visibleMediaCache : null,
           ),
         ),
       );
