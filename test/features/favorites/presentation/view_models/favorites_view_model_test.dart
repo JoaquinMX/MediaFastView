@@ -65,6 +65,8 @@ void main() {
     favoritesRepository = _MockFavoritesRepository();
     mediaDataSource = _MockIsarMediaDataSource();
     getMediaUseCase = _MockGetMediaUseCase();
+    when(mediaDataSource.getMediaById(any))
+        .thenAnswer((_) async => null);
     viewModel = FavoritesViewModel(
       favoritesRepository,
       mediaDataSource,
@@ -153,6 +155,31 @@ void main() {
       verifyNever(favoritesRepository.removeFavorites(any));
       verify(mediaDataSource.getMedia()).called(1);
       verifyNever(getMediaUseCase.byId(any));
+    });
+
+    test('merges stored tags when persisting favorited media', () async {
+      final storedMedia = mediaModel.copyWith(tagIds: const ['stored-tag']);
+
+      when(
+        favoritesRepository.isFavorite(
+          mediaId,
+          type: FavoriteItemType.media,
+        ),
+      ).thenAnswer((_) async => false);
+      when(favoritesRepository.addFavorites(any)).thenAnswer((_) async {});
+      when(mediaDataSource.upsertMedia(any)).thenAnswer((_) async {});
+      when(favoritesRepository.getFavoriteMediaIds())
+          .thenAnswer((_) async => [mediaId]);
+      when(mediaDataSource.getMedia()).thenAnswer((_) async => [mediaModel]);
+      when(mediaDataSource.getMediaById(mediaId))
+          .thenAnswer((_) async => storedMedia);
+      when(favoritesRepository.getFavorites()).thenAnswer((_) async => const []);
+
+      await viewModel.toggleFavoritesForMedia([mediaEntity]);
+
+      final captured = verify(mediaDataSource.upsertMedia(captureAny)).captured;
+      final persistedMedia = captured.single as List<MediaModel>;
+      expect(persistedMedia.single.tagIds, contains('stored-tag'));
     });
 
     test('removes favorites when already favorited', () async {

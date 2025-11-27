@@ -67,6 +67,20 @@ class IsarMediaDataSource {
     }
   }
 
+  /// Retrieves a media entry by its stable identifier.
+  Future<MediaModel?> getMediaById(String mediaId) async {
+    await _ensureReady();
+    try {
+      final collection = await _mediaStore.getByMediaId(mediaId);
+      return collection?.toModel();
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PersistenceError('Failed to load media by id: $error'),
+        stackTrace,
+      );
+    }
+  }
+
   /// Persists [media] replacing any existing records.
   Future<void> saveMedia(List<MediaModel> media) async {
     await _executeSafely(() async {

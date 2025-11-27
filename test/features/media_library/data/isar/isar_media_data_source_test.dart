@@ -250,6 +250,16 @@ void main() {
       expect(media, hasLength(2));
     });
 
+    test('getMediaById returns matching entry', () async {
+      await _seedDirectories(<DirectoryModel>[_buildDirectory('dir-1')]);
+      final storedMedia = _buildMedia(id: 'media-1', directoryId: 'dir-1');
+      await dataSource.saveMedia(<MediaModel>[storedMedia]);
+
+      final media = await dataSource.getMediaById('media-1');
+
+      expect(media, equals(storedMedia));
+    });
+
     test('updateMediaTags overwrites tag assignments', () async {
       await _seedDirectories(<DirectoryModel>[_buildDirectory('dir-1')]);
       final mediaModel = _buildMedia(

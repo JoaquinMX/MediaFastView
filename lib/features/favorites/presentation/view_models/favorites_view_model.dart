@@ -405,6 +405,12 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
 
   /// Persists a media entity to local storage.
   Future<void> _persistMedia(MediaEntity media) async {
+    final existing = await _mediaDataSource.getMediaById(media.id);
+    final mergedTags = <String>{
+      ...?existing?.tagIds,
+      ...media.tagIds,
+    };
+
     final model = MediaModel(
       id: media.id,
       path: media.path,
@@ -412,9 +418,9 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       type: media.type,
       size: media.size,
       lastModified: media.lastModified,
-      tagIds: media.tagIds,
+      tagIds: mergedTags.toList(growable: false),
       directoryId: media.directoryId,
-      bookmarkData: media.bookmarkData,
+      bookmarkData: media.bookmarkData ?? existing?.bookmarkData,
     );
     await _mediaDataSource.upsertMedia([model]);
   }
