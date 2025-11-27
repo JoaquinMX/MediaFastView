@@ -55,6 +55,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   Set<String> _mediaLastMarqueeSelection = <String>{};
   Map<String, Rect> _mediaCachedItemRects = <String, Rect>{};
 
+  bool get _isMacOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+
   @override
   Widget build(BuildContext context) {
     debugPrint(
@@ -96,6 +98,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     return Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.escape): _ClearMediaSelectionIntent(),
+        if (_isMacOS)
+          LogicalKeySet(
+            LogicalKeyboardKey.meta,
+            LogicalKeyboardKey.keyA,
+          ): const _SelectAllMediaIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -113,6 +120,18 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                   return null;
                 },
               ),
+          if (_isMacOS)
+            _SelectAllMediaIntent:
+                CallbackAction<_SelectAllMediaIntent>(
+              onInvoke: (_) {
+                if (_viewModel == null || _visibleMediaCache.isEmpty) {
+                  return null;
+                }
+                _viewModel!
+                    .selectMediaRange(_visibleMediaCache.map((media) => media.id));
+                return null;
+              },
+            ),
         },
         child: Focus(
           autofocus: true,
@@ -904,4 +923,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
 class _ClearMediaSelectionIntent extends Intent {
   const _ClearMediaSelectionIntent();
+}
+
+class _SelectAllMediaIntent extends Intent {
+  const _SelectAllMediaIntent();
 }
