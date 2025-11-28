@@ -1,8 +1,10 @@
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as path;
 
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
@@ -60,6 +62,7 @@ class MediaLoaded extends MediaState {
     required this.isSelectionMode,
     required this.showFavoritesOnly,
     required this.visibleMediaTypes,
+    required this.siblingNavigation,
   });
 
   final List<MediaEntity> media;
@@ -73,6 +76,7 @@ class MediaLoaded extends MediaState {
   final bool isSelectionMode;
   final bool showFavoritesOnly;
   final Set<MediaType> visibleMediaTypes;
+  final SiblingNavigationState? siblingNavigation;
 
   MediaLoaded copyWith({
     List<MediaEntity>? media,
@@ -86,6 +90,7 @@ class MediaLoaded extends MediaState {
     bool? isSelectionMode,
     bool? showFavoritesOnly,
     Set<MediaType>? visibleMediaTypes,
+    SiblingNavigationState? siblingNavigation,
   }) {
     return MediaLoaded(
       media: media ?? this.media,
@@ -99,8 +104,39 @@ class MediaLoaded extends MediaState {
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
       visibleMediaTypes: visibleMediaTypes ?? this.visibleMediaTypes,
+      siblingNavigation: siblingNavigation ?? this.siblingNavigation,
     );
   }
+}
+
+/// Navigation metadata for moving between sibling directories.
+class SiblingNavigationState {
+  const SiblingNavigationState({
+    required this.siblings,
+    required this.currentIndex,
+  });
+
+  final List<DirectorySibling> siblings;
+  final int currentIndex;
+
+  bool get hasSiblings => siblings.length > 1;
+
+  DirectorySibling? get previous =>
+      currentIndex > 0 ? siblings[currentIndex - 1] : null;
+
+  DirectorySibling? get next =>
+      currentIndex < siblings.length - 1 ? siblings[currentIndex + 1] : null;
+}
+
+/// Simple model describing a sibling directory.
+class DirectorySibling {
+  const DirectorySibling({
+    required this.path,
+    required this.name,
+  });
+
+  final String path;
+  final String name;
 }
 
 /// Error state when an operation fails.
@@ -187,6 +223,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   bool _showFavoritesOnly = false;
   late final ProviderSubscription<FavoritesState> _favoritesSubscription;
   Set<MediaType> _visibleMediaTypes = Set<MediaType>.from(MediaType.values);
+  SiblingNavigationState? _siblingNavigation;
 
   MediaSortOption get currentSortOption => _currentSortOption;
   Set<String> get selectedMediaIds => Set<String>.unmodifiable(_selectedMediaIds);
@@ -196,6 +233,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   Set<MediaType> get visibleMediaTypes => Set<MediaType>.unmodifiable(
         _visibleMediaTypes,
       );
+  SiblingNavigationState? get siblingNavigation => _siblingNavigation;
 
   /// Returns tags shared by every selected media item.
   List<String> commonTagIdsForSelection() {
@@ -409,6 +447,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       'Loading media for directory: $_directoryPath, bookmarkData present: ${_bookmarkData != null}',
     );
     state = const MediaLoading();
+    _siblingNavigation = null;
     try {
       LoggingService.instance.debug(
         'Calling _getMediaUseCase.forDirectoryPath',
@@ -459,6 +498,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       );
 
       _cachedMedia = _sortMedia(media, _currentSortOption);
+      _siblingNavigation = await _buildSiblingNavigation();
 
       if (media.isEmpty) {
         LoggingService.instance.info('No media found, setting empty state');
@@ -479,6 +519,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
           isSelectionMode: false,
           showFavoritesOnly: _showFavoritesOnly,
           visibleMediaTypes: _visibleMediaTypes,
+          siblingNavigation: _siblingNavigation,
         );
       }
     } catch (e) {
@@ -824,6 +865,69 @@ class MediaViewModel extends StateNotifier<MediaState> {
     return _applySearch(favoritesFiltered, query);
   }
 
+  Future<SiblingNavigationState?> _buildSiblingNavigation() async {
+    try {
+      final parentPath = path.dirname(_directoryPath);
+      if (parentPath.isEmpty || parentPath == _directoryPath) {
+        return null;
+      }
+
+      final parentDirectory = Directory(parentPath);
+      if (!await parentDirectory.exists()) {
+        return null;
+      }
+
+      final siblings = <DirectorySibling>[];
+      await for (final entity in parentDirectory.list(
+        recursive: false,
+        followLinks: false,
+      )) {
+        if (entity is! Directory) {
+          continue;
+        }
+        final directoryName = path.basename(entity.path);
+        if (directoryName.startsWith('.')) {
+          continue;
+        }
+        siblings.add(
+          DirectorySibling(
+            path: entity.path,
+            name: directoryName,
+          ),
+        );
+      }
+
+      siblings.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+
+      if (siblings.length <= 1) {
+        return null;
+      }
+
+      final currentIndex = siblings.indexWhere(
+        (sibling) => path.equals(
+          path.normalize(sibling.path),
+          path.normalize(_directoryPath),
+        ),
+      );
+
+      if (currentIndex == -1) {
+        return null;
+      }
+
+      return SiblingNavigationState(
+        siblings: List<DirectorySibling>.unmodifiable(siblings),
+        currentIndex: currentIndex,
+      );
+    } catch (e) {
+      LoggingService.instance.debug(
+        'Failed to build sibling navigation for $_directoryPath: $e',
+      );
+      return null;
+    }
+  }
+
   void _emitLoadedStateFromCache() {
     if (state case MediaLoaded(
       :final searchQuery,
@@ -849,6 +953,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
         visibleMediaTypes: _visibleMediaTypes,
+        siblingNavigation: _siblingNavigation,
       );
     } else if (state is MediaEmpty && _selectedMediaIds.isNotEmpty) {
       _clearSelectionInternal();
@@ -886,6 +991,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
         visibleMediaTypes: _visibleMediaTypes,
+        siblingNavigation: _siblingNavigation,
       );
     }
   }
@@ -923,6 +1029,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
         visibleMediaTypes: _visibleMediaTypes,
+        siblingNavigation: _siblingNavigation,
       );
     }
   }

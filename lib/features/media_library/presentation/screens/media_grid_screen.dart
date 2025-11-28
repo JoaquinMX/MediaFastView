@@ -56,6 +56,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   Map<String, Rect> _mediaCachedItemRects = <String, Rect>{};
 
   bool get _isMacOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+  bool get _supportsSwipeNavigation =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android);
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +90,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final selectedMediaIds = ref.watch(selectedMediaIdsProvider(_params!));
     final isSelectionMode = ref.watch(mediaSelectionModeProvider(_params!));
     final selectedMediaCount = ref.watch(selectedMediaCountProvider(_params!));
+    final siblingNavigation = state is MediaLoaded
+        ? state.siblingNavigation
+        : _viewModel?.siblingNavigation;
     if (state case MediaLoaded(:final media)) {
       _visibleMediaCache = media;
     } else {
@@ -143,47 +150,55 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     state as MediaLoaded,
                     selectedMediaIds,
                   )
-                : _buildNormalAppBar(sortOption, _viewModel!),
-            body: Stack(
-              children: [
-                Column(
-                  children: [
-                    _buildTagFilter(
-                      _viewModel!,
-                      state,
-                      isSelectionMode,
-                    ),
-                    Expanded(
-                      child: switch (state) {
-                        MediaLoading() => const Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                        MediaLoaded(:final media, :final columns) => _buildGrid(
-                          media,
-                          columns,
-                          _viewModel!,
-                          selectedMediaIds,
-                          isSelectionMode,
-                        ),
-                        MediaPermissionRevoked(
-                          :final directoryPath,
-                          :final directoryName,
-                        ) =>
-                          _buildPermissionRevoked(
-                            directoryPath,
-                            directoryName,
-                            _viewModel!,
-                          ),
-                        MediaError(:final message) => _buildError(
-                          message,
-                          _viewModel!,
-                        ),
-                        MediaEmpty() => _buildEmpty(_viewModel!),
-                      },
-                    ),
-                  ],
-                ),
-              ],
+                : _buildNormalAppBar(sortOption, _viewModel!, siblingNavigation),
+            body: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragEnd: _supportsSwipeNavigation &&
+                      siblingNavigation?.hasSiblings == true
+                  ? (details) =>
+                      _handleSwipeNavigation(details, siblingNavigation)
+                  : null,
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      _buildTagFilter(
+                        _viewModel!,
+                        state,
+                        isSelectionMode,
+                      ),
+                      Expanded(
+                        child: switch (state) {
+                          MediaLoading() => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          MediaLoaded(:final media, :final columns) => _buildGrid(
+                              media,
+                              columns,
+                              _viewModel!,
+                              selectedMediaIds,
+                              isSelectionMode,
+                            ),
+                          MediaPermissionRevoked(
+                            :final directoryPath,
+                            :final directoryName,
+                          ) =>
+                              _buildPermissionRevoked(
+                                directoryPath,
+                                directoryName,
+                                _viewModel!,
+                              ),
+                          MediaError(:final message) => _buildError(
+                              message,
+                              _viewModel!,
+                            ),
+                          MediaEmpty() => _buildEmpty(_viewModel!),
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -191,10 +206,15 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
   }
 
-  AppBar _buildNormalAppBar(MediaSortOption sortOption, MediaViewModel viewModel) {
+  AppBar _buildNormalAppBar(
+    MediaSortOption sortOption,
+    MediaViewModel viewModel,
+    SiblingNavigationState? siblingNavigation,
+  ) {
     return AppBar(
       title: Text(widget.directoryName),
       actions: [
+        ..._buildSiblingNavigationActions(siblingNavigation),
         IconButton(
           icon: const Icon(Icons.tag),
           tooltip: 'Manage Tags',
@@ -219,6 +239,31 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         ),
       ],
     );
+  }
+
+  List<Widget> _buildSiblingNavigationActions(
+    SiblingNavigationState? siblingNavigation,
+  ) {
+    if (siblingNavigation == null || !siblingNavigation.hasSiblings) {
+      return const [];
+    }
+
+    return [
+      IconButton(
+        icon: const Icon(Icons.arrow_back),
+        tooltip: 'Previous directory',
+        onPressed: siblingNavigation.previous == null
+            ? null
+            : () => _navigateToSibling(siblingNavigation.previous!),
+      ),
+      IconButton(
+        icon: const Icon(Icons.arrow_forward),
+        tooltip: 'Next directory',
+        onPressed: siblingNavigation.next == null
+            ? null
+            : () => _navigateToSibling(siblingNavigation.next!),
+      ),
+    ];
   }
 
   AppBar _buildSelectionAppBar(
@@ -827,6 +872,29 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         },
       ),
     );
+  }
+
+  void _navigateToSibling(DirectorySibling sibling) {
+    _viewModel?.navigateToDirectory(
+      sibling.path,
+      sibling.name,
+    );
+  }
+
+  void _handleSwipeNavigation(
+    DragEndDetails details,
+    SiblingNavigationState? siblingNavigation,
+  ) {
+    if (siblingNavigation == null || !siblingNavigation.hasSiblings) {
+      return;
+    }
+
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity < -300 && siblingNavigation.next != null) {
+      _navigateToSibling(siblingNavigation.next!);
+    } else if (velocity > 300 && siblingNavigation.previous != null) {
+      _navigateToSibling(siblingNavigation.previous!);
+    }
   }
 
   void _onMediaTap(BuildContext context, MediaEntity media) {
