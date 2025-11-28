@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:media_fast_view/features/media_library/presentation/screens/media_grid_screen.dart';
+import 'package:media_fast_view/features/media_library/presentation/models/directory_navigation_target.dart';
 
 void main() {
   group('MediaGridScreen', () {
@@ -59,6 +60,34 @@ void main() {
       // Verify basic UI structure
       expect(find.byType(Column), findsWidgets);
       expect(find.byType(Container), findsWidgets);
+    });
+
+    testWidgets('shows navigation arrows when sibling directories are provided',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: MediaGridScreen(
+              directoryPath: testDirectoryPath,
+              directoryName: testDirectoryName,
+              siblingDirectories: [
+                DirectoryNavigationTarget(
+                  path: '/test/directory',
+                  name: 'Test Directory',
+                ),
+                DirectoryNavigationTarget(
+                  path: '/test/second',
+                  name: 'Second Directory',
+                ),
+              ],
+              currentDirectoryIndex: 0,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
     });
   });
 }

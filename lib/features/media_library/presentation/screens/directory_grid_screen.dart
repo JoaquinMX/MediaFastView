@@ -24,6 +24,7 @@ import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
 import '../../../tagging/presentation/widgets/tag_filter_dialog.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../domain/entities/directory_entity.dart';
+import '../models/directory_navigation_target.dart';
 import '../view_models/directory_grid_view_model.dart';
 import '../widgets/directory_grid_item.dart';
 import '../widgets/directory_search_bar.dart';
@@ -508,7 +509,12 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         return DirectoryGridItem(
           key: itemKey,
           directory: directory,
-          onTap: () => _navigateToMediaGrid(context, directory),
+          onTap: () => _navigateToMediaGrid(
+            context,
+            directory,
+            directories,
+            index,
+          ),
           onDelete: () =>
               _showDeleteConfirmation(context, directory, viewModel),
           onAssignTags: (tagIds) => _assignTagsToDirectory(directory, tagIds),
@@ -589,7 +595,12 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                     directory: directory,
                     onTap: isInaccessible
                         ? () {}
-                        : () => _navigateToMediaGrid(context, directory),
+                        : () => _navigateToMediaGrid(
+                              context,
+                              directory,
+                              allDirectories,
+                              index,
+                            ),
                     onDelete: () =>
                         _showDeleteConfirmation(context, directory, viewModel),
                     onAssignTags: (tagIds) =>
@@ -675,7 +686,12 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                     directory: directory,
                     onTap: isInvalid
                         ? () {}
-                        : () => _navigateToMediaGrid(context, directory),
+                        : () => _navigateToMediaGrid(
+                              context,
+                              directory,
+                              allDirectories,
+                              index,
+                            ),
                     onDelete: () =>
                         _showDeleteConfirmation(context, directory, viewModel),
                     onAssignTags: (tagIds) =>
@@ -1007,13 +1023,36 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     );
   }
 
-  void _navigateToMediaGrid(BuildContext context, DirectoryEntity directory) {
+  List<DirectoryNavigationTarget> _mapDirectoriesToNavigationTargets(
+    List<DirectoryEntity> directories,
+  ) {
+    return directories
+        .map(
+          (directory) => DirectoryNavigationTarget(
+            path: directory.path,
+            name: directory.name,
+            bookmarkData: directory.bookmarkData,
+          ),
+        )
+        .toList();
+  }
+
+  void _navigateToMediaGrid(
+    BuildContext context,
+    DirectoryEntity directory,
+    List<DirectoryEntity> siblingDirectories,
+    int currentIndex,
+  ) {
+    final navigationTargets =
+        _mapDirectoriesToNavigationTargets(siblingDirectories);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => MediaGridScreen(
           directoryPath: directory.path,
           directoryName: directory.name,
           bookmarkData: directory.bookmarkData,
+          siblingDirectories: navigationTargets,
+          currentDirectoryIndex: currentIndex,
         ),
       ),
     );

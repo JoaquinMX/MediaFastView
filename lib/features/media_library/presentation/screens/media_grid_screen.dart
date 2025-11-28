@@ -20,6 +20,7 @@ import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
 import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
+import '../models/directory_navigation_target.dart';
 import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
@@ -31,11 +32,15 @@ class MediaGridScreen extends ConsumerStatefulWidget {
     required this.directoryPath,
     required this.directoryName,
     this.bookmarkData,
+    this.siblingDirectories,
+    this.currentDirectoryIndex,
   });
 
   final String directoryPath;
   final String directoryName;
   final String? bookmarkData;
+  final List<DirectoryNavigationTarget>? siblingDirectories;
+  final int? currentDirectoryIndex;
 
   @override
   ConsumerState<MediaGridScreen> createState() => _MediaGridScreenState();
@@ -54,8 +59,57 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   Set<String> _mediaMarqueeBaseSelection = <String>{};
   Set<String> _mediaLastMarqueeSelection = <String>{};
   Map<String, Rect> _mediaCachedItemRects = <String, Rect>{};
+  List<DirectoryNavigationTarget> _siblingNavigationTargets = const [];
+  int _currentDirectoryNavigationIndex = 0;
 
   bool get _isMacOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+
+  @override
+  void initState() {
+    super.initState();
+    _applyNavigationContext(
+      widget.siblingDirectories,
+      widget.currentDirectoryIndex,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant MediaGridScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.siblingDirectories != oldWidget.siblingDirectories ||
+        widget.currentDirectoryIndex != oldWidget.currentDirectoryIndex) {
+      _applyNavigationContext(
+        widget.siblingDirectories,
+        widget.currentDirectoryIndex,
+        withSetState: true,
+      );
+    }
+  }
+
+  void _applyNavigationContext(
+    List<DirectoryNavigationTarget>? siblings,
+    int? currentIndex, {
+    bool withSetState = false,
+  }) {
+    void updater() {
+      _siblingNavigationTargets =
+          List<DirectoryNavigationTarget>.from(siblings ?? const []);
+      if (_siblingNavigationTargets.isEmpty) {
+        _currentDirectoryNavigationIndex = 0;
+        return;
+      }
+
+      final maxIndex = _siblingNavigationTargets.length - 1;
+      final safeIndex = (currentIndex ?? 0).clamp(0, maxIndex);
+      _currentDirectoryNavigationIndex = safeIndex;
+    }
+
+    if (withSetState) {
+      setState(updater);
+    } else {
+      updater();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,13 +120,16 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       directoryPath: widget.directoryPath,
       directoryName: widget.directoryName,
       bookmarkData: widget.bookmarkData,
-      navigateToDirectory: (path, name, bookmarkData) {
+      navigateToDirectory:
+          (path, name, bookmarkData, siblingDirectories, currentIndex) {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => MediaGridScreen(
               directoryPath: path,
               directoryName: name,
               bookmarkData: bookmarkData,
+              siblingDirectories: siblingDirectories,
+              currentDirectoryIndex: currentIndex,
             ),
           ),
         );
@@ -94,6 +151,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final sortOption = state is MediaLoaded
         ? state.sortOption
         : _viewModel?.currentSortOption ?? MediaSortOption.nameAscending;
+    final hasSiblingNavigation = _siblingNavigationTargets.length > 1;
 
     return Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
@@ -183,6 +241,51 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     ),
                   ],
                 ),
+                if (hasSiblingNavigation) ...[
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragEnd: _handleSiblingSwipe,
+                    ),
+                  ),
+                  Positioned(
+                    left: 8,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: IconButton(
+                        onPressed: _currentDirectoryNavigationIndex > 0
+                            ? () => _navigateToSibling(-1)
+                            : null,
+                        icon: Icon(
+                          Icons.chevron_left,
+                          color: Theme.of(context).colorScheme.onSurface,
+                          size: 36,
+                        ),
+                        tooltip: 'Previous directory',
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 8,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: IconButton(
+                        onPressed:
+                            _currentDirectoryNavigationIndex < _siblingNavigationTargets.length - 1
+                                ? () => _navigateToSibling(1)
+                                : null,
+                        icon: Icon(
+                          Icons.chevron_right,
+                          color: Theme.of(context).colorScheme.onSurface,
+                          size: 36,
+                        ),
+                        tooltip: 'Next directory',
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -829,12 +932,60 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
   }
 
+  void _navigateToSibling(int offset) {
+    if (_siblingNavigationTargets.length < 2 || _viewModel == null) {
+      return;
+    }
+
+    final targetIndex = _currentDirectoryNavigationIndex + offset;
+    if (targetIndex < 0 || targetIndex >= _siblingNavigationTargets.length) {
+      return;
+    }
+
+    final target = _siblingNavigationTargets[targetIndex];
+    _viewModel!.navigateToDirectory(
+      target.path,
+      target.name,
+      bookmarkData: target.bookmarkData,
+      siblingDirectories: _siblingNavigationTargets,
+      currentIndex: targetIndex,
+    );
+  }
+
+  void _handleSiblingSwipe(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity < -100) {
+      _navigateToSibling(1);
+    } else if (velocity > 100) {
+      _navigateToSibling(-1);
+    }
+  }
+
+  List<DirectoryNavigationTarget> _buildSiblingNavigationTargetsFromCache() {
+    return _visibleMediaCache
+        .where((media) => media.type == MediaType.directory)
+        .map(
+          (media) => DirectoryNavigationTarget(
+            path: media.path,
+            name: media.name,
+            bookmarkData: media.bookmarkData,
+          ),
+        )
+        .toList();
+  }
+
   void _onMediaTap(BuildContext context, MediaEntity media) {
     if (media.type == MediaType.directory) {
+      final siblingNavigation = _buildSiblingNavigationTargetsFromCache();
+      final targetIndex = siblingNavigation
+          .indexWhere((directory) => directory.path == media.path);
       _viewModel!.navigateToDirectory(
         media.path,
         media.name,
         bookmarkData: media.bookmarkData,
+        siblingDirectories:
+            siblingNavigation.isEmpty ? null : siblingNavigation,
+        currentIndex: targetIndex == -1 ? null : targetIndex,
       );
     } else {
       // Open full-screen viewer

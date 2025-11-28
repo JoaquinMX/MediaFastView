@@ -16,6 +16,7 @@ import '../../data/isar/isar_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
+import '../models/directory_navigation_target.dart';
 
 /// Defines the available sort options for media items.
 enum MediaSortOption {
@@ -643,11 +644,15 @@ class MediaViewModel extends StateNotifier<MediaState> {
     String directoryPath,
     String directoryName, {
     String? bookmarkData,
+    List<DirectoryNavigationTarget>? siblingDirectories,
+    int? currentIndex,
   }) async {
     _params.navigateToDirectory?.call(
       directoryPath,
       directoryName,
       bookmarkData,
+      siblingDirectories,
+      currentIndex,
     );
   }
 
@@ -1014,7 +1019,13 @@ class MediaViewModelParams {
   final String directoryPath;
   final String directoryName;
   final String? bookmarkData;
-  final void Function(String path, String name, String? bookmarkData)?
+  final void Function(
+    String path,
+    String name,
+    String? bookmarkData,
+    List<DirectoryNavigationTarget>? siblingDirectories,
+    int? currentIndex,
+  )?
   navigateToDirectory;
   final Future<String?> Function()? onPermissionRecoveryNeeded;
 
