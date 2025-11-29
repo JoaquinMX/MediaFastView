@@ -300,11 +300,27 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     final existingMedia = await _mediaDataSource.getMedia();
     final existingById = {for (final m in existingMedia) m.id: m};
     final existingByPath = {for (final m in existingMedia) _normalizePath(m.path): m};
+    final existingBySignature = {
+      for (final m in existingMedia) _metadataSignature(
+            path: m.path,
+            size: m.size,
+            lastModified: m.lastModified,
+          ):
+          m,
+    };
 
     // Convert entities back to models for persistence, merging tagIds from persisted data
     final mergedModels = scannedMedia.map((entity) {
       final normalizedPath = _normalizePath(entity.path);
-      final existing = existingById[entity.id] ?? existingByPath[normalizedPath];
+      final signature = _metadataSignature(
+        path: entity.path,
+        size: entity.size,
+        lastModified: entity.lastModified,
+      );
+
+      final existing = existingById[entity.id] ??
+          existingByPath[normalizedPath] ??
+          existingBySignature[signature];
       final mergedTagIds = <String>{...entity.tagIds};
 
       if (existing != null) {
@@ -328,6 +344,14 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   }
 
   String _normalizePath(String filePath) => p.normalize(filePath).toLowerCase();
+
+  String _metadataSignature({
+    required String path,
+    required int size,
+    required DateTime lastModified,
+  }) {
+    return '${p.basename(path).toLowerCase()}_${size}_${lastModified.millisecondsSinceEpoch}';
+  }
 
   /// Converts MediaModel to MediaEntity.
   MediaEntity _modelToEntity(MediaModel model) {
