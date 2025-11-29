@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Represents persisted playback preferences for videos.
 @immutable
@@ -38,34 +37,15 @@ final videoPlaybackSettingsProvider =
 class VideoPlaybackSettingsNotifier
     extends StateNotifier<VideoPlaybackSettings> {
   VideoPlaybackSettingsNotifier()
-      : super(const VideoPlaybackSettings.initial()) {
-    _loadSettings();
-  }
+      : super(const VideoPlaybackSettings.initial());
 
-  static const _autoplayKey = 'video_autoplay_enabled';
-  static const _loopKey = 'video_loop_enabled';
-
-  Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    final autoplay = prefs.getBool(_autoplayKey) ?? false;
-    final loop = prefs.getBool(_loopKey) ?? false;
-    state = VideoPlaybackSettings(
-      autoplayVideos: autoplay,
-      loopVideos: loop,
-    );
-  }
-
-  Future<void> setAutoplayVideos(bool enabled) async {
+  void setAutoplayVideos(bool enabled) {
     debugPrint('VideoPlaybackSettings: Setting autoplay to $enabled');
     state = state.copyWith(autoplayVideos: enabled);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_autoplayKey, enabled);
   }
 
-  Future<void> setLoopVideos(bool enabled) async {
+  void setLoopVideos(bool enabled) {
     debugPrint('VideoPlaybackSettings: Setting loop to $enabled');
     state = state.copyWith(loopVideos: enabled);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_loopKey, enabled);
   }
 }

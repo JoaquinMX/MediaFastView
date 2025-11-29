@@ -1,3 +1,5 @@
+import 'package:path/path.dart' as p;
+
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
@@ -296,11 +298,13 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     List<MediaModel> scannedMedia,
   ) async {
     final existingMedia = await _mediaDataSource.getMedia();
-    final existingMediaMap = {for (final m in existingMedia) m.id: m};
+    final existingById = {for (final m in existingMedia) m.id: m};
+    final existingByPath = {for (final m in existingMedia) _normalizePath(m.path): m};
 
     // Convert entities back to models for persistence, merging tagIds from persisted data
     final mergedModels = scannedMedia.map((entity) {
-      final existing = existingMediaMap[entity.id];
+      final normalizedPath = _normalizePath(entity.path);
+      final existing = existingById[entity.id] ?? existingByPath[normalizedPath];
       final mergedTagIds = <String>{...entity.tagIds};
 
       if (existing != null) {
@@ -322,6 +326,8 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     await _mediaDataSource.addMedia(mergedModels);
     return mergedModels;
   }
+
+  String _normalizePath(String filePath) => p.normalize(filePath).toLowerCase();
 
   /// Converts MediaModel to MediaEntity.
   MediaEntity _modelToEntity(MediaModel model) {

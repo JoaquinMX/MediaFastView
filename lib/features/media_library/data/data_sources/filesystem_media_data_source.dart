@@ -425,8 +425,10 @@ class FilesystemMediaDataSource {
          LoggingService.instance.warning('Slow file.stat() for ${file.path}: ${statDuration.inMilliseconds}ms');
        }
 
-       // Generate ID from file system metadata for consistency across different access paths
-       final id = _generateIdFromMetadata(stat, file.path);
+       // Generate a stable ID from the normalized file path to avoid collisions
+       // between files with identical metadata that live in different
+       // directories.
+       final id = _generateId(file.path);
 
        return MediaModel(
          id: id,
@@ -527,11 +529,21 @@ class FilesystemMediaDataSource {
     List<MediaModel> mediaWithTags = allMedia;
     if (mediaPersistence != null) {
       final existingMedia = await mediaPersistence.getMedia();
-      final existingMediaMap = {for (final m in existingMedia) m.id: m};
+      final existingById = {for (final m in existingMedia) m.id: m};
+      final existingByPath = {
+        for (final m in existingMedia) _normalizePath(m.path): m,
+      };
 
       // Convert entities back to models for persistence, merging tagIds from persisted data
       mediaWithTags = allMedia.map((entity) {
-        final existing = existingMediaMap[entity.id];
+        final normalizedPath = _normalizePath(entity.path);
+        final existing = existingById[entity.id] ?? existingByPath[normalizedPath];
+        final mergedTagIds = <String>{...entity.tagIds};
+
+        if (existing != null) {
+          mergedTagIds.addAll(existing.tagIds);
+        }
+
         return MediaModel(
           id: entity.id,
           path: entity.path,
@@ -539,7 +551,7 @@ class FilesystemMediaDataSource {
           type: entity.type,
           size: entity.size,
           lastModified: entity.lastModified,
-          tagIds: existing?.tagIds ?? entity.tagIds, // Merge tagIds from persisted data
+          tagIds: mergedTagIds.toList(growable: false),
           directoryId: entity.directoryId,
           bookmarkData: entity.bookmarkData,
         );
