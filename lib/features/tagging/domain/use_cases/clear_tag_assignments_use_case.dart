@@ -14,22 +14,22 @@ class ClearTagAssignmentsUseCase {
   /// Clears all tag assignments while leaving tag definitions intact.
   Future<void> call() async {
     final directories = await directoryRepository.getDirectories();
-    if (directories.isEmpty) {
+    if (directories.isNotEmpty) {
+      final directoryPayload = {
+        for (final directory in directories) directory.id: const <String>[],
+      };
+      await directoryRepository.updateDirectoryTagsBatch(directoryPayload);
+    }
+
+    final mediaItems = await mediaRepository.getAllMedia();
+    if (mediaItems.isEmpty) {
       return;
     }
 
-    final directoryPayload = {
-      for (final directory in directories) directory.id: const <String>[],
-    };
-    await directoryRepository.updateDirectoryTagsBatch(directoryPayload);
-
     final mediaPayload = <String, List<String>>{};
-    for (final directory in directories) {
-      final mediaItems = await mediaRepository.getMediaForDirectory(directory.id);
-      for (final media in mediaItems) {
-        if (media.tagIds.isNotEmpty) {
-          mediaPayload[media.id] = const <String>[];
-        }
+    for (final media in mediaItems) {
+      if (media.tagIds.isNotEmpty) {
+        mediaPayload[media.id] = const <String>[];
       }
     }
 

@@ -43,6 +43,12 @@ class MediaRepositoryImpl implements MediaRepository {
   }
 
   @override
+  Future<List<MediaEntity>> getAllMedia() async {
+    final models = await _mediaDataSource.getMedia();
+    return models.map(_modelToEntity).toList();
+  }
+
+  @override
   Future<List<MediaEntity>> filterMediaByTags(List<String> tagIds) async {
     if (tagIds.isEmpty) {
       final allMedia = await _mediaDataSource.getMedia();
