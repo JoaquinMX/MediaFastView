@@ -93,8 +93,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     bool withSetState = false,
   }) {
     void updater() {
-      _siblingNavigationTargets =
-          List<DirectoryNavigationTarget>.from(siblings ?? const []);
+      _siblingNavigationTargets = List<DirectoryNavigationTarget>.from(
+        siblings ?? const [],
+      );
       if (_siblingNavigationTargets.isEmpty) {
         _currentDirectoryNavigationIndex = 0;
         return;
@@ -123,42 +124,45 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       bookmarkData: widget.bookmarkData,
       navigateToDirectory:
           (path, name, bookmarkData, siblingDirectories, currentIndex) {
-        final targetIndex = currentIndex ?? _currentDirectoryNavigationIndex;
-        final hasSiblingNavigation =
-            (siblingDirectories?.isNotEmpty ?? false) &&
+            final targetIndex =
+                currentIndex ?? _currentDirectoryNavigationIndex;
+            final hasSiblingNavigation =
+                (siblingDirectories?.isNotEmpty ?? false) &&
                 _siblingNavigationTargets.isNotEmpty;
-        final isBackwardNavigation = hasSiblingNavigation
-            ? targetIndex < _currentDirectoryNavigationIndex
-            : false;
+            final isBackwardNavigation = hasSiblingNavigation
+                ? targetIndex < _currentDirectoryNavigationIndex
+                : false;
 
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 300),
-            reverseTransitionDuration: const Duration(milliseconds: 300),
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                MediaGridScreen(
-              directoryPath: path,
-              directoryName: name,
-              bookmarkData: bookmarkData,
-              siblingDirectories: siblingDirectories,
-              currentDirectoryIndex: currentIndex,
-            ),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              final beginOffset =
-                  isBackwardNavigation ? const Offset(-1, 0) : const Offset(1, 0);
-              final tween = Tween(begin: beginOffset, end: Offset.zero).chain(
-                CurveTween(curve: Curves.easeInOut),
-              );
+            Navigator.of(context).pushReplacement(
+              PageRouteBuilder(
+                transitionDuration: const Duration(milliseconds: 250),
+                reverseTransitionDuration: const Duration(milliseconds: 250),
+                pageBuilder: (context, animation, secondaryAnimation) =>
+                    MediaGridScreen(
+                      directoryPath: path,
+                      directoryName: name,
+                      bookmarkData: bookmarkData,
+                      siblingDirectories: siblingDirectories,
+                      currentDirectoryIndex: currentIndex,
+                    ),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                      final beginOffset = isBackwardNavigation
+                          ? const Offset(-1, 0)
+                          : const Offset(1, 0);
+                      final tween = Tween(
+                        begin: beginOffset,
+                        end: Offset.zero,
+                      ).chain(CurveTween(curve: Curves.easeInOutCubic));
 
-              return SlideTransition(
-                position: animation.drive(tween),
-                child: child,
-              );
-            },
-          ),
-        );
-      },
+                      return SlideTransition(
+                        position: animation.drive(tween),
+                        child: child,
+                      );
+                    },
+              ),
+            );
+          },
       onPermissionRecoveryNeeded: () async {
         return await FilePicker.platform.getDirectoryPath();
       },
@@ -182,10 +186,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.escape): _ClearMediaSelectionIntent(),
         if (_isMacOS)
-          LogicalKeySet(
-            LogicalKeyboardKey.meta,
-            LogicalKeyboardKey.keyA,
-          ): const _SelectAllMediaIntent(),
+          LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
+              const _SelectAllMediaIntent(),
         if (hasSiblingNavigation)
           LogicalKeySet(LogicalKeyboardKey.arrowLeft):
               const _NavigateToPreviousDirectoryIntent(),
@@ -210,31 +212,31 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                 },
               ),
           if (_isMacOS)
-            _SelectAllMediaIntent:
-                CallbackAction<_SelectAllMediaIntent>(
+            _SelectAllMediaIntent: CallbackAction<_SelectAllMediaIntent>(
               onInvoke: (_) {
                 if (_viewModel == null || _visibleMediaCache.isEmpty) {
                   return null;
                 }
-                _viewModel!
-                    .selectMediaRange(_visibleMediaCache.map((media) => media.id));
+                _viewModel!.selectMediaRange(
+                  _visibleMediaCache.map((media) => media.id),
+                );
                 return null;
               },
             ),
           _NavigateToPreviousDirectoryIntent:
               CallbackAction<_NavigateToPreviousDirectoryIntent>(
-            onInvoke: (_) {
-              _navigateToSibling(-1);
-              return null;
-            },
-          ),
+                onInvoke: (_) {
+                  _navigateToSibling(-1);
+                  return null;
+                },
+              ),
           _NavigateToNextDirectoryIntent:
               CallbackAction<_NavigateToNextDirectoryIntent>(
-            onInvoke: (_) {
-              _navigateToSibling(1);
-              return null;
-            },
-          ),
+                onInvoke: (_) {
+                  _navigateToSibling(1);
+                  return null;
+                },
+              ),
         },
         child: Focus(
           autofocus: true,
@@ -251,11 +253,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
               children: [
                 Column(
                   children: [
-                    _buildTagFilter(
-                      _viewModel!,
-                      state,
-                      isSelectionMode,
-                    ),
+                    _buildTagFilter(_viewModel!, state, isSelectionMode),
                     Expanded(
                       child: switch (state) {
                         MediaLoading() => const Center(
@@ -318,9 +316,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     child: Center(
                       child: IconButton(
                         onPressed:
-                            _currentDirectoryNavigationIndex < _siblingNavigationTargets.length - 1
-                                ? () => _navigateToSibling(1)
-                                : null,
+                            _currentDirectoryNavigationIndex <
+                                _siblingNavigationTargets.length - 1
+                            ? () => _navigateToSibling(1)
+                            : null,
                         icon: Icon(
                           Icons.chevron_right,
                           color: Theme.of(context).colorScheme.onSurface,
@@ -339,7 +338,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
   }
 
-  AppBar _buildNormalAppBar(MediaSortOption sortOption, MediaViewModel viewModel) {
+  AppBar _buildNormalAppBar(
+    MediaSortOption sortOption,
+    MediaViewModel viewModel,
+  ) {
     return AppBar(
       title: Text(widget.directoryName),
       actions: [
@@ -378,8 +380,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final favoritesState = ref.watch(favoritesViewModelProvider);
-    final favoriteActionLabel =
-        _favoriteBulkActionLabel(favoritesState, selectedMediaIds);
+    final favoriteActionLabel = _favoriteBulkActionLabel(
+      favoritesState,
+      selectedMediaIds,
+    );
 
     return AppBar(
       leading: IconButton(
@@ -435,8 +439,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
     if (favoritesState is FavoritesLoaded) {
       final favoritesSet = favoritesState.favorites.toSet();
-      final allSelectedAreFavorites =
-          selectedMediaIds.every((id) => favoritesSet.contains(id));
+      final allSelectedAreFavorites = selectedMediaIds.every(
+        (id) => favoritesSet.contains(id),
+      );
       if (allSelectedAreFavorites) {
         return 'Unfavorite All';
       }
@@ -455,12 +460,15 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     MediaState state,
     bool isSelectionMode,
   ) {
-    final selectedTagIds =
-        state is MediaLoaded ? state.selectedTagIds : const <String>[];
-    final showFavoritesOnly =
-        state is MediaLoaded ? state.showFavoritesOnly : viewModel.showFavoritesOnly;
-    final visibleMediaTypes =
-        state is MediaLoaded ? state.visibleMediaTypes : viewModel.visibleMediaTypes;
+    final selectedTagIds = state is MediaLoaded
+        ? state.selectedTagIds
+        : const <String>[];
+    final showFavoritesOnly = state is MediaLoaded
+        ? state.showFavoritesOnly
+        : viewModel.showFavoritesOnly;
+    final visibleMediaTypes = state is MediaLoaded
+        ? state.visibleMediaTypes
+        : viewModel.visibleMediaTypes;
     final favoritesState = ref.watch(favoritesViewModelProvider);
     final hasFavoriteMedia = switch (favoritesState) {
       FavoritesLoaded(:final favorites) => favorites.isNotEmpty,
@@ -509,12 +517,15 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           ),
           const SizedBox(height: 12),
           TagFilterChips(
-            selectedTagIds:
-                isSelectionMode ? viewModel.tagIdsInSelection() : selectedTagIds,
-            onSelectionChanged:
-                isSelectionMode ? (_) {} : viewModel.filterByTags,
-            onTagTapped:
-                isSelectionMode ? (tag, _) => viewModel.toggleTagForSelection(tag) : null,
+            selectedTagIds: isSelectionMode
+                ? viewModel.tagIdsInSelection()
+                : selectedTagIds,
+            onSelectionChanged: isSelectionMode
+                ? (_) {}
+                : viewModel.filterByTags,
+            onTagTapped: isSelectionMode
+                ? (tag, _) => viewModel.toggleTagForSelection(tag)
+                : null,
             showAllButton: !isSelectionMode,
           ),
         ],
@@ -523,11 +534,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   }
 
   IconData _iconForType(MediaType type) => switch (type) {
-        MediaType.image => Icons.image_outlined,
-        MediaType.video => Icons.movie_creation_outlined,
-        MediaType.directory => Icons.folder,
-        MediaType.text => Icons.description_outlined,
-      };
+    MediaType.image => Icons.image_outlined,
+    MediaType.video => Icons.movie_creation_outlined,
+    MediaType.directory => Icons.folder,
+    MediaType.text => Icons.description_outlined,
+  };
 
   void _onMediaTypeSelected(
     MediaType type,
@@ -584,7 +595,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         .where((item) => selectedMediaIds.contains(item.id))
         .toList(growable: false);
 
-    final result = await favoritesViewModel.toggleFavoritesForMedia(selectedMedia);
+    final result = await favoritesViewModel.toggleFavoritesForMedia(
+      selectedMedia,
+    );
 
     if (!mounted) {
       return;
@@ -592,9 +605,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
     final favoritesState = ref.read(favoritesViewModelProvider);
     if (favoritesState is FavoritesError) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(favoritesState.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(favoritesState.message)));
       return;
     }
 
@@ -608,9 +621,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       _ => 'No changes to favorites',
     };
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildGrid(
@@ -925,7 +938,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   ) {
     return Center(
       child: PermissionIssuePanel(
-        message: 'The permissions for "$directoryName" are no longer available.',
+        message:
+            'The permissions for "$directoryName" are no longer available.',
         helpText:
             'This can happen when security-scoped bookmarks expire or when directory permissions change.',
         recoverLabel: 'Re-select Directory',
@@ -1021,14 +1035,16 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   Future<void> _onMediaTap(BuildContext context, MediaEntity media) async {
     if (media.type == MediaType.directory) {
       final siblingNavigation = _buildSiblingNavigationTargetsFromCache();
-      final targetIndex = siblingNavigation
-          .indexWhere((directory) => directory.path == media.path);
+      final targetIndex = siblingNavigation.indexWhere(
+        (directory) => directory.path == media.path,
+      );
       _viewModel!.navigateToDirectory(
         media.path,
         media.name,
         bookmarkData: media.bookmarkData,
-        siblingDirectories:
-            siblingNavigation.isEmpty ? null : siblingNavigation,
+        siblingDirectories: siblingNavigation.isEmpty
+            ? null
+            : siblingNavigation,
         currentIndex: targetIndex == -1 ? null : targetIndex,
       );
     } else {
@@ -1040,8 +1056,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
             directoryName: widget.directoryName,
             initialMediaId: media.id,
             bookmarkData: widget.bookmarkData,
-            mediaList:
-                _visibleMediaCache.isNotEmpty ? _visibleMediaCache : null,
+            mediaList: _visibleMediaCache.isNotEmpty
+                ? _visibleMediaCache
+                : null,
             siblingDirectories: _siblingNavigationTargets,
             currentDirectoryIndex: _currentDirectoryNavigationIndex,
           ),
