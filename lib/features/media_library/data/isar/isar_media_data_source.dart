@@ -346,9 +346,7 @@ class IsarMediaCollectionStore implements MediaCollectionStore {
 
   @override
   Future<MediaCollection?> getByMediaId(String mediaId) {
-    final hash = sha256.convert(utf8.encode(mediaId)).bytes;
-    final id = hash.fold<int>(0, (prev, element) => prev + element);
-    return _collection.get(id);
+    return _collection.get(mediaCollectionIdFromMediaId(mediaId));
   }
 
   @override

@@ -26,8 +26,7 @@ class MediaCollection {
 
   /// Unique hash-based identifier used by Isar for this record.
   Id get id {
-    final hash = sha256.convert(utf8.encode(mediaId)).bytes;
-    return hash.fold<int>(0, (prev, element) => prev + element);
+    return mediaCollectionIdFromMediaId(mediaId);
   }
   set id(Id value) {}
 
@@ -65,6 +64,16 @@ class MediaCollection {
 
   /// Link to the parent directory record.
   final IsarLink<DirectoryCollection> directory = IsarLink<DirectoryCollection>();
+}
+
+/// Generates a stable numeric identifier for a media record based on [mediaId].
+///
+/// The implementation uses the first 8 bytes of the SHA-256 digest to build a
+/// 64-bit integer, drastically reducing collision risk compared to summing the
+/// digest bytes.
+int mediaCollectionIdFromMediaId(String mediaId) {
+  final hash = sha256.convert(utf8.encode(mediaId)).bytes;
+  return hash.take(8).fold<int>(0, (value, byte) => (value << 8) | byte);
 }
 
 extension MediaCollectionMapper on MediaCollection {
