@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
 import 'package:media_fast_view/core/services/isar_database.dart';
+import 'package:media_fast_view/core/utils/batch_update_result.dart';
 import 'package:media_fast_view/features/media_library/data/isar/directory_collection.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/models/directory_model.dart';
@@ -165,6 +166,28 @@ void main() {
 
       final directories = await dataSource.getDirectories();
       expect(directories, equals(<DirectoryModel>[updated]));
+    });
+
+    test('updateDirectoryTagsBatch updates only matching directories', () async {
+      final first = _buildDirectory(id: 'dir-1', name: 'First');
+      final second = _buildDirectory(id: 'dir-2', name: 'Second');
+      await dataSource.saveDirectories(<DirectoryModel>[first, second]);
+
+      final result = await dataSource.updateDirectoryTagsBatch(
+        <String, List<String>>{
+          'dir-1': <String>['a', 'b'],
+          'missing': const <String>['c'],
+        },
+      );
+
+      final directories = await dataSource.getDirectories();
+      final updated = directories.firstWhere((dir) => dir.id == 'dir-1');
+      final untouched = directories.firstWhere((dir) => dir.id == 'dir-2');
+
+      expect(updated.tagIds, equals(<String>['a', 'b']));
+      expect(untouched.tagIds, equals(second.tagIds));
+      expect(result.successfulIds, equals(<String>['dir-1']));
+      expect(result.failureReasons.keys, contains('missing'));
     });
 
     test('clearDirectories removes all entries', () async {

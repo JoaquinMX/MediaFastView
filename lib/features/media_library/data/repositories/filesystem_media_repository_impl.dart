@@ -254,37 +254,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   Future<BatchUpdateResult> updateMediaTagsBatch(
     Map<String, List<String>> mediaTags,
   ) async {
-    if (mediaTags.isEmpty) {
-      return BatchUpdateResult.empty;
-    }
-
-    final models = await _mediaDataSource.getMedia();
-    final indexById = {
-      for (var i = 0; i < models.length; i++) models[i].id: i,
-    };
-
-    final successes = <String>[];
-    final failures = <String, String>{};
-
-    for (final entry in mediaTags.entries) {
-      final index = indexById[entry.key];
-      if (index == null) {
-        failures[entry.key] = 'Media not found';
-        continue;
-      }
-
-      models[index] = models[index].copyWith(tagIds: entry.value);
-      successes.add(entry.key);
-    }
-
-    if (successes.isNotEmpty) {
-      await _mediaDataSource.saveMedia(models);
-    }
-
-    return BatchUpdateResult(
-      successfulIds: successes,
-      failureReasons: failures,
-    );
+    return _mediaDataSource.updateMediaTagsBatch(mediaTags);
   }
 
   /// Merges tags from local storage with filesystem-scanned media.

@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/isar_database.dart';
 import '../../../../core/services/logging_service.dart';
+import '../../../../core/utils/batch_update_result.dart';
 import '../models/media_model.dart';
 import 'isar_directory_data_source.dart';
 import 'media_collection.dart';
@@ -143,6 +144,54 @@ class IsarMediaDataSource {
         await _mediaStore.put(existing);
       });
     }, 'Failed to update media tags');
+  }
+
+  /// Updates tags for multiple media entries without rewriting the entire
+  /// collection. Returns a [BatchUpdateResult] describing successes/failures.
+  Future<BatchUpdateResult> updateMediaTagsBatch(
+    Map<String, List<String>> mediaTags,
+  ) async {
+    if (mediaTags.isEmpty) {
+      return BatchUpdateResult.empty;
+    }
+
+    await _ensureReady();
+
+    try {
+      final successes = <String>[];
+      final failures = <String, String>{};
+      final updatedCollections = <MediaCollection>[];
+
+      for (final entry in mediaTags.entries) {
+        final collection = await _mediaStore.getByMediaId(entry.key);
+        if (collection == null) {
+          failures[entry.key] = 'Media not found';
+          continue;
+        }
+
+        collection.tagIds = List<String>.from(entry.value);
+        updatedCollections.add(collection);
+        successes.add(entry.key);
+      }
+
+      if (updatedCollections.isNotEmpty) {
+        await _mediaStore.writeTxn(() async {
+          for (final collection in updatedCollections) {
+            await _mediaStore.put(collection);
+          }
+        });
+      }
+
+      return BatchUpdateResult(
+        successfulIds: successes,
+        failureReasons: failures,
+      );
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PersistenceError('Failed to update media tags: $error'),
+        stackTrace,
+      );
+    }
   }
 
   /// Removes every media record associated with [directoryId].

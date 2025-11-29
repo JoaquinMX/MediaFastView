@@ -206,46 +206,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
   Future<BatchUpdateResult> updateDirectoryTagsBatch(
     Map<String, List<String>> directoryTags,
   ) async {
-    if (directoryTags.isEmpty) {
-      return BatchUpdateResult.empty;
-    }
-
-    final models = await _isarDirectoryDataSource.getDirectories();
-    final indexById = {
-      for (var i = 0; i < models.length; i++) models[i].id: i,
-    };
-
-    final successes = <String>[];
-    final failures = <String, String>{};
-
-    for (final entry in directoryTags.entries) {
-      final index = indexById[entry.key];
-      if (index == null) {
-        failures[entry.key] = 'Directory not found';
-        continue;
-      }
-
-      models[index] = models[index].copyWith(tagIds: entry.value);
-      successes.add(entry.key);
-    }
-
-    if (successes.isNotEmpty) {
-      await _isarDirectoryDataSource.saveDirectories(models);
-      LoggingService.instance.info(
-        'Updated tags for ${successes.length} directories in a single batch.',
-      );
-    }
-
-    if (failures.isNotEmpty) {
-      LoggingService.instance.warning(
-        'Failed to update tags for directories: ${failures.keys.join(', ')}',
-      );
-    }
-
-    return BatchUpdateResult(
-      successfulIds: successes,
-      failureReasons: failures,
-    );
+    return _isarDirectoryDataSource.updateDirectoryTagsBatch(directoryTags);
   }
 
   @override
