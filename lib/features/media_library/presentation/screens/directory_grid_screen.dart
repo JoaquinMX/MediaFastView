@@ -21,7 +21,6 @@ import '../../../tagging/presentation/view_models/tag_management_view_model.dart
 import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
 import '../../../tagging/presentation/widgets/selectable_tag_chip_strip.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
-import '../../../tagging/presentation/widgets/tag_filter_dialog.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../models/directory_navigation_target.dart';
@@ -468,17 +467,6 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         );
         viewModel.filterByTags(newSelection);
       },
-      maxChipsToShow: UiGrid.maxFilterChips,
-      onOverflowPressed: () => TagFilterDialog.show(
-        context,
-        selectedTagIds: selectedTagIds,
-        onSelectionChanged: (newSelection) {
-          debugPrint(
-            'DirectoryGridScreen: Tag selection changed via dialog: $newSelection',
-          );
-          viewModel.filterByTags(newSelection);
-        },
-      ),
     );
   }
 

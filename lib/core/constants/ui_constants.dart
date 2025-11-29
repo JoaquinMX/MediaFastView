@@ -126,9 +126,6 @@ class UiGrid {
   /// Maximum cross-axis extent for responsive grid
   static const double maxCrossAxisExtent = 160.0;
 
-  /// Maximum number of filter chips to show
-  static const int maxFilterChips = 8;
-
   /// Flex ratios for grid items
   static const int thumbnailFlex = 3;
   static const int infoFlex = 2;
