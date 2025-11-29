@@ -35,10 +35,28 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       return [];
     }
 
-    return getMediaForDirectoryPath(
-      directory.path,
-      bookmarkData: directory.bookmarkData,
-    );
+    try {
+      return await getMediaForDirectoryPath(
+        directory.path,
+        bookmarkData: directory.bookmarkData,
+      );
+    } on DirectoryError catch (error) {
+      _permissionService.logPermissionEvent(
+        'repository_get_media_cached_fallback',
+        path: directory.path,
+        error: error.message,
+      );
+      final cachedMedia = await _mediaDataSource.getMediaForDirectory(directoryId);
+      return cachedMedia.map(_modelToEntity).toList();
+    } on PermissionError catch (error) {
+      _permissionService.logPermissionEvent(
+        'repository_get_media_cached_fallback',
+        path: directory.path,
+        error: error.message,
+      );
+      final cachedMedia = await _mediaDataSource.getMediaForDirectory(directoryId);
+      return cachedMedia.map(_modelToEntity).toList();
+    }
   }
 
   @override
