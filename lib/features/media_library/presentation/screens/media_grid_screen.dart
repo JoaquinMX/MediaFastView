@@ -122,7 +122,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       bookmarkData: widget.bookmarkData,
       navigateToDirectory:
           (path, name, bookmarkData, siblingDirectories, currentIndex) {
-        Navigator.of(context).push(
+        Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => MediaGridScreen(
               directoryPath: path,
