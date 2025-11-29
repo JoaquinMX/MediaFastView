@@ -5,6 +5,7 @@ import 'package:isar/isar.dart';
 
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/isar_database.dart';
+import '../../../../core/utils/batch_update_result.dart';
 import '../models/directory_model.dart';
 import 'directory_collection.dart';
 
@@ -104,6 +105,53 @@ class IsarDirectoryDataSource {
         await _store.put(updatedDirectory.toCollection());
       });
     }, 'Failed to update directory');
+  }
+
+  /// Updates tags for multiple directories without wiping unrelated records.
+  Future<BatchUpdateResult> updateDirectoryTagsBatch(
+    Map<String, List<String>> directoryTags,
+  ) async {
+    if (directoryTags.isEmpty) {
+      return BatchUpdateResult.empty;
+    }
+
+    await _ensureReady();
+
+    try {
+      final successes = <String>[];
+      final failures = <String, String>{};
+      final updatedCollections = <DirectoryCollection>[];
+
+      for (final entry in directoryTags.entries) {
+        final collection = await _store.getByDirectoryId(entry.key);
+        if (collection == null) {
+          failures[entry.key] = 'Directory not found';
+          continue;
+        }
+
+        collection.tagIds = List<String>.from(entry.value);
+        updatedCollections.add(collection);
+        successes.add(entry.key);
+      }
+
+      if (updatedCollections.isNotEmpty) {
+        await _store.writeTxn(() async {
+          for (final collection in updatedCollections) {
+            await _store.put(collection);
+          }
+        });
+      }
+
+      return BatchUpdateResult(
+        successfulIds: successes,
+        failureReasons: failures,
+      );
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PersistenceError('Failed to update directory tags: $error'),
+        stackTrace,
+      );
+    }
   }
 
   /// Removes all directories from persistence.

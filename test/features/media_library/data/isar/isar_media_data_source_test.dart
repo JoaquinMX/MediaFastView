@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
 import 'package:media_fast_view/core/services/isar_database.dart';
+import 'package:media_fast_view/core/utils/batch_update_result.dart';
 import 'package:media_fast_view/features/media_library/data/isar/directory_collection.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
@@ -263,6 +264,37 @@ void main() {
 
       final media = await dataSource.getMedia();
       expect(media.single.tagIds, equals(<String>['new', 'tags']));
+    });
+
+    test('updateMediaTagsBatch updates only targeted entries', () async {
+      await _seedDirectories(<DirectoryModel>[_buildDirectory('dir-1')]);
+      final mediaModels = <MediaModel>[
+        _buildMedia(
+          id: 'media-1',
+          directoryId: 'dir-1',
+          tagIds: const <String>['keep'],
+        ),
+        _buildMedia(
+          id: 'media-2',
+          directoryId: 'dir-1',
+          tagIds: const <String>['original'],
+        ),
+      ];
+      await dataSource.saveMedia(mediaModels);
+
+      final result = await dataSource.updateMediaTagsBatch(<String, List<String>>{
+        'media-1': <String>['new'],
+        'missing-media': const <String>['ignored'],
+      });
+
+      final media = await dataSource.getMedia();
+      final updated = media.firstWhere((m) => m.id == 'media-1');
+      final untouched = media.firstWhere((m) => m.id == 'media-2');
+
+      expect(updated.tagIds, equals(<String>['new']));
+      expect(untouched.tagIds, equals(<String>['original']));
+      expect(result.successfulIds, equals(<String>['media-1']));
+      expect(result.failureReasons.keys, contains('missing-media'));
     });
 
     test('removeMediaForDirectory deletes matching entries', () async {
