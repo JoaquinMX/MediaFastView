@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../favorites/domain/repositories/favorites_repository.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../media_library/presentation/models/directory_navigation_target.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/domain/use_cases/assign_tag_use_case.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
@@ -44,9 +45,98 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
   VideoPlaybackSettings _playbackSettings;
   bool _loopOverridden = false;
+  DirectoryNavigationTarget? _currentDirectory;
+  List<DirectoryNavigationTarget> _siblingDirectories = const [];
+  int _currentDirectoryIndex = 0;
+
+  DirectoryNavigationTarget? get currentDirectory => _currentDirectory;
+  int get currentDirectoryIndex => _currentDirectoryIndex;
+  List<DirectoryNavigationTarget> get siblingDirectories =>
+      List<DirectoryNavigationTarget>.unmodifiable(_siblingDirectories);
+
+  DirectoryNavigationTarget? _nextDirectoryTarget() {
+    if (_siblingDirectories.isEmpty) return null;
+    final nextIndex = _currentDirectoryIndex + 1;
+    if (nextIndex >= _siblingDirectories.length) return null;
+    return _siblingDirectories[nextIndex];
+  }
+
+  DirectoryNavigationTarget? _previousDirectoryTarget() {
+    if (_siblingDirectories.isEmpty) return null;
+    final previousIndex = _currentDirectoryIndex - 1;
+    if (previousIndex < 0) return null;
+    return _siblingDirectories[previousIndex];
+  }
+
+  Future<void> navigateToDirectoryTarget(
+    DirectoryNavigationTarget target, {
+    bool startAtEnd = false,
+  }) async {
+    if (_siblingDirectories.isEmpty ||
+        !_siblingDirectories.any((directory) => directory.path == target.path)) {
+      _siblingDirectories = [..._siblingDirectories, target];
+    }
+
+    final resolvedIndex = _siblingDirectories.indexWhere(
+      (directory) => directory.path == target.path,
+    );
+
+    _currentDirectoryIndex = resolvedIndex == -1 ? 0 : resolvedIndex;
+    _currentDirectory = target;
+
+    await initialize(
+      target.path,
+      directoryName: target.name,
+      bookmarkData: target.bookmarkData,
+      siblingDirectories: _siblingDirectories,
+      currentDirectoryIndex: _currentDirectoryIndex,
+      startAtEnd: startAtEnd,
+    );
+  }
+
+  void _applyNavigationContext(
+    String directoryPath, {
+    String? directoryName,
+    String? bookmarkData,
+    List<DirectoryNavigationTarget>? siblingDirectories,
+    int? currentIndex,
+  }) {
+    _siblingDirectories = List<DirectoryNavigationTarget>.from(
+      siblingDirectories ?? _siblingDirectories,
+    );
+
+    if (_siblingDirectories.isNotEmpty) {
+      final resolvedIndex = currentIndex ??
+          _siblingDirectories.indexWhere(
+            (directory) => directory.path == directoryPath,
+          );
+
+      final safeIndex = (resolvedIndex == -1 ? 0 : resolvedIndex)
+          .clamp(0, _siblingDirectories.length - 1);
+      _currentDirectoryIndex = safeIndex;
+      _currentDirectory = _siblingDirectories[_currentDirectoryIndex];
+    } else {
+      _currentDirectory = DirectoryNavigationTarget(
+        path: directoryPath,
+        name: directoryName ?? directoryPath.split('/').last,
+        bookmarkData: bookmarkData,
+      );
+      _currentDirectoryIndex = 0;
+    }
+  }
 
   /// Initialize the viewer with media from a directory or provided media list
-  Future<void> initialize(String directoryPath, {String? initialMediaId, String? bookmarkData, List<MediaEntity>? mediaList}) async {
+  Future<void> initialize(
+    String directoryPath, {
+    String? directoryName,
+    String? initialMediaId,
+    String? bookmarkData,
+    List<MediaEntity>? mediaList,
+    List<DirectoryNavigationTarget>? siblingDirectories,
+    int? currentDirectoryIndex,
+    int? initialIndex,
+    bool startAtEnd = false,
+  }) async {
     LoggingService.instance.info('Initializing with directoryPath: $directoryPath, initialMediaId: $initialMediaId, mediaList provided: ${mediaList != null}');
     Future(() {
       state = const FullScreenLoading();
@@ -78,17 +168,26 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         return;
       }
 
-      final currentIndex = initialMediaId != null
-          ? finalMediaList.indexWhere((media) => media.id == initialMediaId)
-          : 0;
+      _applyNavigationContext(
+        directoryPath,
+        bookmarkData: bookmarkData,
+        directoryName: directoryName,
+        siblingDirectories: siblingDirectories,
+        currentIndex: currentDirectoryIndex,
+      );
 
-      if (currentIndex == -1) {
+      final requestedIndex = initialMediaId != null
+          ? finalMediaList.indexWhere((media) => media.id == initialMediaId)
+          : (startAtEnd ? finalMediaList.length - 1 : (initialIndex ?? 0));
+
+      if (initialMediaId != null && requestedIndex == -1) {
         Future(() {
           state = const FullScreenError('Initial media not found');
         });
         return;
       }
 
+      final currentIndex = requestedIndex.clamp(0, finalMediaList.length - 1);
       final currentMedia = finalMediaList[currentIndex];
       final isVideo = currentMedia.type == MediaType.video;
 
@@ -164,9 +263,11 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   }
 
   /// Navigate to next media
-  Future<void> nextMedia() async {
+  Future<NavigationAttemptResult> nextMedia() async {
     final currentState = state;
-    if (currentState is! FullScreenLoaded) return;
+    if (currentState is! FullScreenLoaded) {
+      return const NavigationAttemptResult(mediaAdvanced: false);
+    }
 
     if (currentState.currentIndex < currentState.mediaList.length - 1) {
       final newIndex = currentState.currentIndex + 1;
@@ -188,13 +289,21 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
       _loopOverridden = false;
 
+      return const NavigationAttemptResult(mediaAdvanced: true);
     }
+
+    return NavigationAttemptResult(
+      mediaAdvanced: false,
+      directoryTarget: _nextDirectoryTarget(),
+    );
   }
 
   /// Navigate to previous media
-  Future<void> previousMedia() async {
+  Future<NavigationAttemptResult> previousMedia() async {
     final currentState = state;
-    if (currentState is! FullScreenLoaded) return;
+    if (currentState is! FullScreenLoaded) {
+      return const NavigationAttemptResult(mediaAdvanced: false);
+    }
 
     if (currentState.currentIndex > 0) {
       final newIndex = currentState.currentIndex - 1;
@@ -218,7 +327,13 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
       _loopOverridden = false;
 
+      return const NavigationAttemptResult(mediaAdvanced: true);
     }
+
+    return NavigationAttemptResult(
+      mediaAdvanced: false,
+      directoryTarget: _previousDirectoryTarget(),
+    );
   }
 
   /// Toggles a [tag] assignment for the currently selected media item.
@@ -482,9 +597,9 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   /// Helper method to check if an error is permission-related.
   bool _isPermissionError(String errorMessage) {
     return errorMessage.contains('Operation not permitted') ||
-           errorMessage.contains('errno = 1') ||
-           errorMessage.contains('Permission denied') ||
-           errorMessage.contains('FileSystemError');
+        errorMessage.contains('errno = 1') ||
+        errorMessage.contains('Permission denied') ||
+        errorMessage.contains('FileSystemError');
   }
 }
 
@@ -506,6 +621,19 @@ class TagUpdateResult {
   final int removedCount;
 
   bool get hasChanges => addedCount > 0 || removedCount > 0;
+}
+
+/// Result of attempting to move to the next or previous media item.
+class NavigationAttemptResult {
+  const NavigationAttemptResult({
+    required this.mediaAdvanced,
+    this.directoryTarget,
+  });
+
+  final bool mediaAdvanced;
+  final DirectoryNavigationTarget? directoryTarget;
+
+  bool get hasDirectoryOption => directoryTarget != null;
 }
 
 /// Provider for FullScreenViewModel

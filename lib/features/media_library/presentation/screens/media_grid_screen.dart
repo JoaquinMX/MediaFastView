@@ -16,6 +16,7 @@ import '../../../../shared/widgets/permission_issue_panel.dart';
 
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
+import '../../../full_screen/presentation/models/full_screen_exit_result.dart';
 import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
 import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
@@ -993,7 +994,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         .toList();
   }
 
-  void _onMediaTap(BuildContext context, MediaEntity media) {
+  Future<void> _onMediaTap(BuildContext context, MediaEntity media) async {
     if (media.type == MediaType.directory) {
       final siblingNavigation = _buildSiblingNavigationTargetsFromCache();
       final targetIndex = siblingNavigation
@@ -1008,17 +1009,38 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       );
     } else {
       // Open full-screen viewer
-      Navigator.of(context).push(
+      final result = await Navigator.of(context).push<FullScreenExitResult?>(
         MaterialPageRoute(
           builder: (context) => FullScreenViewerScreen(
             directoryPath: widget.directoryPath,
+            directoryName: widget.directoryName,
             initialMediaId: media.id,
             bookmarkData: widget.bookmarkData,
             mediaList:
                 _visibleMediaCache.isNotEmpty ? _visibleMediaCache : null,
+            siblingDirectories: _siblingNavigationTargets,
+            currentDirectoryIndex: _currentDirectoryNavigationIndex,
           ),
         ),
       );
+
+      if (!context.mounted || result == null) return;
+
+      _applyNavigationContext(
+        result.siblingDirectories,
+        result.currentDirectoryIndex,
+        withSetState: true,
+      );
+
+      if (result.currentDirectory.path != widget.directoryPath) {
+        _viewModel?.navigateToDirectory(
+          result.currentDirectory.path,
+          result.currentDirectory.name,
+          bookmarkData: result.currentDirectory.bookmarkData,
+          siblingDirectories: result.siblingDirectories,
+          currentIndex: result.currentDirectoryIndex,
+        );
+      }
     }
   }
 

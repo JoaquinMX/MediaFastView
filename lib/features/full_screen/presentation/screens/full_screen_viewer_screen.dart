@@ -6,10 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../media_library/presentation/models/directory_navigation_target.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/view_models/tags_view_model.dart';
 import '../../../tagging/presentation/widgets/tag_chip.dart';
 import '../../domain/entities/viewer_state_entity.dart';
+import '../models/full_screen_exit_result.dart';
 import '../view_models/full_screen_view_model.dart';
 import '../widgets/full_screen_image_viewer.dart';
 import '../widgets/full_screen_video_player.dart';
@@ -24,15 +26,21 @@ class FullScreenViewerScreen extends ConsumerStatefulWidget {
   const FullScreenViewerScreen({
     super.key,
     required this.directoryPath,
+    this.directoryName,
     this.initialMediaId,
     this.bookmarkData,
     this.mediaList,
+    this.siblingDirectories,
+    this.currentDirectoryIndex,
   });
 
   final String directoryPath;
+  final String? directoryName;
   final String? initialMediaId;
   final String? bookmarkData;
   final List<MediaEntity>? mediaList;
+  final List<DirectoryNavigationTarget>? siblingDirectories;
+  final int? currentDirectoryIndex;
 
   @override
   ConsumerState<FullScreenViewerScreen> createState() =>
@@ -57,9 +65,12 @@ class _FullScreenViewerScreenState
   Future<void> _initializeViewer() async {
     await _viewModel.initialize(
       widget.directoryPath,
+      directoryName: widget.directoryName,
       initialMediaId: widget.initialMediaId,
       bookmarkData: widget.bookmarkData,
       mediaList: widget.mediaList,
+      siblingDirectories: widget.siblingDirectories,
+      currentDirectoryIndex: widget.currentDirectoryIndex,
     );
   }
 
@@ -125,7 +136,7 @@ class _FullScreenViewerScreenState
                   child: Row(
                     children: [
                       IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: _popWithResult,
                         icon: Platform.isMacOS
                             ? Icon(Icons.arrow_back, color: colorScheme.onSurface)
                             : Icon(Icons.close, color: colorScheme.onSurface),
@@ -186,9 +197,7 @@ class _FullScreenViewerScreenState
                 bottom: 0,
                 child: Center(
                   child: IconButton(
-                    onPressed: state.currentIndex > 0
-                        ? _viewModel.previousMedia
-                        : null,
+                    onPressed: _handlePreviousNavigation,
                     icon: Icon(
                       Icons.chevron_left,
                       color: colorScheme.onSurface,
@@ -203,9 +212,7 @@ class _FullScreenViewerScreenState
                 bottom: 0,
                 child: Center(
                   child: IconButton(
-                    onPressed: state.currentIndex < state.mediaList.length - 1
-                        ? _viewModel.nextMedia
-                        : null,
+                    onPressed: _handleNextNavigation,
                     icon: Icon(
                       Icons.chevron_right,
                       color: colorScheme.onSurface,
@@ -228,7 +235,7 @@ class _FullScreenViewerScreenState
     return GestureDetector(
       onTap: () => setState(() => _showControls = !_showControls),
       onDoubleTap: () =>
-          Navigator.of(context).pop(), // Double-tap to exit full-screen
+          _popWithResult(), // Double-tap to exit full-screen
       onLongPress: () => _showMediaInfo(media), // Long-press to show media info
       onSecondaryTap: () => _showContextMenu(media), // Right-click context menu
       child: MouseRegion(
@@ -292,8 +299,8 @@ class _FullScreenViewerScreenState
           isMuted: state.isMuted,
           progress: clampedProgress,
           onPlayPause: _viewModel.togglePlayPause,
-          onNext: () => _viewModel.nextMedia(),
-          onPrevious: () => _viewModel.previousMedia(),
+          onNext: _handleNextNavigation,
+          onPrevious: _handlePreviousNavigation,
           onToggleLoop: _viewModel.toggleLoop,
           onToggleMute: _viewModel.toggleMute,
           visibility: const MediaPlaybackControlVisibility(
@@ -302,9 +309,12 @@ class _FullScreenViewerScreenState
             showVideoLoop: false,
           ),
           availability: MediaPlaybackControlAvailability(
-            enablePrevious: state.currentIndex > 0,
+            enablePrevious: state.currentIndex > 0 ||
+                _viewModel.currentDirectoryIndex > 0,
             enablePlayPause: true,
-            enableNext: state.currentIndex < totalItems - 1,
+            enableNext: state.currentIndex < totalItems - 1 ||
+                _viewModel.currentDirectoryIndex <
+                    (_viewModel.siblingDirectories.length - 1),
             enableLoop: true,
             enableShuffle: false,
             enableMute: true,
@@ -421,7 +431,7 @@ class _FullScreenViewerScreenState
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: _popWithResult,
             child: const Text('Close'),
           ),
         ],
@@ -586,6 +596,80 @@ class _FullScreenViewerScreenState
     _viewModel.seekTo(position);
   }
 
+  Future<void> _promptDirectoryNavigation(
+    DirectoryNavigationTarget target, {
+    required bool forward,
+  }) async {
+    final directionLabel = forward ? 'next' : 'previous';
+    final shouldNavigate = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Continue to sibling directory?'),
+            content: Text(
+              'You have reached the ${forward ? 'end' : 'beginning'} of this directory. Go to the $directionLabel directory "${target.name}"?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Stay'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Go'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (shouldNavigate) {
+      await _viewModel.navigateToDirectoryTarget(
+        target,
+        startAtEnd: !forward,
+      );
+    }
+  }
+
+  Future<void> _handleNextNavigation() async {
+    final navigationResult = await _viewModel.nextMedia();
+    if (!navigationResult.mediaAdvanced &&
+        navigationResult.hasDirectoryOption &&
+        navigationResult.directoryTarget != null) {
+      await _promptDirectoryNavigation(
+        navigationResult.directoryTarget!,
+        forward: true,
+      );
+    }
+  }
+
+  Future<void> _handlePreviousNavigation() async {
+    final navigationResult = await _viewModel.previousMedia();
+    if (!navigationResult.mediaAdvanced &&
+        navigationResult.hasDirectoryOption &&
+        navigationResult.directoryTarget != null) {
+      await _promptDirectoryNavigation(
+        navigationResult.directoryTarget!,
+        forward: false,
+      );
+    }
+  }
+
+  void _popWithResult() {
+    final currentDirectory = _viewModel.currentDirectory;
+    if (currentDirectory == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    Navigator.of(context).pop(
+      FullScreenExitResult(
+        currentDirectory: currentDirectory,
+        currentDirectoryIndex: _viewModel.currentDirectoryIndex,
+        siblingDirectories: _viewModel.siblingDirectories,
+      ),
+    );
+  }
+
   Widget _buildPermissionRevoked() {
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
@@ -603,9 +687,10 @@ class _FullScreenViewerScreenState
         backgroundColor: colorScheme.surface.withValues(alpha: 0.9),
         borderColor: colorScheme.error,
         onRecover: () async {
+          final directory = _viewModel.currentDirectory;
           final success = await _viewModel.attemptPermissionRecovery(
-            widget.directoryPath,
-            bookmarkData: widget.bookmarkData,
+            directory?.path ?? widget.directoryPath,
+            bookmarkData: directory?.bookmarkData ?? widget.bookmarkData,
           );
 
           if (context.mounted) {
@@ -622,7 +707,7 @@ class _FullScreenViewerScreenState
             );
           }
         },
-        onBack: () => Navigator.of(context).pop(),
+        onBack: _popWithResult,
       ),
     );
   }
@@ -644,17 +729,13 @@ class _FullScreenViewerScreenState
 
     switch (event.logicalKey) {
       case LogicalKeyboardKey.escape:
-        Navigator.of(context).pop();
+        _popWithResult();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowLeft:
-        if (state.currentIndex > 0) {
-          _viewModel.previousMedia();
-        }
+        unawaited(_handlePreviousNavigation());
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowRight:
-        if (state.currentIndex < state.mediaList.length - 1) {
-          _viewModel.nextMedia();
-        }
+        unawaited(_handleNextNavigation());
         return KeyEventResult.handled;
       case LogicalKeyboardKey.home:
         if (state.mediaList.isNotEmpty) {
