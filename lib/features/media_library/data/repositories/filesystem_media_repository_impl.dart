@@ -18,10 +18,11 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     IsarMediaDataSource isarMediaDataSource, {
     PermissionService? permissionService,
     FilesystemMediaDataSource? filesystemDataSource,
-  })  : _mediaDataSource = isarMediaDataSource,
-        _filesystemDataSource =
-            filesystemDataSource ?? FilesystemMediaDataSource(bookmarkService, permissionService),
-        _permissionService = permissionService ?? PermissionService();
+  }) : _mediaDataSource = isarMediaDataSource,
+       _filesystemDataSource =
+           filesystemDataSource ??
+           FilesystemMediaDataSource(bookmarkService, permissionService),
+       _permissionService = permissionService ?? PermissionService();
   final DirectoryRepository _directoryRepository;
   final IsarMediaDataSource _mediaDataSource;
   final FilesystemMediaDataSource _filesystemDataSource;
@@ -49,14 +50,13 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     _permissionService.logPermissionEvent(
       'repository_get_media_start',
       path: directoryPath,
-      details: 'directoryId=$directoryId, bookmark_present=${bookmarkData != null}',
+      details:
+          'directoryId=$directoryId, bookmark_present=${bookmarkData != null}',
     );
 
     // Validate permissions before attempting to scan
-    final validationResult = await _filesystemDataSource.validateDirectoryAccess(
-      directoryPath,
-      bookmarkData: bookmarkData,
-    );
+    final validationResult = await _filesystemDataSource
+        .validateDirectoryAccess(directoryPath, bookmarkData: bookmarkData);
 
     if (!validationResult.canAccess) {
       _permissionService.logPermissionEvent(
@@ -66,9 +66,13 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       );
 
       if (validationResult.requiresRecovery) {
-        throw PermissionError('Directory access denied: ${validationResult.reason}. Recovery required.');
+        throw PermissionError(
+          'Directory access denied: ${validationResult.reason}. Recovery required.',
+        );
       } else {
-        throw DirectoryAccessDeniedError('Directory access denied: ${validationResult.reason}');
+        throw DirectoryAccessDeniedError(
+          'Directory access denied: ${validationResult.reason}',
+        );
       }
     }
 
@@ -117,7 +121,9 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       return _scanDirectoriesForMedia(id);
     }
 
-    final directory = await _directoryRepository.getDirectoryById(localMedia.directoryId);
+    final directory = await _directoryRepository.getDirectoryById(
+      localMedia.directoryId,
+    );
     if (directory == null) {
       return _modelToEntity(localMedia);
     }
@@ -194,7 +200,9 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       final directoryId = entry.key;
       final mediaIds = entry.value;
 
-      final directory = await _directoryRepository.getDirectoryById(directoryId);
+      final directory = await _directoryRepository.getDirectoryById(
+        directoryId,
+      );
       if (directory == null) continue;
 
       final directoryMedia = await getMediaForDirectoryPath(
@@ -203,7 +211,9 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       );
 
       // Filter to only include media with matching IDs
-      result.addAll(directoryMedia.where((media) => mediaIds.contains(media.id)));
+      result.addAll(
+        directoryMedia.where((media) => mediaIds.contains(media.id)),
+      );
     }
 
     return result;
@@ -258,12 +268,14 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   }
 
   /// Merges tags from local storage with filesystem-scanned media.
-  Future<List<MediaModel>> _mergeTagsWithLocalStorage(List<MediaModel> scannedMedia) async {
+  Future<List<MediaModel>> _mergeTagsWithLocalStorage(
+    List<MediaModel> scannedMedia,
+  ) async {
     final existingMedia = await _mediaDataSource.getMedia();
     final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
     // Convert entities back to models for persistence, merging tagIds from persisted data
-    return scannedMedia.map((entity) {
+    final mergedModels = scannedMedia.map((entity) {
       final existing = existingMediaMap[entity.id];
       final mergedTagIds = <String>{...entity.tagIds};
 
@@ -283,6 +295,8 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
         bookmarkData: entity.bookmarkData,
       );
     }).toList();
+    await _mediaDataSource.addMedia(mergedModels);
+    return mergedModels;
   }
 
   /// Converts MediaModel to MediaEntity.
