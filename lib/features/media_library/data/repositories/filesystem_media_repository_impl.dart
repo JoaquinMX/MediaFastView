@@ -160,6 +160,12 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     return _modelToEntity(localMedia);
   }
 
+  @override
+  Future<List<MediaEntity>> getAllMedia() async {
+    final models = await _mediaDataSource.getMedia();
+    return models.map(_modelToEntity).toList();
+  }
+
   /// Gets media by ID from a specific directory.
   Future<MediaEntity?> getMediaByIdFromDirectory(
     String id,

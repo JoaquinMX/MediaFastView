@@ -14,6 +14,9 @@ abstract class MediaRepository {
   /// @deprecated Use getMediaForDirectoryPath instead for path-aware operations.
   Future<List<MediaEntity>> getMediaForDirectory(String directoryId);
 
+  /// Retrieves all persisted media entries without touching the filesystem.
+  Future<List<MediaEntity>> getAllMedia();
+
   /// Retrieves a media item by its ID.
   Future<MediaEntity?> getMediaById(String id);
 
