@@ -470,7 +470,6 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                 isSelectionMode ? (_) {} : viewModel.filterByTags,
             onTagTapped:
                 isSelectionMode ? (tag, _) => viewModel.toggleTagForSelection(tag) : null,
-            maxChipsToShow: UiGrid.maxFilterChips,
             showAllButton: !isSelectionMode,
           ),
         ],
