@@ -16,4 +16,7 @@ abstract interface class TagRepository {
 
   /// Deletes the tag identified by [id].
   Future<void> deleteTag(String id);
+
+  /// Removes all persisted tags.
+  Future<void> clearTags();
 }

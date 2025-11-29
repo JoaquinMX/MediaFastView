@@ -38,6 +38,11 @@ class TagRepositoryImpl implements TagRepository {
     return _tagDataSource.removeTag(id);
   }
 
+  @override
+  Future<void> clearTags() {
+    return _tagDataSource.clearTags();
+  }
+
   TagEntity _modelToEntity(TagModel model) {
     return TagEntity(
       id: model.id,

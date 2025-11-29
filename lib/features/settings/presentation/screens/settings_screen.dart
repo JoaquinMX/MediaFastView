@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../features/media_library/presentation/view_models/directory_grid_view_model.dart';
 import '../../../../features/favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../../shared/providers/delete_from_source_provider.dart';
+import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/theme_provider.dart';
 import '../../../../shared/providers/thumbnail_caching_provider.dart';
 import '../../../../shared/providers/video_playback_settings_provider.dart';
@@ -57,6 +58,8 @@ class SettingsScreen extends ConsumerWidget {
           ),
           _buildClearCacheTile(context, ref),
           _buildClearFavoritesTile(context, ref),
+          _buildClearTagAssignmentsTile(context, ref),
+          _buildClearTagsTile(context, ref),
           const Divider(),
           _buildSectionHeader('About'),
           _buildAboutTile(context),
@@ -182,6 +185,26 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildClearTagAssignmentsTile(BuildContext context, WidgetRef ref) {
+    return ListTile(
+      title: const Text('Clear All Assigned Tags'),
+      subtitle: const Text(
+        'Remove tag assignments from all media and directories',
+      ),
+      trailing: const Icon(Icons.label_off, color: Colors.red),
+      onTap: () => _showClearTagAssignmentsDialog(context, ref),
+    );
+  }
+
+  Widget _buildClearTagsTile(BuildContext context, WidgetRef ref) {
+    return ListTile(
+      title: const Text('Clear All Tags'),
+      subtitle: const Text('Delete all tags and their assignments'),
+      trailing: const Icon(Icons.delete_sweep, color: Colors.red),
+      onTap: () => _showClearTagsDialog(context, ref),
+    );
+  }
+
   Widget _buildAboutTile(BuildContext context) {
     return ListTile(
       title: const Text('About Media Fast View'),
@@ -271,6 +294,96 @@ class SettingsScreen extends ConsumerWidget {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Failed to clear favorites: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Clear', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearTagAssignmentsDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All Assigned Tags'),
+        content: const Text(
+          'This will remove tag assignments from all media items and '
+          'directories while keeping your tags. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              try {
+                await ref.read(clearTagAssignmentsUseCaseProvider)();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('All tag assignments cleared successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to clear tag assignments: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Clear', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearTagsDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All Tags'),
+        content: const Text(
+          'This will delete all tags and remove their assignments from your '
+          'library. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              try {
+                await ref.read(clearTagsUseCaseProvider)();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('All tags cleared successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to clear tags: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );

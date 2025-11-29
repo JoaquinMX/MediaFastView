@@ -99,6 +99,15 @@ class IsarTagDataSource {
     }, 'Failed to remove tag');
   }
 
+  /// Removes all tags and leaves tag assignments empty.
+  Future<void> clearTags() async {
+    await _executeSafely(() async {
+      await _tagStore.writeTxn(() async {
+        await _tagStore.clear();
+      });
+    }, 'Failed to clear tags');
+  }
+
   /// Resolves the tags assigned to the media entry identified by [mediaId].
   Future<List<TagModel>> getTagsForMedia(String mediaId) async {
     await _ensureReady();
