@@ -161,6 +161,12 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
             LogicalKeyboardKey.meta,
             LogicalKeyboardKey.keyA,
           ): const _SelectAllMediaIntent(),
+        if (hasSiblingNavigation)
+          LogicalKeySet(LogicalKeyboardKey.arrowLeft):
+              const _NavigateToPreviousDirectoryIntent(),
+        if (hasSiblingNavigation)
+          LogicalKeySet(LogicalKeyboardKey.arrowRight):
+              const _NavigateToNextDirectoryIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -190,6 +196,20 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                 return null;
               },
             ),
+          _NavigateToPreviousDirectoryIntent:
+              CallbackAction<_NavigateToPreviousDirectoryIntent>(
+            onInvoke: (_) {
+              _navigateToSibling(-1);
+              return null;
+            },
+          ),
+          _NavigateToNextDirectoryIntent:
+              CallbackAction<_NavigateToNextDirectoryIntent>(
+            onInvoke: (_) {
+              _navigateToSibling(1);
+              return null;
+            },
+          ),
         },
         child: Focus(
           autofocus: true,
@@ -1077,4 +1097,12 @@ class _ClearMediaSelectionIntent extends Intent {
 
 class _SelectAllMediaIntent extends Intent {
   const _SelectAllMediaIntent();
+}
+
+class _NavigateToPreviousDirectoryIntent extends Intent {
+  const _NavigateToPreviousDirectoryIntent();
+}
+
+class _NavigateToNextDirectoryIntent extends Intent {
+  const _NavigateToNextDirectoryIntent();
 }
