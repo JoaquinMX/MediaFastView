@@ -10,6 +10,8 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/thumbnail_caching_provider.dart';
 import '../../../../shared/widgets/file_operation_button.dart';
 import '../../../favorites/presentation/widgets/favorite_toggle_button.dart';
+import '../../../tagging/domain/entities/tag_entity.dart';
+import '../../../tagging/presentation/widgets/tag_chip.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
 
@@ -137,6 +139,12 @@ class _MediaGridItemState extends State<MediaGridItem> {
                   child: Stack(
                     children: [
                       _buildMediaContent(ref),
+                      Positioned(
+                        left: UiSpacing.extraSmallGap,
+                        right: UiSpacing.extraSmallGap,
+                        bottom: UiSpacing.extraSmallGap,
+                        child: _buildTagStrip(ref),
+                      ),
                       if (_isHovering) _buildHoverOverlay(),
                       if (widget.isSelectionMode || widget.isSelected)
                         Positioned(
@@ -200,6 +208,58 @@ class _MediaGridItemState extends State<MediaGridItem> {
                 ),
               ),
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTagStrip(WidgetRef ref) {
+    if (widget.media.tagIds.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final tagLookup = ref.watch(tagLookupProvider);
+
+    return FutureBuilder<List<TagEntity>>(
+      future: tagLookup.getTagsByIds(widget.media.tagIds),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink();
+        }
+
+        final tags = snapshot.data;
+        if (tags == null || tags.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final chipWidgets = <Widget>[];
+        for (final tag in tags) {
+          chipWidgets.add(
+            TagChip(
+              key: ValueKey('library_tag_${widget.media.id}_${tag.id}'),
+              tag: tag,
+              selected: true,
+              compact: true,
+            ),
+          );
+          chipWidgets.add(const SizedBox(width: UiSpacing.extraSmallGap));
+        }
+
+        if (chipWidgets.isNotEmpty) {
+          chipWidgets.removeLast();
+        }
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.45),
+            borderRadius: BorderRadius.circular(UiSizing.borderRadiusSmall),
+            border: Border.all(color: Colors.white24),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: chipWidgets),
           ),
         );
       },
