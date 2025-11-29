@@ -17,6 +17,7 @@ import '../../data/models/media_model.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../models/directory_navigation_target.dart';
+import 'package:path/path.dart' as p;
 
 /// Defines the available sort options for media items.
 enum MediaSortOption {
@@ -427,11 +428,21 @@ class MediaViewModel extends StateNotifier<MediaState> {
       // Get existing persisted media to merge tagIds
       final mergeStartTime = DateTime.now();
       final existingMedia = await _mediaDataSource.getMedia();
-      final existingMediaMap = {for (final m in existingMedia) m.id: m};
+      final existingById = {for (final m in existingMedia) m.id: m};
+      final existingByPath = {
+        for (final m in existingMedia) _normalizePath(m.path): m,
+      };
 
       // Convert entities back to models for persistence, merging tagIds from persisted data
       final mediaModels = media.map((entity) {
-        final existing = existingMediaMap[entity.id];
+        final normalizedPath = _normalizePath(entity.path);
+        final existing = existingById[entity.id] ?? existingByPath[normalizedPath];
+        final mergedTagIds = <String>{...entity.tagIds};
+
+        if (existing != null) {
+          mergedTagIds.addAll(existing.tagIds);
+        }
+
         return MediaModel(
           id: entity.id,
           path: entity.path,
@@ -439,9 +450,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
           type: entity.type,
           size: entity.size,
           lastModified: entity.lastModified,
-          tagIds:
-              existing?.tagIds ??
-              entity.tagIds, // Merge tagIds from persisted data
+          tagIds: mergedTagIds.toList(growable: false),
           directoryId: entity.directoryId,
           bookmarkData: entity.bookmarkData,
         );
@@ -960,6 +969,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
     }
     return sorted;
   }
+
+  String _normalizePath(String filePath) => p.normalize(filePath).toLowerCase();
 }
 
 /// Provider for MediaViewModel with auto-dispose.
