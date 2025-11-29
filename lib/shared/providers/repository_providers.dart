@@ -34,6 +34,8 @@ import '../../features/tagging/domain/use_cases/get_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/assign_tag_use_case.dart';
 import '../../features/tagging/domain/use_cases/create_tag_use_case.dart';
 import '../../features/tagging/domain/use_cases/filter_by_tags_use_case.dart';
+import '../../features/tagging/domain/use_cases/clear_tag_assignments_use_case.dart';
+import '../../features/tagging/domain/use_cases/clear_tags_use_case.dart';
 import '../../features/favorites/domain/use_cases/get_favorites_use_case.dart';
 import '../../features/favorites/domain/use_cases/toggle_favorite_use_case.dart';
 import '../../features/favorites/domain/use_cases/start_slideshow_use_case.dart';
@@ -229,6 +231,21 @@ final getTagsUseCaseProvider = Provider<GetTagsUseCase>((ref) {
 
 final createTagUseCaseProvider = Provider<CreateTagUseCase>((ref) {
   return CreateTagUseCase(ref.watch(tagRepositoryProvider));
+});
+
+final clearTagAssignmentsUseCaseProvider =
+    Provider<ClearTagAssignmentsUseCase>((ref) {
+  return ClearTagAssignmentsUseCase(
+    directoryRepository: ref.watch(directoryRepositoryProvider),
+    mediaRepository: ref.watch(mediaRepositoryProvider),
+  );
+});
+
+final clearTagsUseCaseProvider = Provider<ClearTagsUseCase>((ref) {
+  return ClearTagsUseCase(
+    tagRepository: ref.watch(tagRepositoryProvider),
+    clearTagAssignmentsUseCase: ref.watch(clearTagAssignmentsUseCaseProvider),
+  );
 });
 
 final assignTagUseCaseProvider = Provider<AssignTagUseCase>((ref) {
