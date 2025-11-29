@@ -515,6 +515,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         MaterialPageRoute(
           builder: (context) => FullScreenViewerScreen(
             directoryPath: media.path,
+            directoryName: media.name,
             bookmarkData: media.bookmarkData,
           ),
         ),
@@ -527,6 +528,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       MaterialPageRoute(
         builder: (context) => FullScreenViewerScreen(
           directoryPath: directoryPath,
+          directoryName: p.basename(directoryPath),
           initialMediaId: media.id,
           mediaList: mediaList,
         ),
@@ -539,6 +541,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       MaterialPageRoute(
         builder: (context) => FullScreenViewerScreen(
           directoryPath: directoryContent.directory.path,
+          directoryName: directoryContent.directory.name,
           bookmarkData: directoryContent.directory.bookmarkData,
           initialMediaId: directoryContent.media.isNotEmpty
               ? directoryContent.media.first.id
