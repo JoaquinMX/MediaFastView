@@ -265,6 +265,12 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     // Convert entities back to models for persistence, merging tagIds from persisted data
     return scannedMedia.map((entity) {
       final existing = existingMediaMap[entity.id];
+      final mergedTagIds = <String>{...entity.tagIds};
+
+      if (existing != null) {
+        mergedTagIds.addAll(existing.tagIds);
+      }
+
       return MediaModel(
         id: entity.id,
         path: entity.path,
@@ -272,7 +278,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
         type: entity.type,
         size: entity.size,
         lastModified: entity.lastModified,
-        tagIds: existing?.tagIds ?? entity.tagIds, // Merge tagIds from persisted data
+        tagIds: mergedTagIds.toList(growable: false),
         directoryId: entity.directoryId,
         bookmarkData: entity.bookmarkData,
       );
