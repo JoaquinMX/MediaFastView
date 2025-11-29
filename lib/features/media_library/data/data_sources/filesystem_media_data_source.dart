@@ -425,8 +425,9 @@ class FilesystemMediaDataSource {
          LoggingService.instance.warning('Slow file.stat() for ${file.path}: ${statDuration.inMilliseconds}ms');
        }
 
-       // Generate ID from file system metadata for consistency across different access paths
-       final id = _generateIdFromMetadata(stat, file.path);
+      // Generate a stable ID from the file path so tag assignments remain
+      // consistent across rescans, even if file metadata changes.
+      final id = _generateId(file.path);
 
        return MediaModel(
          id: id,
@@ -460,17 +461,6 @@ class FilesystemMediaDataSource {
   /// Checks if a file should be excluded.
   bool _isExcludedFile(String fileName) {
     return _excludedFiles.any((excluded) => fileName.startsWith(excluded));
-  }
-
-  /// Generates a unique ID from file metadata for consistency across different access paths.
-  String _generateIdFromMetadata(FileStat stat, String filePath) {
-    // Use file size, modification time, and filename for consistent identification
-    // This combination should be unique for each file and consistent across different access paths
-    final fileName = path.basename(filePath);
-    final idString = '${stat.size}_${stat.modified.millisecondsSinceEpoch}_$fileName';
-    final bytes = utf8.encode(idString);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
   }
 
   /// Generates a unique ID from file path using SHA-256.
