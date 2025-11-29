@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
 import '../../../../core/error/app_error.dart';
@@ -92,9 +89,13 @@ class IsarTagDataSource {
   Future<void> removeTag(String id) async {
     await _executeSafely(() async {
       await _tagStore.writeTxn(() async {
-        final hash = sha256.convert(utf8.encode(id)).bytes;
-        final hashedId = hash.fold<int>(0, (prev, element) => prev + element);
-        await _tagStore.deleteById(hashedId);
+        final primaryId = computeTagCollectionId(id);
+        final legacyId = computeLegacyTagCollectionId(id);
+
+        await _tagStore.deleteById(primaryId);
+        if (legacyId != primaryId) {
+          await _tagStore.deleteById(legacyId);
+        }
       });
     }, 'Failed to remove tag');
   }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
@@ -21,8 +22,7 @@ class TagCollection {
 
   /// Unique hash-based identifier used by Isar for this record.
   Id get id {
-    final hash = sha256.convert(utf8.encode(tagId)).bytes;
-    return hash.fold<int>(0, (prev, element) => prev + element);
+    return computeTagCollectionId(tagId);
   }
   set id(Id value) {}
 
@@ -45,6 +45,23 @@ class TagCollection {
   /// Links to directories associated with the tag.
   final IsarLinks<DirectoryCollection> directories =
       IsarLinks<DirectoryCollection>();
+}
+
+/// Generates a deterministic, collision-resistant identifier for a [TagCollection]
+/// based on its [tagId]. The first 64 bits of the SHA-256 digest are used to
+/// produce a stable numeric value accepted by Isar.
+Id computeTagCollectionId(String tagId) {
+  final digest = sha256.convert(utf8.encode(tagId)).bytes;
+  final view = ByteData.sublistView(Uint8List.fromList(digest), 0, 8);
+  return view.getUint64(0, Endian.big);
+}
+
+/// Legacy identifier mapping used before the introduction of
+/// [computeTagCollectionId]. Retained to support cleanup of existing records
+/// written with the previous sum-based hash.
+Id computeLegacyTagCollectionId(String tagId) {
+  final hash = sha256.convert(utf8.encode(tagId)).bytes;
+  return hash.fold<int>(0, (prev, element) => prev + element);
 }
 
 extension TagCollectionMapper on TagCollection {

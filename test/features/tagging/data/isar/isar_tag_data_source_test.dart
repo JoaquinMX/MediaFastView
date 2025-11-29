@@ -39,6 +39,10 @@ class _FakeIsarDatabase extends IsarDatabase {
 class _InMemoryTagCollectionStore implements TagCollectionStore {
   final Map<Id, TagCollection> _data = <Id, TagCollection>{};
 
+  void seedWithId(Id id, TagCollection tag) {
+    _data[id] = _clone(tag);
+  }
+
   @override
   Future<void> clear() async {
     _data.clear();
@@ -56,17 +60,26 @@ class _InMemoryTagCollectionStore implements TagCollectionStore {
 
   @override
   Future<TagCollection?> getByTagId(String tagId) async {
-    final tag = _data[isarIdForString(tagId)];
-    return tag == null ? null : _clone(tag);
+    for (final entry in _data.values) {
+      if (entry.tagId == tagId) {
+        return _clone(entry);
+      }
+    }
+    return null;
   }
 
   @override
   Future<List<TagCollection>> getByTagIds(List<String> tagIds) async {
-    return tagIds
-        .map((tagId) => _data[isarIdForString(tagId)])
-        .whereType<TagCollection>()
-        .map(_clone)
-        .toList(growable: false);
+    final results = <TagCollection>[];
+    for (final tagId in tagIds) {
+      for (final entry in _data.values) {
+        if (entry.tagId == tagId) {
+          results.add(_clone(entry));
+          break;
+        }
+      }
+    }
+    return results;
   }
 
   @override
@@ -298,6 +311,21 @@ void main() {
 
       final tags = await dataSource.getTags();
       expect(tags, equals(<TagModel>[tagB]));
+    });
+
+    test('removeTag also deletes legacy hashed ids', () async {
+      final legacyTag = _buildTag('legacy-tag');
+      final legacyCollection = legacyTag.toCollection();
+
+      tagStore.seedWithId(
+        legacyTagIdForString(legacyTag.id),
+        legacyCollection,
+      );
+
+      await dataSource.removeTag(legacyTag.id);
+
+      final tags = await dataSource.getTags();
+      expect(tags, isEmpty);
     });
 
     test('getTagsForMedia resolves tag models in stored order', () async {

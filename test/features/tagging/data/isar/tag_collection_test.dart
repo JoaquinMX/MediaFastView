@@ -20,7 +20,7 @@ void main() {
       expect(collection.name, model.name);
       expect(collection.color, model.color);
       expect(collection.createdAt, model.createdAt);
-      expect(collection.id, isarIdForString(model.id));
+      expect(collection.id, tagIdForString(model.id));
 
       final roundTrip = collection.toModel();
 
