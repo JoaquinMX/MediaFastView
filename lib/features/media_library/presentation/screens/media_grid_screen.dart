@@ -123,15 +123,39 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       bookmarkData: widget.bookmarkData,
       navigateToDirectory:
           (path, name, bookmarkData, siblingDirectories, currentIndex) {
+        final targetIndex = currentIndex ?? _currentDirectoryNavigationIndex;
+        final hasSiblingNavigation =
+            (siblingDirectories?.isNotEmpty ?? false) &&
+                _siblingNavigationTargets.isNotEmpty;
+        final isBackwardNavigation = hasSiblingNavigation
+            ? targetIndex < _currentDirectoryNavigationIndex
+            : false;
+
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => MediaGridScreen(
+          PageRouteBuilder(
+            transitionDuration: const Duration(milliseconds: 300),
+            reverseTransitionDuration: const Duration(milliseconds: 300),
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                MediaGridScreen(
               directoryPath: path,
               directoryName: name,
               bookmarkData: bookmarkData,
               siblingDirectories: siblingDirectories,
               currentDirectoryIndex: currentIndex,
             ),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+              final beginOffset =
+                  isBackwardNavigation ? const Offset(-1, 0) : const Offset(1, 0);
+              final tween = Tween(begin: beginOffset, end: Offset.zero).chain(
+                CurveTween(curve: Curves.easeInOut),
+              );
+
+              return SlideTransition(
+                position: animation.drive(tween),
+                child: child,
+              );
+            },
           ),
         );
       },
