@@ -7,6 +7,7 @@ import '../../../../shared/providers/delete_from_source_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/theme_provider.dart';
 import '../../../../shared/providers/thumbnail_caching_provider.dart';
+import '../../../../shared/providers/auto_navigate_sibling_directories_provider.dart';
 import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/widgets/app_bar.dart';
 
@@ -26,6 +27,10 @@ class SettingsScreen extends ConsumerWidget {
     final deleteFromSourceEnabled = ref.watch(deleteFromSourceProvider);
     final deleteFromSourceNotifier =
         ref.read(deleteFromSourceProvider.notifier);
+    final autoNavigateSiblingDirectories =
+        ref.watch(autoNavigateSiblingDirectoriesProvider);
+    final autoNavigateSiblingDirectoriesNotifier =
+        ref.read(autoNavigateSiblingDirectoriesProvider.notifier);
 
     return Scaffold(
       appBar: const CustomAppBar(
@@ -45,6 +50,12 @@ class SettingsScreen extends ConsumerWidget {
           _buildLoopSetting(
             playbackSettings.loopVideos,
             playbackSettingsNotifier,
+          ),
+          const Divider(),
+          _buildSectionHeader('Navigation'),
+          _buildSiblingNavigationSetting(
+            autoNavigateSiblingDirectories,
+            autoNavigateSiblingDirectoriesNotifier,
           ),
           const Divider(),
           _buildSectionHeader('Data Management'),
@@ -162,6 +173,24 @@ class SettingsScreen extends ConsumerWidget {
         value: isEnabled,
         onChanged: (bool value) {
           notifier.setLoopVideos(value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildSiblingNavigationSetting(
+    bool isEnabled,
+    AutoNavigateSiblingDirectoriesNotifier notifier,
+  ) {
+    return ListTile(
+      title: const Text('Auto-Navigate Sibling Directories'),
+      subtitle: const Text(
+        'Skip confirmation prompts when moving between sibling directories in full-screen view.',
+      ),
+      trailing: Switch(
+        value: isEnabled,
+        onChanged: (bool value) {
+          notifier.setAutoNavigateSiblingDirectories(value);
         },
       ),
     );

@@ -20,6 +20,7 @@ import '../../../../shared/widgets/media_playback_controls.dart';
 import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
+import '../../../../shared/providers/auto_navigate_sibling_directories_provider.dart';
 
 /// Full-screen media viewer screen
 class FullScreenViewerScreen extends ConsumerStatefulWidget {
@@ -635,7 +636,7 @@ class _FullScreenViewerScreenState
     if (!navigationResult.mediaAdvanced &&
         navigationResult.hasDirectoryOption &&
         navigationResult.directoryTarget != null) {
-      await _promptDirectoryNavigation(
+      await _handleSiblingDirectoryNavigation(
         navigationResult.directoryTarget!,
         forward: true,
       );
@@ -647,11 +648,30 @@ class _FullScreenViewerScreenState
     if (!navigationResult.mediaAdvanced &&
         navigationResult.hasDirectoryOption &&
         navigationResult.directoryTarget != null) {
-      await _promptDirectoryNavigation(
+      await _handleSiblingDirectoryNavigation(
         navigationResult.directoryTarget!,
         forward: false,
       );
     }
+  }
+
+  Future<void> _handleSiblingDirectoryNavigation(
+    DirectoryNavigationTarget target, {
+    required bool forward,
+  }) async {
+    final autoNavigate = ref.read(autoNavigateSiblingDirectoriesProvider);
+    if (autoNavigate) {
+      await _viewModel.navigateToDirectoryTarget(
+        target,
+        startAtEnd: !forward,
+      );
+      return;
+    }
+
+    await _promptDirectoryNavigation(
+      target,
+      forward: forward,
+    );
   }
 
   void _popWithResult() {
