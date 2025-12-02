@@ -91,9 +91,7 @@ class IsarDirectoryDataSource {
   Future<void> removeDirectory(String id) async {
     await _executeSafely(() async {
       await _store.writeTxn(() async {
-        final hash = sha256.convert(utf8.encode(id)).bytes;
-        final hashedId = hash.fold<int>(0, (prev, element) => prev + element);
-        await _store.deleteById(hashedId);
+        await _store.deleteById(computeDirectoryCollectionId(id));
       });
     }, 'Failed to remove directory');
   }
