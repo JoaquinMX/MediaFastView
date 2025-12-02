@@ -7,6 +7,16 @@ import '../models/directory_model.dart';
 
 part 'directory_collection.g.dart';
 
+/// Converts a directory identifier into a deterministic Isar [Id].
+///
+/// The first 16 hex characters (64 bits) of the SHA-256 hash are parsed to
+/// avoid collisions caused by previously summing the hash bytes.
+Id computeDirectoryCollectionId(String directoryId) {
+  final hash = sha256.convert(utf8.encode(directoryId)).toString();
+  final first64Bits = hash.substring(0, 16);
+  return int.parse(first64Bits, radix: 16);
+}
+
 /// Isar collection representing a directory record stored on disk.
 @collection
 class DirectoryCollection {
@@ -22,8 +32,7 @@ class DirectoryCollection {
 
   /// Unique hash-based identifier used by Isar for this record.
   Id get id {
-    final hash = sha256.convert(utf8.encode(directoryId)).bytes;
-    return hash.fold<int>(0, (prev, element) => prev + element);
+    return computeDirectoryCollectionId(directoryId);
   }
   set id(Id value) {}
 
