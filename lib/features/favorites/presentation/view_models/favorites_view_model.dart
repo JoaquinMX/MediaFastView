@@ -1,14 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../domain/entities/favorite_entity.dart';
 import '../../domain/entities/favorite_item_type.dart';
 import '../../domain/repositories/favorites_repository.dart';
 import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../media_library/domain/repositories/directory_repository.dart';
 import '../../../media_library/domain/use_cases/get_media_use_case.dart';
 import '../../../media_library/data/isar/isar_media_data_source.dart';
 import '../../../media_library/data/models/media_model.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/recursive_directory_actions_provider.dart';
 import '../../../../core/services/logging_service.dart';
 
 /// Sealed class representing the state of favorites.
@@ -130,13 +133,17 @@ class SlideshowFinished extends SlideshowState {
 class FavoritesViewModel extends StateNotifier<FavoritesState> {
   FavoritesViewModel(
     this._favoritesRepository,
+    this._directoryRepository,
     this._mediaDataSource,
     this._getMediaUseCase,
+    this._applyDirectoryActionsRecursively,
   ) : super(const FavoritesInitial());
 
   final FavoritesRepository _favoritesRepository;
+  final DirectoryRepository _directoryRepository;
   final IsarMediaDataSource _mediaDataSource;
   final GetMediaUseCase _getMediaUseCase;
+  final bool _applyDirectoryActionsRecursively;
   bool _hasLoadedFavorites = false;
 
   /// Tracks whether an initial load has completed.
@@ -286,6 +293,107 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
     }
   }
 
+  Future<({List<FavoriteEntity> additions, List<String> removals})>
+      _buildRecursiveFavoriteChanges({
+    required List<DirectoryEntity> directoriesToAdd,
+    required List<DirectoryEntity> directoriesToRemove,
+  }) async {
+    if (!_applyDirectoryActionsRecursively ||
+        (directoriesToAdd.isEmpty && directoriesToRemove.isEmpty)) {
+      return (additions: const <FavoriteEntity>[], removals: const <String>[]);
+    }
+
+    final expandedAddIds = await _expandDirectoryIdsRecursively(directoriesToAdd);
+    final expandedRemoveIds =
+        await _expandDirectoryIdsRecursively(directoriesToRemove);
+
+    // Favor additions when the same path is present in both lists.
+    expandedRemoveIds.removeWhere(expandedAddIds.contains);
+
+    final targetIds = {...expandedAddIds, ...expandedRemoveIds};
+    if (targetIds.isEmpty) {
+      return (additions: const <FavoriteEntity>[], removals: const <String>[]);
+    }
+
+    final media = await _collectMediaForDirectories(targetIds);
+    final additions = <FavoriteEntity>[];
+    final removals = <String>[];
+
+    for (final item in media) {
+      if (expandedAddIds.contains(item.directoryId)) {
+        final isFavorite = await _favoritesRepository.isFavorite(item.id);
+        if (!isFavorite) {
+          additions.add(
+            FavoriteEntity(
+              itemId: item.id,
+              itemType: FavoriteItemType.media,
+              addedAt: DateTime.now(),
+              metadata: {
+                'name': item.name,
+                'path': item.path,
+              },
+            ),
+          );
+          await _persistMedia(item);
+        }
+      } else if (expandedRemoveIds.contains(item.directoryId)) {
+        removals.add(item.id);
+      }
+    }
+
+    return (additions: additions, removals: removals);
+  }
+
+  Future<Set<String>> _expandDirectoryIdsRecursively(
+    List<DirectoryEntity> roots,
+  ) async {
+    if (roots.isEmpty) {
+      return <String>{};
+    }
+
+    final normalizedRoots = roots
+        .map(
+          (dir) => (
+            id: dir.id,
+            path: _normalizePath(dir.path),
+          ),
+        )
+        .toList(growable: false);
+
+    final allDirectories = await _directoryRepository.getDirectories();
+    final expanded = <String>{};
+
+    for (final directory in allDirectories) {
+      final normalizedPath = _normalizePath(directory.path);
+      final isWithinRoot = normalizedRoots.any(
+        (root) =>
+            p.equals(root.path, normalizedPath) ||
+            p.isWithin(root.path, normalizedPath),
+      );
+
+      if (isWithinRoot) {
+        expanded.add(directory.id);
+      }
+    }
+
+    return expanded;
+  }
+
+  Future<List<MediaEntity>> _collectMediaForDirectories(
+    Set<String> directoryIds,
+  ) async {
+    if (directoryIds.isEmpty) {
+      return const <MediaEntity>[];
+    }
+
+    final allMedia = await _getMediaUseCase.entireLibrary();
+    return allMedia
+        .where((media) => directoryIds.contains(media.directoryId))
+        .toList();
+  }
+
+  String _normalizePath(String path) => p.normalize(path.trim());
+
   /// Toggles favorites for directory entities.
   Future<FavoritesBatchResult> toggleFavoritesForDirectories(
     List<DirectoryEntity> directories,
@@ -297,6 +405,8 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
     try {
       final additions = <FavoriteEntity>[];
       final removals = <String>[];
+      final directoriesToAdd = <DirectoryEntity>[];
+      final directoriesToRemove = <DirectoryEntity>[];
 
       for (final directory in directories) {
         final isFavorited = await _favoritesRepository.isFavorite(
@@ -305,6 +415,7 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
         );
         if (isFavorited) {
           removals.add(directory.id);
+          directoriesToRemove.add(directory);
         } else {
           additions.add(
             FavoriteEntity(
@@ -317,15 +428,25 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
               },
             ),
           );
+          directoriesToAdd.add(directory);
         }
       }
 
-      if (additions.isNotEmpty) {
-        await _favoritesRepository.addFavorites(additions);
+      final recursiveChanges = await _buildRecursiveFavoriteChanges(
+        directoriesToAdd: directoriesToAdd,
+        directoriesToRemove: directoriesToRemove,
+      );
+
+      if (additions.isNotEmpty || recursiveChanges.additions.isNotEmpty) {
+        await _favoritesRepository.addFavorites(
+          [...additions, ...recursiveChanges.additions],
+        );
       }
 
-      if (removals.isNotEmpty) {
-        await _favoritesRepository.removeFavorites(removals);
+      if (removals.isNotEmpty || recursiveChanges.removals.isNotEmpty) {
+        await _favoritesRepository.removeFavorites(
+          [...removals, ...recursiveChanges.removals],
+        );
       }
 
       if (!mounted) {
@@ -517,8 +638,10 @@ final favoritesViewModelProvider =
       (ref) {
         final viewModel = FavoritesViewModel(
           ref.watch(favoritesRepositoryProvider),
+          ref.watch(directoryRepositoryProvider),
           ref.watch(isarMediaDataSourceProvider),
           ref.watch(getMediaUseCaseProvider),
+          ref.watch(recursiveDirectoryActionsProvider),
         );
         viewModel.loadFavorites();
         return viewModel;

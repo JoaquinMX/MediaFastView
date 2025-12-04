@@ -1,5 +1,6 @@
 import 'package:media_fast_view/core/utils/batch_update_result.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/assign_tag_use_case.dart';
@@ -63,6 +64,59 @@ void main() {
       verify(directoryRepository.getDirectoryById('unknown')).called(1);
       verifyNever(directoryRepository.updateDirectoryTags(any, any));
     });
+
+    test('applies tags to media recursively when enabled', () async {
+      const directoryId = 'dir-recursive';
+      final root = DirectoryEntity(
+        id: directoryId,
+        path: '/test',
+        name: 'Root',
+        thumbnailPath: null,
+        tagIds: const [],
+        lastModified: DateTime(2024, 1, 1),
+      );
+      final child = DirectoryEntity(
+        id: 'child',
+        path: '/test/child',
+        name: 'Child',
+        thumbnailPath: null,
+        tagIds: const [],
+        lastModified: DateTime(2024, 1, 1),
+      );
+      final media = MediaEntity(
+        id: 'media-child',
+        path: '/test/child/file.jpg',
+        name: 'file.jpg',
+        type: MediaType.image,
+        size: 10,
+        lastModified: DateTime(2024, 1, 2),
+        tagIds: const ['existing'],
+        directoryId: child.id,
+        bookmarkData: null,
+      );
+
+      when(directoryRepository.getDirectoryById(directoryId))
+          .thenAnswer((_) async => root);
+      when(directoryRepository.updateDirectoryTags(any, any))
+          .thenAnswer((_) async {});
+      when(directoryRepository.getDirectories())
+          .thenAnswer((_) async => [root, child]);
+      when(mediaRepository.getAllMedia()).thenAnswer((_) async => [media]);
+      when(mediaRepository.updateMediaTagsBatch(any))
+          .thenAnswer((_) async => BatchUpdateResult.empty);
+
+      await useCase.setTagsForDirectory(
+        directoryId,
+        ['tag-a'],
+        applyToMediaRecursively: true,
+      );
+
+      final captured = verify(
+        mediaRepository.updateMediaTagsBatch(captureAny),
+      ).captured.single as Map<String, List<String>>;
+
+      expect(captured[media.id], equals(['existing', 'tag-a']));
+    });
   });
 
   group('setTagsForDirectories', () {
@@ -113,6 +167,53 @@ void main() {
 
       expect(result, equals(BatchUpdateResult.empty));
       verifyNever(directoryRepository.updateDirectoryTagsBatch(any));
+    });
+
+    test('applies tags to media recursively for successful directories', () async {
+      const directoryId = 'dir-recursive';
+      final root = DirectoryEntity(
+        id: directoryId,
+        path: '/test',
+        name: 'Root',
+        thumbnailPath: null,
+        tagIds: const [],
+        lastModified: DateTime(2024, 1, 1),
+      );
+      final child = DirectoryEntity(
+        id: 'child',
+        path: '/test/child',
+        name: 'Child',
+        thumbnailPath: null,
+        tagIds: const [],
+        lastModified: DateTime(2024, 1, 1),
+      );
+      final media = MediaEntity(
+        id: 'media-child',
+        path: '/test/child/file.jpg',
+        name: 'file.jpg',
+        type: MediaType.image,
+        size: 10,
+        lastModified: DateTime(2024, 1, 2),
+        tagIds: const [],
+        directoryId: child.id,
+        bookmarkData: null,
+      );
+
+      when(directoryRepository.updateDirectoryTagsBatch(any)).thenAnswer((_) async =>
+          const BatchUpdateResult(successfulIds: [directoryId], failureReasons: {}));
+      when(directoryRepository.getDirectories())
+          .thenAnswer((_) async => [root, child]);
+      when(mediaRepository.getAllMedia()).thenAnswer((_) async => [media]);
+      when(mediaRepository.updateMediaTagsBatch(any))
+          .thenAnswer((_) async => BatchUpdateResult.empty);
+
+      await useCase.setTagsForDirectories(
+        [directoryId],
+        ['tag-a'],
+        applyToMediaRecursively: true,
+      );
+
+      verify(mediaRepository.updateMediaTagsBatch(any)).called(1);
     });
   });
 

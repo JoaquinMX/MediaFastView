@@ -9,6 +9,7 @@ import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/recursive_directory_actions_provider.dart';
 import '../../data/data_sources/local_directory_data_source.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../../domain/use_cases/add_directory_use_case.dart';
@@ -366,6 +367,8 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     final result = await assignTagUseCase.setTagsForDirectories(
       _selectedDirectoryIds.toList(),
       sanitizedTags,
+      applyToMediaRecursively:
+          _ref.read(recursiveDirectoryActionsProvider),
     );
 
     if (result.successfulIds.isNotEmpty) {

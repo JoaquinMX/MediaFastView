@@ -14,6 +14,7 @@ import '../../../../core/constants/ui_constants.dart';
 
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/recursive_directory_actions_provider.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
@@ -1150,7 +1151,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     final assignTagUseCase = ref.read(assignTagUseCaseProvider);
 
     try {
-      await assignTagUseCase.setTagsForDirectory(directory.id, tagIds);
+      await assignTagUseCase.setTagsForDirectory(
+        directory.id,
+        tagIds,
+        applyToMediaRecursively: ref.read(recursiveDirectoryActionsProvider),
+      );
       await ref.read(directoryViewModelProvider.notifier).loadDirectories();
     } catch (e) {
       if (mounted) {

@@ -8,6 +8,7 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/theme_provider.dart';
 import '../../../../shared/providers/thumbnail_caching_provider.dart';
 import '../../../../shared/providers/auto_navigate_sibling_directories_provider.dart';
+import '../../../../shared/providers/recursive_directory_actions_provider.dart';
 import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/widgets/app_bar.dart';
 
@@ -31,6 +32,10 @@ class SettingsScreen extends ConsumerWidget {
         ref.watch(autoNavigateSiblingDirectoriesProvider);
     final autoNavigateSiblingDirectoriesNotifier =
         ref.read(autoNavigateSiblingDirectoriesProvider.notifier);
+    final recursiveDirectoryActions =
+        ref.watch(recursiveDirectoryActionsProvider);
+    final recursiveDirectoryActionsNotifier =
+        ref.read(recursiveDirectoryActionsProvider.notifier);
 
     return Scaffold(
       appBar: const CustomAppBar(
@@ -62,6 +67,10 @@ class SettingsScreen extends ConsumerWidget {
           _buildThumbnailCachingSetting(
             isThumbnailCachingEnabled,
             thumbnailCachingNotifier,
+          ),
+          _buildRecursiveDirectoryActionsSetting(
+            recursiveDirectoryActions,
+            recursiveDirectoryActionsNotifier,
           ),
           _buildDeleteFromSourceSetting(
             deleteFromSourceEnabled,
@@ -122,6 +131,25 @@ class SettingsScreen extends ConsumerWidget {
         value: isEnabled,
         onChanged: (bool value) {
           notifier.setThumbnailCaching(value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildRecursiveDirectoryActionsSetting(
+    bool isEnabled,
+    RecursiveDirectoryActionsNotifier notifier,
+  ) {
+    return ListTile(
+      title: const Text('Cascade directory actions to media'),
+      subtitle: const Text(
+        'When tagging or adding a directory to favorites, also apply the action to '
+        'all media inside that directory and its subdirectories.',
+      ),
+      trailing: Switch(
+        value: isEnabled,
+        onChanged: (bool value) {
+          notifier.setRecursiveDirectoryActions(value);
         },
       ),
     );

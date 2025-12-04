@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 
+import 'package:media_fast_view/features/favorites/domain/entities/favorite_entity.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
 import 'package:media_fast_view/features/favorites/presentation/view_models/favorites_view_model.dart';
@@ -8,17 +9,21 @@ import 'package:media_fast_view/features/media_library/domain/entities/directory
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
+import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/get_media_use_case.dart';
 
 class _MockFavoritesRepository extends Mock implements FavoritesRepository {}
 
 class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
 
+class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
+
 class _MockGetMediaUseCase extends Mock implements GetMediaUseCase {}
 
 void main() {
   late _MockFavoritesRepository favoritesRepository;
   late _MockIsarMediaDataSource mediaDataSource;
+  late _MockDirectoryRepository directoryRepository;
   late _MockGetMediaUseCase getMediaUseCase;
   late FavoritesViewModel viewModel;
 
@@ -64,11 +69,14 @@ void main() {
   setUp(() {
     favoritesRepository = _MockFavoritesRepository();
     mediaDataSource = _MockIsarMediaDataSource();
+    directoryRepository = _MockDirectoryRepository();
     getMediaUseCase = _MockGetMediaUseCase();
     viewModel = FavoritesViewModel(
       favoritesRepository,
+      directoryRepository,
       mediaDataSource,
       getMediaUseCase,
+      false,
     );
   });
 
@@ -224,6 +232,63 @@ void main() {
       verify(favoritesRepository.removeFavorites(any)).called(1);
       verifyNever(favoritesRepository.addFavorites(any));
       verifyZeroInteractions(getMediaUseCase);
+    });
+
+    test('recursively favorites media when enabled', () async {
+      final childDirectory = DirectoryEntity(
+        id: 'child-dir',
+        path: '$directoryPath/child',
+        name: 'Child',
+        thumbnailPath: null,
+        tagIds: const [],
+        lastModified: now,
+        bookmarkData: null,
+      );
+
+      final childMedia = mediaEntity.copyWith(directoryId: childDirectory.id);
+
+      final recursiveViewModel = FavoritesViewModel(
+        favoritesRepository,
+        directoryRepository,
+        mediaDataSource,
+        getMediaUseCase,
+        true,
+      );
+
+      when(
+        favoritesRepository.isFavorite(
+          any,
+          type: anyNamed('type'),
+        ),
+      ).thenAnswer((_) async => false);
+      when(directoryRepository.getDirectories()).thenAnswer((_) async => [
+            directoryEntity,
+            childDirectory,
+          ]);
+      when(getMediaUseCase.entireLibrary())
+          .thenAnswer((_) async => [childMedia]);
+      when(favoritesRepository.addFavorites(any)).thenAnswer((_) async {});
+      when(favoritesRepository.removeFavorites(any)).thenAnswer((_) async {});
+      when(mediaDataSource.upsertMedia(any)).thenAnswer((_) async {});
+      when(favoritesRepository.getFavoriteMediaIds())
+          .thenAnswer((_) async => <String>[]);
+      when(favoritesRepository.getFavoriteDirectoryIds())
+          .thenAnswer((_) async => <String>[]);
+      when(favoritesRepository.getFavorites())
+          .thenAnswer((_) async => const []);
+
+      final result = await recursiveViewModel
+          .toggleFavoritesForDirectories([directoryEntity]);
+
+      final addedFavorites = verify(
+        favoritesRepository.addFavorites(captureAny),
+      ).captured.single as List<FavoriteEntity>;
+
+      expect(
+        addedFavorites.where((fav) => fav.itemType == FavoriteItemType.media),
+        isNotEmpty,
+      );
+      expect(result.added, 1);
     });
   });
 

@@ -1,6 +1,9 @@
 import 'dart:collection';
 
+import 'package:path/path.dart' as p;
+
 import '../../../../core/utils/batch_update_result.dart';
+import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/repositories/directory_repository.dart';
 import '../../../media_library/domain/repositories/media_repository.dart';
 import '../entities/tag_entity.dart';
@@ -23,8 +26,9 @@ class AssignTagUseCase {
   /// updates.
   Future<void> setTagsForDirectory(
     String directoryId,
-    List<String> tagIds,
-  ) async {
+    List<String> tagIds, {
+    bool applyToMediaRecursively = false,
+  }) async {
     final directory = await directoryRepository.getDirectoryById(directoryId);
     if (directory == null) {
       return;
@@ -36,13 +40,21 @@ class AssignTagUseCase {
       directoryId,
       sanitizedTagIds,
     );
+
+    if (applyToMediaRecursively) {
+      await _applyTagsToMediaRecursively(
+        directories: [directory],
+        tagIds: sanitizedTagIds,
+      );
+    }
   }
 
   /// Replaces the tags assigned to multiple directories.
   Future<BatchUpdateResult> setTagsForDirectories(
     List<String> directoryIds,
-    List<String> tagIds,
-  ) async {
+    List<String> tagIds, {
+    bool applyToMediaRecursively = false,
+  }) async {
     if (directoryIds.isEmpty) {
       return BatchUpdateResult.empty;
     }
@@ -62,7 +74,20 @@ class AssignTagUseCase {
         directoryId: sanitizedTagIds,
     };
 
-    return directoryRepository.updateDirectoryTagsBatch(payload);
+    final result = await directoryRepository.updateDirectoryTagsBatch(payload);
+
+    if (applyToMediaRecursively && result.successfulIds.isNotEmpty) {
+      final directories = await directoryRepository.getDirectories();
+      final updatedDirectories = directories
+          .where((dir) => result.successfulIds.contains(dir.id))
+          .toList();
+      await _applyTagsToMediaRecursively(
+        directories: updatedDirectories,
+        tagIds: sanitizedTagIds,
+      );
+    }
+
+    return result;
   }
 
   /// Assigns a tag to a directory.
@@ -152,4 +177,66 @@ class AssignTagUseCase {
       }
     }
   }
+
+  Future<void> _applyTagsToMediaRecursively({
+    required List<DirectoryEntity> directories,
+    required List<String> tagIds,
+  }) async {
+    if (directories.isEmpty || tagIds.isEmpty) {
+      return;
+    }
+
+    final directoryIds = await _expandDirectoryIdsRecursively(directories);
+    if (directoryIds.isEmpty) {
+      return;
+    }
+
+    final media = await mediaRepository.getAllMedia();
+    final payload = <String, List<String>>{};
+
+    for (final item in media) {
+      if (!directoryIds.contains(item.directoryId)) {
+        continue;
+      }
+
+      final mergedTags = LinkedHashSet<String>.from(item.tagIds)..addAll(tagIds);
+      payload[item.id] = List<String>.unmodifiable(mergedTags);
+    }
+
+    if (payload.isNotEmpty) {
+      await mediaRepository.updateMediaTagsBatch(payload);
+    }
+  }
+
+  Future<Set<String>> _expandDirectoryIdsRecursively(
+    List<DirectoryEntity> roots,
+  ) async {
+    if (roots.isEmpty) {
+      return <String>{};
+    }
+
+    final normalizedRoots = roots
+        .map((dir) => (id: dir.id, path: _normalizePath(dir.path)))
+        .toList(growable: false);
+
+    final allDirectories = await directoryRepository.getDirectories();
+    final expanded = <String>{};
+
+    for (final directory in allDirectories) {
+      final normalizedPath = _normalizePath(directory.path);
+      final isWithinRoot = normalizedRoots.any(
+        (root) =>
+            p.equals(root.path, normalizedPath) ||
+            p.isWithin(root.path, normalizedPath),
+      );
+
+      if (isWithinRoot) {
+        expanded.add(directory.id);
+      }
+    }
+
+    return expanded;
+  }
+
+  String _normalizePath(String path) => p.normalize(path.trim());
 }
