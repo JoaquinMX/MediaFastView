@@ -89,16 +89,23 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final selectedSections = sections
         .where((section) => state.selectedTagIds.contains(section.id))
         .toList();
+    final hasSelectedTags = selectedSections.isNotEmpty;
+    final sectionsForFiltering =
+        hasSelectedTags || state.excludedTagIds.isEmpty ? selectedSections : sections;
     final aggregatedMedia = _collectMediaFromSections(
-      selectedSections,
+      sectionsForFiltering,
       state.filterMode,
+      state.excludedTagIds,
+      hasSelectedTags,
     );
     final filteredMedia = _filterMediaByType(
       aggregatedMedia,
       state.mediaTypeFilter,
     );
-    final selectedDirectories =
-        _collectDirectoriesFromSections(selectedSections);
+    final selectedDirectories = _collectDirectoriesFromSections(
+      sectionsForFiltering,
+      state.excludedTagIds,
+    );
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
@@ -114,7 +121,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           const SizedBox(height: 12),
           _buildMediaTypeFilter(state, viewModel),
           const SizedBox(height: 24),
-          if (selectedSections.isEmpty)
+          if (selectedSections.isEmpty && state.excludedTagIds.isEmpty)
             _buildSelectionPlaceholder()
           else ...[
             _buildSelectionSummary(
@@ -122,6 +129,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               viewModel,
               state.filterMode,
               state.selectedTagIds.length,
+              state.excludedTagIds.length,
             ),
             const SizedBox(height: 12),
             if (selectedDirectories.isNotEmpty) ...[
@@ -183,22 +191,47 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           runSpacing: 12,
           children: filteredSections.map((section) {
             final isSelected = state.selectedTagIds.contains(section.id);
-            return FilterChip(
-              label: Text(
-                '${section.name} • ${section.itemCount} '
-                'item${section.itemCount == 1 ? '' : 's'}',
+            final isExcluded = state.excludedTagIds.contains(section.id);
+            final labelText = StringBuffer(section.name)
+              ..write(' • ${section.itemCount} ')
+              ..write('item${section.itemCount == 1 ? '' : 's'}');
+            if (isExcluded) {
+              labelText.write(' (excluded)');
+            }
+
+            return GestureDetector(
+              onLongPress: () =>
+                  viewModel.setTagExcluded(section.id, !isExcluded),
+              onSecondaryTap: () =>
+                  viewModel.setTagExcluded(section.id, !isExcluded),
+              child: FilterChip(
+                label: Text(labelText.toString()),
+                avatar: section.isFavorites
+                    ? const Icon(Icons.star, color: Colors.amber)
+                    : section.color != null
+                        ? CircleAvatar(
+                            backgroundColor: section.color,
+                            radius: 12,
+                          )
+                        : null,
+                selected: isSelected || isExcluded,
+                selectedColor: isExcluded
+                    ? Theme.of(context)
+                        .colorScheme
+                        .errorContainer
+                        .withOpacity(0.9)
+                    : null,
+                checkmarkColor: isExcluded
+                    ? Theme.of(context).colorScheme.onErrorContainer
+                    : null,
+                labelStyle: isExcluded
+                    ? TextStyle(
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                      )
+                    : null,
+                onSelected: (selected) =>
+                    viewModel.setTagSelected(section.id, selected),
               ),
-              avatar: section.isFavorites
-                  ? const Icon(Icons.star, color: Colors.amber)
-                  : section.color != null
-                      ? CircleAvatar(
-                          backgroundColor: section.color,
-                          radius: 12,
-                        )
-                      : null,
-              selected: isSelected,
-              onSelected: (selected) =>
-                  viewModel.setTagSelected(section.id, selected),
             );
           }).toList(),
         ),
@@ -226,6 +259,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                   .bodyMedium
                   ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Long press (mobile) or right-click (desktop) a tag to exclude it.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
           ],
         ),
       ),
@@ -237,11 +278,15 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     TagsViewModel viewModel,
     TagFilterMode filterMode,
     int selectedTagCount,
+    int excludedTagCount,
   ) {
     final theme = Theme.of(context);
     final filterDescription = filterMode.matchesAll
         ? 'Matching all selected tags'
         : 'Matching any selected tag';
+    final exclusionDescription = excludedTagCount > 0
+        ? 'Excluding $excludedTagCount tag${excludedTagCount == 1 ? '' : 's'}'
+        : null;
 
     return Row(
       children: [
@@ -256,9 +301,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                selectedTagCount <= 1
-                    ? filterDescription
-                    : '$filterDescription (${selectedTagCount} tags)',
+                [
+                  if (selectedTagCount > 0)
+                    selectedTagCount <= 1
+                        ? filterDescription
+                        : '$filterDescription (${selectedTagCount} tags)',
+                  if (selectedTagCount == 0) 'No tags selected',
+                  if (exclusionDescription != null) exclusionDescription,
+                ].where((text) => text.isNotEmpty).join(' • '),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -325,17 +375,24 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   List<MediaEntity> _collectMediaFromSections(
     List<TagSection> sections,
     TagFilterMode filterMode,
+    List<String> excludedTagIds,
+    bool hasSelectedTags,
   ) {
     if (sections.isEmpty) {
       return const <MediaEntity>[];
     }
 
+    final excludedSet = excludedTagIds.toSet();
     final mediaById = <String, MediaEntity>{};
     final occurrenceCount = <String, int>{};
 
     for (final section in sections) {
       final seenInSection = <String>{};
       for (final media in section.allMedia) {
+        if (excludedSet.isNotEmpty &&
+            media.tagIds.any(excludedSet.contains)) {
+          continue;
+        }
         mediaById[media.id] = media;
         if (seenInSection.add(media.id)) {
           occurrenceCount.update(
@@ -347,7 +404,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       }
     }
 
-    if (!filterMode.matchesAll) {
+    final requireAll = hasSelectedTags && filterMode.matchesAll;
+    if (!requireAll) {
       return mediaById.values.toList();
     }
 
@@ -360,20 +418,34 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
   List<TagDirectoryContent> _collectDirectoriesFromSections(
     List<TagSection> sections,
+    List<String> excludedTagIds,
   ) {
     if (sections.isEmpty) {
       return const <TagDirectoryContent>[];
     }
 
+    final excludedSet = excludedTagIds.toSet();
     final map = <String, TagDirectoryContent>{};
     for (final section in sections) {
       for (final directoryContent in section.directories) {
+        if (excludedSet.isNotEmpty &&
+            directoryContent.directory.tagIds.any(excludedSet.contains)) {
+          continue;
+        }
+        final filteredMedia = excludedSet.isEmpty
+            ? directoryContent.media
+            : directoryContent.media
+                .where((media) => !media.tagIds.any(excludedSet.contains))
+                .toList();
+        if (filteredMedia.isEmpty) {
+          continue;
+        }
         map.update(
           directoryContent.directory.id,
           (existing) {
             final merged = <String, MediaEntity>{
               for (final media in existing.media) media.id: media,
-              for (final media in directoryContent.media) media.id: media,
+              for (final media in filteredMedia) media.id: media,
             };
             return TagDirectoryContent(
               directory: directoryContent.directory,
@@ -382,7 +454,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           },
           ifAbsent: () => TagDirectoryContent(
             directory: directoryContent.directory,
-            media: List<MediaEntity>.from(directoryContent.media),
+            media: List<MediaEntity>.from(filteredMedia),
           ),
         );
       }
