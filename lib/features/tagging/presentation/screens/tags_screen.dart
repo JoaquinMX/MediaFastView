@@ -9,6 +9,7 @@ import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/widgets/media_grid_item.dart';
 import '../../../media_library/presentation/widgets/column_selector_popup.dart';
 import '../../domain/enums/tag_filter_mode.dart';
+import '../../domain/enums/tag_media_type_filter.dart';
 import '../view_models/tags_view_model.dart';
 import '../widgets/tag_directory_chip.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
@@ -92,6 +93,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       selectedSections,
       state.filterMode,
     );
+    final filteredMedia = _filterMediaByType(
+      aggregatedMedia,
+      state.mediaTypeFilter,
+    );
     final selectedDirectories =
         _collectDirectoriesFromSections(selectedSections);
 
@@ -106,12 +111,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           _buildTagSelectionChips(state, viewModel),
           const SizedBox(height: 12),
           _buildFilterModeToggle(state, viewModel),
+          const SizedBox(height: 12),
+          _buildMediaTypeFilter(state, viewModel),
           const SizedBox(height: 24),
           if (selectedSections.isEmpty)
             _buildSelectionPlaceholder()
           else ...[
             _buildSelectionSummary(
-              aggregatedMedia,
+              filteredMedia,
               viewModel,
               state.filterMode,
               state.selectedTagIds.length,
@@ -121,10 +128,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               _buildDirectorySection(selectedDirectories),
               const SizedBox(height: 24),
             ],
-            if (aggregatedMedia.isEmpty)
+            if (filteredMedia.isEmpty)
               _buildNoResultsMessage()
             else
-              _buildMediaGrid(aggregatedMedia, aggregatedMedia, gridColumns),
+              _buildMediaGrid(filteredMedia, filteredMedia, gridColumns),
           ],
         ],
       ),
@@ -288,7 +295,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Try choosing different tags or clear the selection.',
+              'Try choosing different tags or adjust the media type filter.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -297,6 +304,22 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         ),
       ),
     );
+  }
+
+  List<MediaEntity> _filterMediaByType(
+    List<MediaEntity> media,
+    TagMediaTypeFilter filter,
+  ) {
+    return media.where((item) {
+      switch (filter) {
+        case TagMediaTypeFilter.images:
+          return item.type == MediaType.image;
+        case TagMediaTypeFilter.videos:
+          return item.type == MediaType.video;
+        case TagMediaTypeFilter.all:
+          return item.type == MediaType.image || item.type == MediaType.video;
+      }
+    }).toList();
   }
 
   List<MediaEntity> _collectMediaFromSections(
@@ -387,6 +410,39 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           'When enabled, media must include every selected tag.',
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      ),
+    );
+  }
+
+  Widget _buildMediaTypeFilter(
+    TagsLoaded state,
+    TagsViewModel viewModel,
+  ) {
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Media type',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              children: TagMediaTypeFilter.values.map((filter) {
+                final isSelected = state.mediaTypeFilter == filter;
+                return ChoiceChip(
+                  label: Text(filter.label),
+                  selected: isSelected,
+                  onSelected: (_) => viewModel.setMediaTypeFilter(filter),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
