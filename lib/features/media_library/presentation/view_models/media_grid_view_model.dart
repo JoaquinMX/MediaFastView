@@ -60,6 +60,7 @@ class MediaLoaded extends MediaState {
     required this.selectedMediaIds,
     required this.isSelectionMode,
     required this.showFavoritesOnly,
+    required this.showUntaggedOnly,
     required this.visibleMediaTypes,
   });
 
@@ -73,6 +74,7 @@ class MediaLoaded extends MediaState {
   final Set<String> selectedMediaIds;
   final bool isSelectionMode;
   final bool showFavoritesOnly;
+  final bool showUntaggedOnly;
   final Set<MediaType> visibleMediaTypes;
 
   MediaLoaded copyWith({
@@ -86,6 +88,7 @@ class MediaLoaded extends MediaState {
     Set<String>? selectedMediaIds,
     bool? isSelectionMode,
     bool? showFavoritesOnly,
+    bool? showUntaggedOnly,
     Set<MediaType>? visibleMediaTypes,
   }) {
     return MediaLoaded(
@@ -99,6 +102,7 @@ class MediaLoaded extends MediaState {
       selectedMediaIds: selectedMediaIds ?? this.selectedMediaIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
+      showUntaggedOnly: showUntaggedOnly ?? this.showUntaggedOnly,
       visibleMediaTypes: visibleMediaTypes ?? this.visibleMediaTypes,
     );
   }
@@ -186,6 +190,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   late final UpdateDirectoryAccessUseCase _updateDirectoryAccessUseCase;
   List<String> _favoriteMediaIds = const <String>[];
   bool _showFavoritesOnly = false;
+  bool _showUntaggedOnly = false;
   late final ProviderSubscription<FavoritesState> _favoritesSubscription;
   Set<MediaType> _visibleMediaTypes = Set<MediaType>.from(MediaType.values);
 
@@ -194,6 +199,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   bool get isSelectionMode => _isSelectionMode;
   int get selectedMediaCount => _selectedMediaIds.length;
   bool get showFavoritesOnly => _showFavoritesOnly;
+  bool get showUntaggedOnly => _showUntaggedOnly;
   Set<MediaType> get visibleMediaTypes => Set<MediaType>.unmodifiable(
         _visibleMediaTypes,
       );
@@ -479,6 +485,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
           selectedMediaIds: const <String>{},
           isSelectionMode: false,
           showFavoritesOnly: _showFavoritesOnly,
+          showUntaggedOnly: _showUntaggedOnly,
           visibleMediaTypes: _visibleMediaTypes,
         );
       }
@@ -533,6 +540,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
+        showUntaggedOnly: _showUntaggedOnly,
         visibleMediaTypes: _visibleMediaTypes,
       );
     }
@@ -540,6 +548,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   /// Filters media by tag IDs.
   void filterByTags(List<String> tagIds) async {
+    if (tagIds.isNotEmpty && _showUntaggedOnly) {
+      _showUntaggedOnly = false;
+    }
     final previousColumns = _ref.read(gridColumnsProvider);
     state = const MediaLoading();
     try {
@@ -589,6 +600,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: const <String>{},
         isSelectionMode: false,
         showFavoritesOnly: _showFavoritesOnly,
+        showUntaggedOnly: _showUntaggedOnly,
         visibleMediaTypes: _visibleMediaTypes,
       );
     } catch (e) {
@@ -616,6 +628,25 @@ class MediaViewModel extends StateNotifier<MediaState> {
       return;
     }
     _showFavoritesOnly = value;
+    _emitLoadedStateFromCache();
+  }
+
+  /// Filters media to show only items without tags when [value] is true.
+  Future<void> setShowUntaggedOnly(bool value) async {
+    if (_showUntaggedOnly == value) {
+      return;
+    }
+    _showUntaggedOnly = value;
+
+    if (value) {
+      if (state case MediaLoaded(:final selectedTagIds)) {
+        if (selectedTagIds.isNotEmpty) {
+          await filterByTags(const []);
+          return;
+        }
+      }
+    }
+
     _emitLoadedStateFromCache();
   }
 
@@ -810,6 +841,13 @@ class MediaViewModel extends StateNotifier<MediaState> {
         .toList(growable: false);
   }
 
+  List<MediaEntity> _applyUntaggedFilter(List<MediaEntity> media) {
+    if (!_showUntaggedOnly) {
+      return List<MediaEntity>.from(media);
+    }
+    return media.where((item) => item.tagIds.isEmpty).toList(growable: false);
+  }
+
   List<MediaEntity> _applyMediaTypeFilter(List<MediaEntity> media) {
     if (_visibleMediaTypes.length == MediaType.values.length) {
       return List<MediaEntity>.from(media);
@@ -826,7 +864,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
   ) {
     final typeFiltered = _applyMediaTypeFilter(media);
     final favoritesFiltered = _applyFavoritesFilter(typeFiltered);
-    return _applySearch(favoritesFiltered, query);
+    final untaggedFiltered = _applyUntaggedFilter(favoritesFiltered);
+    return _applySearch(untaggedFiltered, query);
   }
 
   void _emitLoadedStateFromCache() {
@@ -853,6 +892,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
+        showUntaggedOnly: _showUntaggedOnly,
         visibleMediaTypes: _visibleMediaTypes,
       );
     } else if (state is MediaEmpty && _selectedMediaIds.isNotEmpty) {
@@ -890,6 +930,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
+        showUntaggedOnly: _showUntaggedOnly,
         visibleMediaTypes: _visibleMediaTypes,
       );
     }
@@ -927,6 +968,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         selectedMediaIds: selectionSnapshot,
         isSelectionMode: selectionMode,
         showFavoritesOnly: _showFavoritesOnly,
+        showUntaggedOnly: _showUntaggedOnly,
         visibleMediaTypes: _visibleMediaTypes,
       );
     }

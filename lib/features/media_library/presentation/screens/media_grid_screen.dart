@@ -466,6 +466,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final showFavoritesOnly = state is MediaLoaded
         ? state.showFavoritesOnly
         : viewModel.showFavoritesOnly;
+    final showUntaggedOnly = state is MediaLoaded
+        ? state.showUntaggedOnly
+        : viewModel.showUntaggedOnly;
     final visibleMediaTypes = state is MediaLoaded
         ? state.visibleMediaTypes
         : viewModel.visibleMediaTypes;
@@ -513,6 +516,14 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     viewModel.setShowFavoritesOnly(value);
                   },
                 ),
+              FilterChip(
+                label: const Text('Untagged'),
+                avatar: const Icon(Icons.label_off),
+                selected: showUntaggedOnly,
+                onSelected: (value) async {
+                  await viewModel.setShowUntaggedOnly(value);
+                },
+              ),
             ],
           ),
           const SizedBox(height: 12),
