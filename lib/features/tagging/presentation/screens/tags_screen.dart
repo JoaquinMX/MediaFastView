@@ -107,41 +107,69 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       state.excludedTagIds,
     );
 
+    final headerWidgets = <Widget>[
+      _buildSearchField(),
+      const SizedBox(height: 12),
+      _buildTagSelectionChips(state, viewModel),
+      const SizedBox(height: 12),
+      _buildFilterModeToggle(state, viewModel),
+      const SizedBox(height: 12),
+      _buildMediaTypeFilter(state, viewModel),
+      const SizedBox(height: 24),
+    ];
+
+    if (selectedSections.isEmpty && state.excludedTagIds.isEmpty) {
+      headerWidgets.add(_buildSelectionPlaceholder());
+    } else {
+      headerWidgets.addAll([
+        _buildSelectionSummary(
+          filteredMedia,
+          viewModel,
+          state.filterMode,
+          state.selectedTagIds.length,
+          state.excludedTagIds.length,
+        ),
+        const SizedBox(height: 12),
+      ]);
+
+      if (selectedDirectories.isNotEmpty) {
+        headerWidgets.addAll([
+          _buildDirectorySection(selectedDirectories),
+          const SizedBox(height: 24),
+        ]);
+      }
+
+      if (filteredMedia.isEmpty) {
+        headerWidgets.add(_buildNoResultsMessage());
+      } else {
+        headerWidgets.add(const SizedBox(height: 12));
+      }
+    }
+
+    final slivers = <Widget>[
+      SliverPadding(
+        padding: const EdgeInsets.all(16),
+        sliver: SliverList(
+          delegate: SliverChildListDelegate(headerWidgets),
+        ),
+      ),
+    ];
+
+    if (filteredMedia.isNotEmpty &&
+        (selectedSections.isNotEmpty || state.excludedTagIds.isNotEmpty)) {
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          sliver: _buildMediaGrid(filteredMedia, filteredMedia, gridColumns),
+        ),
+      );
+    }
+
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
+      child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          _buildSearchField(),
-          const SizedBox(height: 12),
-          _buildTagSelectionChips(state, viewModel),
-          const SizedBox(height: 12),
-          _buildFilterModeToggle(state, viewModel),
-          const SizedBox(height: 12),
-          _buildMediaTypeFilter(state, viewModel),
-          const SizedBox(height: 24),
-          if (selectedSections.isEmpty && state.excludedTagIds.isEmpty)
-            _buildSelectionPlaceholder()
-          else ...[
-            _buildSelectionSummary(
-              filteredMedia,
-              viewModel,
-              state.filterMode,
-              state.selectedTagIds.length,
-              state.excludedTagIds.length,
-            ),
-            const SizedBox(height: 12),
-            if (selectedDirectories.isNotEmpty) ...[
-              _buildDirectorySection(selectedDirectories),
-              const SizedBox(height: 24),
-            ],
-            if (filteredMedia.isEmpty)
-              _buildNoResultsMessage()
-            else
-              _buildMediaGrid(filteredMedia, filteredMedia, gridColumns),
-          ],
-        ],
+        slivers: slivers,
       ),
     );
   }
@@ -549,25 +577,25 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  Widget _buildMediaGrid(
+  SliverGrid _buildMediaGrid(
     List<MediaEntity> collection,
     List<MediaEntity> media,
     int columns,
   ) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return SliverGrid(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
         childAspectRatio: 1,
       ),
-      itemCount: media.length,
-      itemBuilder: (context, index) {
-        final mediaItem = media[index];
-        return _buildMediaTile(mediaItem, collection);
-      },
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final mediaItem = media[index];
+          return _buildMediaTile(mediaItem, collection);
+        },
+        childCount: media.length,
+      ),
     );
   }
 
