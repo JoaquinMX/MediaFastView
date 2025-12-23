@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_fast_view/core/config/app_config.dart';
 import 'package:media_fast_view/shared/widgets/media_playback_controls.dart';
 import 'package:media_fast_view/shared/widgets/media_progress_indicator.dart';
+import 'package:media_fast_view/shared/providers/slideshow_controls_hide_delay_provider.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
 
@@ -25,6 +27,8 @@ class SlideshowScreen extends ConsumerStatefulWidget {
 class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
   late final FocusNode _focusNode;
   bool _areControlsVisible = true;
+  Timer? _controlsHideTimer;
+  Duration _controlsHideDelay = AppConfig.defaultSlideshowControlsHideDelay;
 
   @override
   void initState() {
@@ -32,10 +36,17 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     _focusNode = FocusNode();
     // Enable fullscreen mode
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _controlsHideDelay = ref.read(slideshowControlsHideDelayProvider);
+    ref.listen<Duration>(slideshowControlsHideDelayProvider, (previous, next) {
+      _controlsHideDelay = next;
+      _restartControlsHideTimer();
+    });
+    _restartControlsHideTimer();
   }
 
   @override
   void dispose() {
+    _controlsHideTimer?.cancel();
     _focusNode.dispose();
     // Restore system UI
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -55,16 +66,20 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
         focusNode: _focusNode,
         autofocus: true,
         onKeyEvent: _handleKeyEvent,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Main content area
-            _buildSlideshowContent(viewModel, slideshowViewModel),
+        child: MouseRegion(
+          onEnter: (_) => _handlePointerActivity(),
+          onHover: (_) => _handlePointerActivity(),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Main content area
+              _buildSlideshowContent(viewModel, slideshowViewModel),
 
-            // Controls overlay
-            if (_areControlsVisible)
-              _buildControlsOverlay(viewModel, slideshowViewModel),
-          ],
+              // Controls overlay
+              if (_areControlsVisible)
+                _buildControlsOverlay(viewModel, slideshowViewModel),
+            ],
+          ),
         ),
       ),
     );
@@ -233,7 +248,29 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
   }
 
   void _toggleControlsVisibility() {
-    setState(() => _areControlsVisible = !_areControlsVisible);
+    if (_areControlsVisible) {
+      _controlsHideTimer?.cancel();
+      setState(() => _areControlsVisible = false);
+    } else {
+      setState(() => _areControlsVisible = true);
+      _restartControlsHideTimer();
+    }
+  }
+
+  void _handlePointerActivity() {
+    if (!_areControlsVisible) {
+      setState(() => _areControlsVisible = true);
+    }
+    _restartControlsHideTimer();
+  }
+
+  void _restartControlsHideTimer() {
+    _controlsHideTimer?.cancel();
+    _controlsHideTimer = Timer(_controlsHideDelay, () {
+      if (mounted) {
+        setState(() => _areControlsVisible = false);
+      }
+    });
   }
 
   void _handlePlayPause() {

@@ -8,6 +8,7 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/theme_provider.dart';
 import '../../../../shared/providers/thumbnail_caching_provider.dart';
 import '../../../../shared/providers/auto_navigate_sibling_directories_provider.dart';
+import '../../../../shared/providers/slideshow_controls_hide_delay_provider.dart';
 import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/widgets/app_bar.dart';
 
@@ -31,6 +32,10 @@ class SettingsScreen extends ConsumerWidget {
         ref.watch(autoNavigateSiblingDirectoriesProvider);
     final autoNavigateSiblingDirectoriesNotifier =
         ref.read(autoNavigateSiblingDirectoriesProvider.notifier);
+    final slideshowControlsHideDelay =
+        ref.watch(slideshowControlsHideDelayProvider);
+    final slideshowControlsHideDelayNotifier =
+        ref.read(slideshowControlsHideDelayProvider.notifier);
 
     return Scaffold(
       appBar: const CustomAppBar(
@@ -50,6 +55,10 @@ class SettingsScreen extends ConsumerWidget {
           _buildLoopSetting(
             playbackSettings.loopVideos,
             playbackSettingsNotifier,
+          ),
+          _buildSlideshowControlsHideDelaySetting(
+            slideshowControlsHideDelay,
+            slideshowControlsHideDelayNotifier,
           ),
           const Divider(),
           _buildSectionHeader('Navigation'),
@@ -175,6 +184,45 @@ class SettingsScreen extends ConsumerWidget {
           notifier.setLoopVideos(value);
         },
       ),
+    );
+  }
+
+  Widget _buildSlideshowControlsHideDelaySetting(
+    Duration delay,
+    SlideshowControlsHideDelayNotifier notifier,
+  ) {
+    final seconds = delay.inSeconds;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          title: const Text('Slideshow controls auto-hide'),
+          subtitle: Text(
+            'Hide slideshow controls after $seconds second${seconds == 1 ? '' : 's'} '
+            'of inactivity.',
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Slider(
+            value: seconds
+                .clamp(
+                  slideshowControlsHideDelayMinSeconds,
+                  slideshowControlsHideDelayMaxSeconds,
+                )
+                .toDouble(),
+            min: slideshowControlsHideDelayMinSeconds.toDouble(),
+            max: slideshowControlsHideDelayMaxSeconds.toDouble(),
+            divisions: slideshowControlsHideDelayMaxSeconds -
+                slideshowControlsHideDelayMinSeconds,
+            label: '$seconds s',
+            onChanged: (value) => notifier.setDelay(
+              Duration(seconds: value.round()),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
