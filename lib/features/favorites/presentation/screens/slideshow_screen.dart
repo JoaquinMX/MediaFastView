@@ -37,10 +37,6 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     // Enable fullscreen mode
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _controlsHideDelay = ref.read(slideshowControlsHideDelayProvider);
-    ref.listen<Duration>(slideshowControlsHideDelayProvider, (previous, next) {
-      _controlsHideDelay = next;
-      _restartControlsHideTimer();
-    });
     _restartControlsHideTimer();
   }
 
@@ -59,6 +55,10 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     final slideshowViewModel = ref.read(
       slideshowViewModelProvider(widget.mediaList).notifier,
     );
+    ref.listen<Duration>(slideshowControlsHideDelayProvider, (previous, next) {
+      _controlsHideDelay = next;
+      _restartControlsHideTimer();
+    });
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -104,9 +104,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
       onTap: _toggleControlsVisibility,
       child: Container(
         color: Colors.black,
-        child: Center(
-          child: _buildMediaContent(currentMedia, viewModel),
-        ),
+        child: Center(child: _buildMediaContent(currentMedia, viewModel)),
       ),
     );
   }
@@ -156,10 +154,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
           gradient: LinearGradient(
             begin: Alignment.bottomCenter,
             end: Alignment.topCenter,
-            colors: [
-              Colors.black.withValues(alpha: 0.8),
-              Colors.transparent,
-            ],
+            colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
           ),
         ),
         child: SafeArea(
@@ -188,10 +183,8 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
                 isPlaying: viewModel.isPlaying,
                 isLooping: viewModel.isLooping,
                 isShuffleEnabled: switch (state) {
-                  SlideshowPlaying(:final isShuffleEnabled) =>
-                    isShuffleEnabled,
-                  SlideshowPaused(:final isShuffleEnabled) =>
-                    isShuffleEnabled,
+                  SlideshowPlaying(:final isShuffleEnabled) => isShuffleEnabled,
+                  SlideshowPaused(:final isShuffleEnabled) => isShuffleEnabled,
                   _ => false,
                 },
                 isMuted: viewModel.isMuted,
@@ -225,8 +218,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
                       viewModel.currentMedia?.type == MediaType.video,
                 ),
                 style: MediaPlaybackControlStyle(
-                  progressBackgroundColor:
-                      Colors.white.withValues(alpha: 0.3),
+                  progressBackgroundColor: Colors.white.withValues(alpha: 0.3),
                 ),
               ),
 
