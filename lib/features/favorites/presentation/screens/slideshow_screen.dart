@@ -67,6 +67,9 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
         autofocus: true,
         onKeyEvent: _handleKeyEvent,
         child: MouseRegion(
+          cursor: _shouldHideMouse
+              ? SystemMouseCursors.none
+              : SystemMouseCursors.basic,
           onEnter: (_) => _handlePointerActivity(),
           onHover: (_) => _handlePointerActivity(),
           child: Stack(
@@ -255,6 +258,10 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     }
     _restartControlsHideTimer();
   }
+
+  bool get _shouldHideMouse =>
+      !_areControlsVisible &&
+      (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
   void _restartControlsHideTimer() {
     _controlsHideTimer?.cancel();
