@@ -15,6 +15,8 @@ class AppConfig {
   static const String _cacheExpirationKey = 'cacheExpiration';
   static const String _slideshowMinDurationKey = 'slideshowMinDuration';
   static const String _slideshowMaxDurationKey = 'slideshowMaxDuration';
+  static const String _slideshowControlsHideDelayKey =
+      'slideshowControlsHideDelay';
 
   // Default values
   static const int defaultGridColumns = 3;
@@ -26,6 +28,8 @@ class AppConfig {
   static const Duration defaultCacheExpiration = Duration(days: 1);
   static const Duration defaultSlideshowMinDuration = Duration(seconds: 2);
   static const Duration defaultSlideshowMaxDuration = Duration(seconds: 15);
+  static const Duration defaultSlideshowControlsHideDelay =
+      Duration(seconds: 5);
 
   // File size formatting constants
   static const int kbBytes = 1024;
@@ -145,6 +149,18 @@ class AppConfig {
     _prefs?.setInt(_slideshowMaxDurationKey, value.inMilliseconds);
   }
 
+  /// Get the slideshow controls auto-hide delay.
+  static Duration get slideshowControlsHideDelay {
+    final ms = _prefs?.getInt(_slideshowControlsHideDelayKey) ??
+        defaultSlideshowControlsHideDelay.inMilliseconds;
+    return Duration(milliseconds: ms);
+  }
+
+  /// Set the slideshow controls auto-hide delay.
+  static set slideshowControlsHideDelay(Duration value) {
+    _prefs?.setInt(_slideshowControlsHideDelayKey, value.inMilliseconds);
+  }
+
   /// Reset all configuration values to defaults.
   static void resetToDefaults() {
     gridColumns = defaultGridColumns;
@@ -156,5 +172,6 @@ class AppConfig {
     cacheExpiration = defaultCacheExpiration;
     slideshowMinDuration = defaultSlideshowMinDuration;
     slideshowMaxDuration = defaultSlideshowMaxDuration;
+    slideshowControlsHideDelay = defaultSlideshowControlsHideDelay;
   }
 }
