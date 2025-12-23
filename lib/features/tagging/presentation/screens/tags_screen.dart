@@ -89,21 +89,32 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final selectedSections = sections
         .where((section) => state.selectedTagIds.contains(section.id))
         .toList();
-    final hasSelectedTags = selectedSections.isNotEmpty;
-    final sectionsForFiltering =
-        hasSelectedTags || state.excludedTagIds.isEmpty ? selectedSections : sections;
+    final optionalSections = sections
+        .where((section) => state.optionalTagIds.contains(section.id))
+        .toList();
+    final hasRequiredTags = selectedSections.isNotEmpty;
+    final hasOptionalTags = optionalSections.isNotEmpty;
+    final hasSelectedTags = hasRequiredTags || hasOptionalTags;
     final aggregatedMedia = _collectMediaFromSections(
-      sectionsForFiltering,
+      sections,
+      selectedSections,
+      optionalSections,
       state.filterMode,
       state.excludedTagIds,
-      hasSelectedTags,
     );
     final filteredMedia = _filterMediaByType(
       aggregatedMedia,
       state.mediaTypeFilter,
     );
+    final sectionsForDirectories = _resolveFilterSections(
+      sections,
+      selectedSections,
+      optionalSections,
+      hasSelectedTags,
+      state.excludedTagIds.isEmpty,
+    );
     final selectedDirectories = _collectDirectoriesFromSections(
-      sectionsForFiltering,
+      sectionsForDirectories,
       state.excludedTagIds,
     );
 
@@ -113,6 +124,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       _buildTagSelectionChips(state, viewModel),
       const SizedBox(height: 12),
       _buildFilterModeToggle(state, viewModel),
+      if (state.filterMode.isHybrid) ...[
+        const SizedBox(height: 12),
+        _buildSelectionModeToggle(state, viewModel),
+      ],
       const SizedBox(height: 12),
       _buildMediaTypeFilter(state, viewModel),
       const SizedBox(height: 24),
@@ -127,6 +142,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           viewModel,
           state.filterMode,
           state.selectedTagIds.length,
+          state.optionalTagIds.length,
           state.excludedTagIds.length,
         ),
         const SizedBox(height: 12),
@@ -219,12 +235,15 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           runSpacing: 12,
           children: filteredSections.map((section) {
             final isSelected = state.selectedTagIds.contains(section.id);
+            final isOptional = state.optionalTagIds.contains(section.id);
             final isExcluded = state.excludedTagIds.contains(section.id);
             final labelText = StringBuffer(section.name)
               ..write(' • ${section.itemCount} ')
               ..write('item${section.itemCount == 1 ? '' : 's'}');
             if (isExcluded) {
               labelText.write(' (excluded)');
+            } else if (isOptional) {
+              labelText.write(' (optional)');
             }
 
             return GestureDetector(
@@ -242,21 +261,34 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                             radius: 12,
                           )
                         : null,
-                selected: isSelected || isExcluded,
+                selected: isSelected || isOptional || isExcluded,
                 selectedColor: isExcluded
                     ? Theme.of(context)
                         .colorScheme
                         .errorContainer
                         .withOpacity(0.9)
+                    : isOptional
+                        ? Theme.of(context)
+                            .colorScheme
+                            .secondaryContainer
+                            .withOpacity(0.9)
                     : null,
                 checkmarkColor: isExcluded
                     ? Theme.of(context).colorScheme.onErrorContainer
+                    : isOptional
+                        ? Theme.of(context).colorScheme.onSecondaryContainer
                     : null,
                 labelStyle: isExcluded
                     ? TextStyle(
                         color: Theme.of(context).colorScheme.onErrorContainer,
                       )
-                    : null,
+                    : isOptional
+                        ? TextStyle(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSecondaryContainer,
+                          )
+                        : null,
                 onSelected: (selected) =>
                     viewModel.setTagSelected(section.id, selected),
               ),
@@ -295,6 +327,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                   .bodySmall
                   ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Hybrid mode lets you mix must-include and match-any tags.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
           ],
         ),
       ),
@@ -306,12 +346,21 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     TagsViewModel viewModel,
     TagFilterMode filterMode,
     int selectedTagCount,
+    int optionalTagCount,
     int excludedTagCount,
   ) {
     final theme = Theme.of(context);
-    final filterDescription = filterMode.matchesAll
-        ? 'Matching all selected tags'
-        : 'Matching any selected tag';
+    final filterDescription = switch (filterMode) {
+      TagFilterMode.hybrid => 'Hybrid match',
+      _ when filterMode.matchesAll => 'Matching all selected tags',
+      _ => 'Matching any selected tag',
+    };
+    final requiredDescription = selectedTagCount > 0
+        ? 'Must include $selectedTagCount tag${selectedTagCount == 1 ? '' : 's'}'
+        : null;
+    final optionalDescription = optionalTagCount > 0
+        ? 'Match any of $optionalTagCount tag${optionalTagCount == 1 ? '' : 's'}'
+        : null;
     final exclusionDescription = excludedTagCount > 0
         ? 'Excluding $excludedTagCount tag${excludedTagCount == 1 ? '' : 's'}'
         : null;
@@ -330,11 +379,21 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               const SizedBox(height: 4),
               Text(
                 [
-                  if (selectedTagCount > 0)
+                  if (filterMode.isHybrid && hasSelection(selectedTagCount, optionalTagCount))
+                    filterDescription,
+                  if (filterMode.isHybrid && requiredDescription != null)
+                    requiredDescription,
+                  if (filterMode.isHybrid && optionalDescription != null)
+                    optionalDescription,
+                  if (!filterMode.isHybrid && selectedTagCount > 0)
                     selectedTagCount <= 1
                         ? filterDescription
                         : '$filterDescription (${selectedTagCount} tags)',
-                  if (selectedTagCount == 0) 'No tags selected',
+                  if (!filterMode.isHybrid && selectedTagCount == 0)
+                    'No tags selected',
+                  if (filterMode.isHybrid &&
+                      !hasSelection(selectedTagCount, optionalTagCount))
+                    'No tags selected',
                   if (exclusionDescription != null) exclusionDescription,
                 ].where((text) => text.isNotEmpty).join(' • '),
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -356,6 +415,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           ),
       ],
     );
+  }
+
+  bool hasSelection(int selectedCount, int optionalCount) {
+    return selectedCount + optionalCount > 0;
   }
 
   Widget _buildNoResultsMessage() {
@@ -400,21 +463,72 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     }).toList();
   }
 
+  List<TagSection> _resolveFilterSections(
+    List<TagSection> allSections,
+    List<TagSection> requiredSections,
+    List<TagSection> optionalSections,
+    bool hasSelectedTags,
+    bool excludedIsEmpty,
+  ) {
+    if (hasSelectedTags || excludedIsEmpty) {
+      return _mergeSections(requiredSections, optionalSections);
+    }
+    return allSections;
+  }
+
+  List<TagSection> _mergeSections(
+    List<TagSection> requiredSections,
+    List<TagSection> optionalSections,
+  ) {
+    final map = <String, TagSection>{
+      for (final section in requiredSections) section.id: section,
+    };
+    for (final section in optionalSections) {
+      map.putIfAbsent(section.id, () => section);
+    }
+    return map.values.toList();
+  }
+
   List<MediaEntity> _collectMediaFromSections(
-    List<TagSection> sections,
+    List<TagSection> allSections,
+    List<TagSection> requiredSections,
+    List<TagSection> optionalSections,
     TagFilterMode filterMode,
     List<String> excludedTagIds,
-    bool hasSelectedTags,
   ) {
-    if (sections.isEmpty) {
+    if (allSections.isEmpty) {
       return const <MediaEntity>[];
     }
 
     final excludedSet = excludedTagIds.toSet();
-    final mediaById = <String, MediaEntity>{};
-    final occurrenceCount = <String, int>{};
+    final requiredIds = {
+      for (final section in requiredSections) section.id,
+    };
+    final optionalIds = {
+      for (final section in optionalSections) section.id,
+    };
+    final hasRequired = requiredSections.isNotEmpty;
+    final hasOptional = optionalSections.isNotEmpty;
 
-    for (final section in sections) {
+    final sectionsToScan = filterMode.isHybrid
+        ? _resolveFilterSections(
+            allSections,
+            requiredSections,
+            optionalSections,
+            hasRequired || hasOptional,
+            excludedTagIds.isEmpty,
+          )
+        : (hasRequired || excludedTagIds.isEmpty ? requiredSections : allSections);
+
+    if (sectionsToScan.isEmpty) {
+      return const <MediaEntity>[];
+    }
+
+    final mediaById = <String, MediaEntity>{};
+    final requiredCount = <String, int>{};
+    final optionalCount = <String, int>{};
+
+    for (final section in sectionsToScan) {
       final seenInSection = <String>{};
       for (final media in section.allMedia) {
         if (excludedSet.isNotEmpty &&
@@ -423,25 +537,51 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         }
         mediaById[media.id] = media;
         if (seenInSection.add(media.id)) {
-          occurrenceCount.update(
-            media.id,
-            (value) => value + 1,
-            ifAbsent: () => 1,
-          );
+          if (requiredIds.contains(section.id)) {
+            requiredCount.update(
+              media.id,
+              (value) => value + 1,
+              ifAbsent: () => 1,
+            );
+          }
+          if (optionalIds.contains(section.id)) {
+            optionalCount.update(
+              media.id,
+              (value) => value + 1,
+              ifAbsent: () => 1,
+            );
+          }
         }
       }
     }
 
-    final requireAll = hasSelectedTags && filterMode.matchesAll;
-    if (!requireAll) {
-      return mediaById.values.toList();
+    if (!filterMode.isHybrid) {
+      final requireAll = hasRequired && filterMode.matchesAll;
+      if (!requireAll) {
+        return mediaById.values.toList();
+      }
+
+      final requiredMatches = requiredSections.length;
+      return requiredCount.entries
+          .where((entry) => entry.value == requiredMatches)
+          .map((entry) => mediaById[entry.key]!)
+          .toList();
     }
 
-    final requiredMatches = sections.length;
-    return occurrenceCount.entries
-        .where((entry) => entry.value == requiredMatches)
-        .map((entry) => mediaById[entry.key]!)
-        .toList();
+    return mediaById.values.where((media) {
+      final mediaId = media.id;
+      if (hasRequired) {
+        if ((requiredCount[mediaId] ?? 0) != requiredSections.length) {
+          return false;
+        }
+      }
+      if (hasOptional) {
+        if ((optionalCount[mediaId] ?? 0) == 0) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
   }
 
   List<TagDirectoryContent> _collectDirectoriesFromSections(
@@ -497,19 +637,76 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     TagsLoaded state,
     TagsViewModel viewModel,
   ) {
-    final isMatchAll = state.filterMode.matchesAll;
     return Card(
       elevation: 1,
-      child: SwitchListTile.adaptive(
-        value: isMatchAll,
-        onChanged: (value) => viewModel.setFilterMode(
-          value ? TagFilterMode.all : TagFilterMode.any,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tag matching',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              children: TagFilterMode.values.map((mode) {
+                return ChoiceChip(
+                  label: Text(mode.label),
+                  selected: state.filterMode == mode,
+                  onSelected: (_) => viewModel.setFilterMode(mode),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              state.filterMode.helperText,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
         ),
-        title: const Text('Match all selected tags'),
-        subtitle: const Text(
-          'When enabled, media must include every selected tag.',
+      ),
+    );
+  }
+
+  Widget _buildSelectionModeToggle(
+    TagsLoaded state,
+    TagsViewModel viewModel,
+  ) {
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Selection mode',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              children: TagSelectionMode.values.map((mode) {
+                return ChoiceChip(
+                  label: Text(mode.label),
+                  selected: state.selectionMode == mode,
+                  onSelected: (_) => viewModel.setSelectionMode(mode),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              state.selectionMode.helperText,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       ),
     );
   }
