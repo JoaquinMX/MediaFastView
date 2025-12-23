@@ -14,6 +14,8 @@ import '../view_models/tags_view_model.dart';
 import '../widgets/tag_directory_chip.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 
+enum TagSelectionIntent { include, exclude }
+
 class TagsScreen extends ConsumerStatefulWidget {
   const TagsScreen({super.key});
 
@@ -22,6 +24,7 @@ class TagsScreen extends ConsumerStatefulWidget {
 }
 
 class _TagsScreenState extends ConsumerState<TagsScreen> {
+  TagSelectionIntent _selectionIntent = TagSelectionIntent.include;
   late final TextEditingController _searchController;
   String _searchQuery = '';
 
@@ -113,13 +116,17 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       _buildTagSelectionChips(state, viewModel),
       const SizedBox(height: 12),
       _buildFilterModeToggle(state, viewModel),
+      if (state.filterMode.isHybrid) ...[
+        const SizedBox(height: 12),
+        _buildSelectionIntentToggle(),
+      ],
       const SizedBox(height: 12),
       _buildMediaTypeFilter(state, viewModel),
       const SizedBox(height: 24),
     ];
 
     if (selectedSections.isEmpty && state.excludedTagIds.isEmpty) {
-      headerWidgets.add(_buildSelectionPlaceholder());
+      headerWidgets.add(_buildSelectionPlaceholder(state.filterMode));
     } else {
       headerWidgets.addAll([
         _buildSelectionSummary(
@@ -190,6 +197,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     TagsViewModel viewModel,
   ) {
     final query = _searchQuery.trim().toLowerCase();
+    final isHybridMode = state.filterMode.isHybrid;
     final filteredSections = state.sections.where((section) {
       if (query.isEmpty) {
         return true;
@@ -257,8 +265,20 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                         color: Theme.of(context).colorScheme.onErrorContainer,
                       )
                     : null,
-                onSelected: (selected) =>
-                    viewModel.setTagSelected(section.id, selected),
+                onSelected: (_) {
+                  if (isHybridMode &&
+                      _selectionIntent == TagSelectionIntent.exclude) {
+                    viewModel.setTagExcluded(section.id, !isExcluded);
+                    return;
+                  }
+
+                  if (isHybridMode && isExcluded) {
+                    viewModel.setTagSelected(section.id, true);
+                    return;
+                  }
+
+                  viewModel.setTagSelected(section.id, !isSelected);
+                },
               ),
             );
           }).toList(),
@@ -267,7 +287,12 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  Widget _buildSelectionPlaceholder() {
+  Widget _buildSelectionPlaceholder(TagFilterMode filterMode) {
+    final helperText = filterMode.isHybrid
+        ? 'Use the Include/Exclude toggle below to build a must-have and '
+            'must-not-have list of tags.'
+        : 'Long press (mobile) or right-click (desktop) a tag to exclude it.';
+
     return Card(
       elevation: 1,
       child: Padding(
@@ -289,7 +314,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Long press (mobile) or right-click (desktop) a tag to exclude it.',
+              helperText,
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
@@ -309,9 +334,11 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     int excludedTagCount,
   ) {
     final theme = Theme.of(context);
-    final filterDescription = filterMode.matchesAll
-        ? 'Matching all selected tags'
-        : 'Matching any selected tag';
+    final filterDescription = switch (filterMode) {
+      TagFilterMode.all => 'Matching all selected tags',
+      TagFilterMode.any => 'Matching any selected tag',
+      TagFilterMode.hybrid => 'Including all selected tags',
+    };
     final exclusionDescription = excludedTagCount > 0
         ? 'Excluding $excludedTagCount tag${excludedTagCount == 1 ? '' : 's'}'
         : null;
@@ -497,19 +524,112 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     TagsLoaded state,
     TagsViewModel viewModel,
   ) {
-    final isMatchAll = state.filterMode.matchesAll;
+    final filterModeDescription = switch (state.filterMode) {
+      TagFilterMode.all =>
+        'Media must include every selected tag.',
+      TagFilterMode.any =>
+        'Media can include any of the selected tags.',
+      TagFilterMode.hybrid =>
+        'Build a must-include list and a must-exclude list.',
+    };
+
     return Card(
       elevation: 1,
-      child: SwitchListTile.adaptive(
-        value: isMatchAll,
-        onChanged: (value) => viewModel.setFilterMode(
-          value ? TagFilterMode.all : TagFilterMode.any,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Filter mode',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              children: TagFilterMode.values.map((mode) {
+                final isSelected = state.filterMode == mode;
+                final label = switch (mode) {
+                  TagFilterMode.any => 'Any',
+                  TagFilterMode.all => 'All',
+                  TagFilterMode.hybrid => 'Hybrid',
+                };
+
+                return ChoiceChip(
+                  label: Text(label),
+                  selected: isSelected,
+                  onSelected: (_) {
+                    viewModel.setFilterMode(mode);
+                    if (mode != TagFilterMode.hybrid &&
+                        _selectionIntent != TagSelectionIntent.include) {
+                      setState(() {
+                        _selectionIntent = TagSelectionIntent.include;
+                      });
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              filterModeDescription,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
         ),
-        title: const Text('Match all selected tags'),
-        subtitle: const Text(
-          'When enabled, media must include every selected tag.',
+      ),
+    );
+  }
+
+  Widget _buildSelectionIntentToggle() {
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Selection mode',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              children: TagSelectionIntent.values.map((intent) {
+                final label = intent == TagSelectionIntent.include
+                    ? 'Include'
+                    : 'Exclude';
+                return ChoiceChip(
+                  label: Text(label),
+                  selected: _selectionIntent == intent,
+                  selectedColor: intent == TagSelectionIntent.exclude
+                      ? Theme.of(context)
+                          .colorScheme
+                          .errorContainer
+                          .withOpacity(0.9)
+                      : null,
+                  onSelected: (_) {
+                    setState(() {
+                      _selectionIntent = intent;
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectionIntent == TagSelectionIntent.include
+                  ? 'Tap tags to require them.'
+                  : 'Tap tags to hide any media that includes them.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       ),
     );
   }
