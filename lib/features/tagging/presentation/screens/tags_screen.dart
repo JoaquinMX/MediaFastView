@@ -14,6 +14,63 @@ import '../view_models/tags_view_model.dart';
 import '../widgets/tag_directory_chip.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 
+enum TagQueryOperator {
+  and,
+  or,
+}
+
+extension TagQueryOperatorX on TagQueryOperator {
+  String get label => switch (this) {
+        TagQueryOperator.and => 'AND',
+        TagQueryOperator.or => 'OR',
+      };
+
+  IconData get icon => switch (this) {
+        TagQueryOperator.and => Icons.join_full,
+        TagQueryOperator.or => Icons.alt_route,
+      };
+}
+
+@immutable
+class TagQueryToken {
+  const TagQueryToken._({
+    required this.sectionId,
+    required this.label,
+    required this.color,
+    required this.isFavorites,
+    this.operator,
+  });
+
+  const TagQueryToken.tag({
+    required String sectionId,
+    required String label,
+    required Color? color,
+    required bool isFavorites,
+  }) : this._(
+          sectionId: sectionId,
+          label: label,
+          color: color,
+          isFavorites: isFavorites,
+        );
+
+  const TagQueryToken.operator(TagQueryOperator operator)
+      : this._(
+          sectionId: null,
+          label: null,
+          color: null,
+          isFavorites: false,
+          operator: operator,
+        );
+
+  final String? sectionId;
+  final String? label;
+  final Color? color;
+  final bool isFavorites;
+  final TagQueryOperator? operator;
+
+  bool get isOperator => operator != null;
+}
+
 class TagsScreen extends ConsumerStatefulWidget {
   const TagsScreen({super.key});
 
@@ -23,12 +80,15 @@ class TagsScreen extends ConsumerStatefulWidget {
 
 class _TagsScreenState extends ConsumerState<TagsScreen> {
   late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
+  List<TagQueryToken> _queryTokens = const [];
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+    _searchFocusNode = FocusNode();
     _searchController.addListener(_onSearchChanged);
     Future.microtask(() async {
       await ref.read(tagsViewModelProvider.notifier).loadTags();
@@ -40,6 +100,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -74,6 +135,141 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
+  void _handleTokenSelected(TagQueryToken token) {
+    setState(() {
+      if (token.isOperator) {
+        if (_queryTokens.isEmpty || _queryTokens.last.isOperator) {
+          return;
+        }
+        _queryTokens = [..._queryTokens, token];
+        return;
+      }
+
+      final tokens = List<TagQueryToken>.from(_queryTokens);
+      if (tokens.isNotEmpty && !tokens.last.isOperator) {
+        tokens.add(const TagQueryToken.operator(TagQueryOperator.and));
+      }
+      tokens.add(token);
+      _queryTokens = tokens;
+    });
+  }
+
+  void _handleManualSubmit(TagsLoaded state) {
+    final rawInput = _searchController.text.trim();
+    if (rawInput.isEmpty) {
+      return;
+    }
+
+    final normalized = rawInput.toLowerCase();
+    for (final operator in TagQueryOperator.values) {
+      if (operator.label.toLowerCase() == normalized ||
+          operator.name == normalized) {
+        _handleTokenSelected(TagQueryToken.operator(operator));
+        _searchController.clear();
+        return;
+      }
+    }
+
+    TagSection? matchedSection;
+    for (final section in state.sections) {
+      if (section.name.toLowerCase() == normalized) {
+        matchedSection = section;
+        break;
+      }
+    }
+
+    if (matchedSection != null) {
+      _handleTokenSelected(
+        TagQueryToken.tag(
+          sectionId: matchedSection.id,
+          label: matchedSection.name,
+          color: matchedSection.color,
+          isFavorites: matchedSection.isFavorites,
+        ),
+      );
+    }
+
+    _searchController.clear();
+  }
+
+  void _clearQueryTokens() {
+    setState(() {
+      _queryTokens = const [];
+    });
+  }
+
+  void _removeTokenAt(int index) {
+    if (index < 0 || index >= _queryTokens.length) {
+      return;
+    }
+    setState(() {
+      _queryTokens = List<TagQueryToken>.from(_queryTokens)..removeAt(index);
+    });
+  }
+
+  Widget _buildQueryTokenChip(
+    int index,
+    TagQueryToken token,
+    Map<String, TagSection> sectionsById,
+  ) {
+    final theme = Theme.of(context);
+    final isOperator = token.isOperator;
+    final color = _tokenColor(token, sectionsById);
+    final label = _tokenLabel(token, sectionsById);
+    final isFavorites = token.sectionId != null
+        ? (sectionsById[token.sectionId]?.isFavorites ?? token.isFavorites)
+        : token.isFavorites;
+
+    return InputChip(
+      avatar: isOperator
+          ? Icon(
+              token.operator?.icon,
+              color: theme.colorScheme.onSecondaryContainer,
+            )
+          : _TagColorIndicator(
+              color: color,
+              isFavorites: isFavorites,
+            ),
+      label: Text(
+        label,
+        style: isOperator
+            ? theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSecondaryContainer,
+              )
+            : null,
+      ),
+      backgroundColor: isOperator
+          ? theme.colorScheme.secondaryContainer.withOpacity(0.8)
+          : null,
+      onDeleted: () => _removeTokenAt(index),
+    );
+  }
+
+  String _tokenLabel(
+    TagQueryToken token,
+    Map<String, TagSection> sectionsById,
+  ) {
+    if (token.isOperator) {
+      return token.operator?.label ?? '';
+    }
+    final section =
+        token.sectionId != null ? sectionsById[token.sectionId] : null;
+    return section?.name ?? token.label ?? 'Unknown tag';
+  }
+
+  Color? _tokenColor(
+    TagQueryToken token,
+    Map<String, TagSection> sectionsById,
+  ) {
+    if (token.isOperator) {
+      return null;
+    }
+    final section =
+        token.sectionId != null ? sectionsById[token.sectionId] : null;
+    return section?.color ?? token.color;
+  }
+
   void _onSearchChanged() {
     setState(() {
       _searchQuery = _searchController.text;
@@ -95,31 +291,41 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final hasRequiredTags = selectedSections.isNotEmpty;
     final hasOptionalTags = optionalSections.isNotEmpty;
     final hasSelectedTags = hasRequiredTags || hasOptionalTags;
+    final resolvedTokens = _resolveQueryTokens(state.sections);
+    final hasQueryTokens = resolvedTokens.isNotEmpty;
     final aggregatedMedia = _collectMediaFromSections(
       sections,
       selectedSections,
       optionalSections,
       state.filterMode,
       state.excludedTagIds,
+      useAllSectionsWhenEmpty: hasQueryTokens,
     );
     final filteredMedia = _filterMediaByType(
       aggregatedMedia,
       state.mediaTypeFilter,
     );
-    final sectionsForDirectories = _resolveFilterSections(
-      sections,
-      selectedSections,
-      optionalSections,
-      hasSelectedTags,
-      state.excludedTagIds.isEmpty,
+    final queryFilteredMedia = _filterMediaByQuery(
+      filteredMedia,
+      state.sections,
+      resolvedTokens,
     );
+    final sectionsForDirectories = hasQueryTokens
+        ? _sectionsForQuery(state.sections, resolvedTokens)
+        : _resolveFilterSections(
+            sections,
+            selectedSections,
+            optionalSections,
+            hasSelectedTags,
+            state.excludedTagIds.isEmpty,
+          );
     final selectedDirectories = _collectDirectoriesFromSections(
       sectionsForDirectories,
       state.excludedTagIds,
     );
 
     final headerWidgets = <Widget>[
-      _buildSearchField(),
+      _buildSearchField(state, resolvedTokens),
       const SizedBox(height: 12),
       _buildTagSelectionChips(state, viewModel),
       const SizedBox(height: 12),
@@ -133,12 +339,12 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       const SizedBox(height: 24),
     ];
 
-    if (selectedSections.isEmpty && state.excludedTagIds.isEmpty) {
+    if (!hasSelectedTags && state.excludedTagIds.isEmpty && !hasQueryTokens) {
       headerWidgets.add(_buildSelectionPlaceholder());
     } else {
       headerWidgets.addAll([
         _buildSelectionSummary(
-          filteredMedia,
+          queryFilteredMedia,
           viewModel,
           state.filterMode,
           state.selectedTagIds.length,
@@ -155,7 +361,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         ]);
       }
 
-      if (filteredMedia.isEmpty) {
+      if (queryFilteredMedia.isEmpty) {
         headerWidgets.add(_buildNoResultsMessage());
       } else {
         headerWidgets.add(const SizedBox(height: 12));
@@ -171,12 +377,13 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ),
     ];
 
-    if (filteredMedia.isNotEmpty &&
-        (selectedSections.isNotEmpty || state.excludedTagIds.isNotEmpty)) {
+    if (queryFilteredMedia.isNotEmpty &&
+        (hasSelectedTags || state.excludedTagIds.isNotEmpty || hasQueryTokens)) {
       slivers.add(
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          sliver: _buildMediaGrid(filteredMedia, filteredMedia, gridColumns),
+          sliver:
+              _buildMediaGrid(queryFilteredMedia, queryFilteredMedia, gridColumns),
         ),
       );
     }
@@ -190,14 +397,139 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  Widget _buildSearchField() {
-    return TextField(
-      controller: _searchController,
-      decoration: const InputDecoration(
-        labelText: 'Search tags',
-        prefixIcon: Icon(Icons.search),
-        border: OutlineInputBorder(),
-      ),
+  Widget _buildSearchField(
+    TagsLoaded state,
+    List<TagQueryToken> resolvedTokens,
+  ) {
+    final sectionsById = {
+      for (final section in state.sections) section.id: section,
+    };
+
+    return RawAutocomplete<TagQueryToken>(
+      textEditingController: _searchController,
+      focusNode: _searchFocusNode,
+      optionsBuilder: (textEditingValue) {
+        final query = textEditingValue.text.trim().toLowerCase();
+        final options = <TagQueryToken>[];
+        final canInsertOperator =
+            _queryTokens.isNotEmpty && !_queryTokens.last.isOperator;
+
+        if (canInsertOperator) {
+          for (final operator in TagQueryOperator.values) {
+            if (query.isEmpty ||
+                operator.label.toLowerCase().startsWith(query) ||
+                operator.name.startsWith(query)) {
+              options.add(TagQueryToken.operator(operator));
+            }
+          }
+        }
+
+        for (final section in state.sections) {
+          final matches = query.isEmpty
+              ? true
+              : section.name.toLowerCase().contains(query);
+          if (matches) {
+            options.add(
+              TagQueryToken.tag(
+                sectionId: section.id,
+                label: section.name,
+                color: section.color,
+                isFavorites: section.isFavorites,
+              ),
+            );
+          }
+        }
+
+        return options;
+      },
+      displayStringForOption: (option) => _tokenLabel(option, sectionsById),
+      optionsViewBuilder: (context, onSelected, options) {
+        final optionList = options.toList();
+        if (optionList.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280, maxWidth: 380),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: optionList.length,
+                itemBuilder: (context, index) {
+                  final option = optionList[index];
+                  final isOperator = option.isOperator;
+                  final label = _tokenLabel(option, sectionsById);
+                  final color = _tokenColor(option, sectionsById);
+                  return ListTile(
+                    leading: isOperator
+                        ? Icon(option.operator?.icon)
+                        : _TagColorIndicator(
+                            color: color,
+                            isFavorites: option.isFavorites,
+                          ),
+                    title: Text(label),
+                    subtitle: Text(
+                      isOperator
+                          ? 'Combine tags with ${option.operator?.label ?? ''}'
+                          : 'Add tag filter',
+                    ),
+                    onTap: () => onSelected(option),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+      onSelected: (option) {
+        _handleTokenSelected(option);
+        _searchController.clear();
+      },
+      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+        return InputDecorator(
+          decoration: const InputDecoration(
+            labelText: 'Search by tags',
+            prefixIcon: Icon(Icons.search),
+            border: OutlineInputBorder(),
+          ),
+          isFocused: focusNode.hasFocus,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ...resolvedTokens.asMap().entries.map(
+                (entry) => _buildQueryTokenChip(
+                  entry.key,
+                  entry.value,
+                  sectionsById,
+                ),
+              ),
+              SizedBox(
+                width: 200,
+                child: TextField(
+                  controller: textController,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    hintText: 'Type a tag name or AND / OR',
+                  ),
+                  onSubmitted: (_) => _handleManualSubmit(state),
+                ),
+              ),
+              if (resolvedTokens.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.clear),
+                  tooltip: 'Clear query',
+                  onPressed: _clearQueryTokens,
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -463,6 +795,90 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     }).toList();
   }
 
+  List<TagQueryToken> _resolveQueryTokens(List<TagSection> sections) {
+    if (_queryTokens.isEmpty) {
+      return const [];
+    }
+
+    final available = {for (final section in sections) section.id};
+    final resolved = <TagQueryToken>[];
+
+    for (final token in _queryTokens) {
+      if (token.isOperator) {
+        if (resolved.isNotEmpty && !resolved.last.isOperator) {
+          resolved.add(token);
+        }
+        continue;
+      }
+
+      if (token.sectionId != null && available.contains(token.sectionId)) {
+        if (resolved.isNotEmpty && !resolved.last.isOperator) {
+          resolved.add(const TagQueryToken.operator(TagQueryOperator.and));
+        }
+        resolved.add(token);
+      }
+    }
+
+    if (resolved.isNotEmpty && resolved.last.isOperator) {
+      resolved.removeLast();
+    }
+
+    return resolved;
+  }
+
+  List<TagSection> _sectionsForQuery(
+    List<TagSection> sections,
+    List<TagQueryToken> tokens,
+  ) {
+    final ids = tokens
+        .where((token) => !token.isOperator && token.sectionId != null)
+        .map((token) => token.sectionId!)
+        .toSet();
+    return sections.where((section) => ids.contains(section.id)).toList();
+  }
+
+  List<MediaEntity> _filterMediaByQuery(
+    List<MediaEntity> media,
+    List<TagSection> sections,
+    List<TagQueryToken> tokens,
+  ) {
+    if (tokens.isEmpty) {
+      return media;
+    }
+
+    final mediaIdsBySection = {
+      for (final section in sections)
+        section.id: section.allMedia.map((media) => media.id).toSet(),
+    };
+
+    return media.where((item) {
+      bool? result;
+      TagQueryOperator? pending;
+
+      for (final token in tokens) {
+        if (token.isOperator) {
+          pending = token.operator;
+          continue;
+        }
+
+        final ids = mediaIdsBySection[token.sectionId] ?? const <String>{};
+        final hasTag = ids.contains(item.id);
+
+        if (result == null) {
+          result = hasTag;
+          continue;
+        }
+
+        result = switch (pending ?? TagQueryOperator.and) {
+          TagQueryOperator.and => result! && hasTag,
+          TagQueryOperator.or => result! || hasTag,
+        };
+      }
+
+      return result ?? true;
+    }).toList();
+  }
+
   List<TagSection> _resolveFilterSections(
     List<TagSection> allSections,
     List<TagSection> requiredSections,
@@ -495,6 +911,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     List<TagSection> optionalSections,
     TagFilterMode filterMode,
     List<String> excludedTagIds,
+    {bool useAllSectionsWhenEmpty = false,}
   ) {
     if (allSections.isEmpty) {
       return const <MediaEntity>[];
@@ -521,6 +938,27 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         : (hasRequired || excludedTagIds.isEmpty ? requiredSections : allSections);
 
     if (sectionsToScan.isEmpty) {
+      if (useAllSectionsWhenEmpty) {
+        final allowedSections = excludedSet.isEmpty
+            ? allSections
+            : allSections
+                .where((section) => !excludedSet.contains(section.id))
+                .toList();
+        if (allowedSections.isEmpty) {
+          return const <MediaEntity>[];
+        }
+        final fallbackMedia = <String, MediaEntity>{};
+        for (final section in allowedSections) {
+          for (final media in section.allMedia) {
+            if (excludedSet.isNotEmpty &&
+                media.tagIds.any(excludedSet.contains)) {
+              continue;
+            }
+            fallbackMedia[media.id] = media;
+          }
+        }
+        return fallbackMedia.values.toList();
+      }
       return const <MediaEntity>[];
     }
 
@@ -909,6 +1347,32 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       MaterialPageRoute(
         builder: (context) => SlideshowScreen(mediaList: media),
       ),
+    );
+  }
+}
+
+class _TagColorIndicator extends StatelessWidget {
+  const _TagColorIndicator({
+    this.color,
+    required this.isFavorites,
+  });
+
+  final Color? color;
+  final bool isFavorites;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isFavorites) {
+      return const Icon(Icons.star, color: Colors.amber);
+    }
+
+    if (color == null) {
+      return const CircleAvatar(radius: 10);
+    }
+
+    return CircleAvatar(
+      radius: 10,
+      backgroundColor: color,
     );
   }
 }
