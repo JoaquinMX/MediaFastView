@@ -1,12 +1,8 @@
 import 'dart:async';
 
-import 'dart:ui';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_config.dart';
@@ -18,13 +14,15 @@ import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
 import '../../../full_screen/presentation/models/full_screen_exit_result.dart';
 import '../../../tagging/presentation/widgets/bulk_tag_assignment_dialog.dart';
-import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
+import '../controllers/media_marquee_controller.dart';
+import '../controllers/media_navigation_handler.dart';
 import '../models/directory_navigation_target.dart';
 import '../view_models/media_grid_view_model.dart';
-import '../widgets/media_grid_item.dart';
+import '../widgets/media_filter_bar.dart';
 import '../widgets/column_selector_popup.dart';
+import '../widgets/media_grid_view.dart';
 
 /// Screen for displaying media in a customizable grid layout.
 class MediaGridScreen extends ConsumerStatefulWidget {
@@ -50,27 +48,19 @@ class MediaGridScreen extends ConsumerStatefulWidget {
 class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   MediaViewModelParams? _params;
   MediaViewModel? _viewModel;
-  final GlobalKey _mediaGridOverlayKey = GlobalKey();
-  final Map<String, GlobalKey> _mediaItemKeys = <String, GlobalKey>{};
+  late final MediaMarqueeController _marqueeController;
+  late final MediaNavigationHandler _navigationHandler;
   List<MediaEntity> _visibleMediaCache = const [];
-  Rect? _mediaSelectionRect;
-  Offset? _mediaDragStart;
-  bool _isMediaMarqueeActive = false;
-  bool _mediaAppendMode = false;
-  Set<String> _mediaMarqueeBaseSelection = <String>{};
-  Set<String> _mediaLastMarqueeSelection = <String>{};
-  Map<String, Rect> _mediaCachedItemRects = <String, Rect>{};
-  List<DirectoryNavigationTarget> _siblingNavigationTargets = const [];
-  int _currentDirectoryNavigationIndex = 0;
 
   bool get _isMacOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 
   @override
   void initState() {
     super.initState();
-    _applyNavigationContext(
-      widget.siblingDirectories,
-      widget.currentDirectoryIndex,
+    _marqueeController = MediaMarqueeController();
+    _navigationHandler = MediaNavigationHandler(
+      siblings: widget.siblingDirectories,
+      currentIndex: widget.currentDirectoryIndex,
     );
   }
 
@@ -79,38 +69,19 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     super.didUpdateWidget(oldWidget);
     if (widget.siblingDirectories != oldWidget.siblingDirectories ||
         widget.currentDirectoryIndex != oldWidget.currentDirectoryIndex) {
-      _applyNavigationContext(
-        widget.siblingDirectories,
-        widget.currentDirectoryIndex,
-        withSetState: true,
-      );
+      setState(() {
+        _navigationHandler.updateNavigationContext(
+          widget.siblingDirectories,
+          widget.currentDirectoryIndex,
+        );
+      });
     }
   }
 
-  void _applyNavigationContext(
-    List<DirectoryNavigationTarget>? siblings,
-    int? currentIndex, {
-    bool withSetState = false,
-  }) {
-    void updater() {
-      _siblingNavigationTargets = List<DirectoryNavigationTarget>.from(
-        siblings ?? const [],
-      );
-      if (_siblingNavigationTargets.isEmpty) {
-        _currentDirectoryNavigationIndex = 0;
-        return;
-      }
-
-      final maxIndex = _siblingNavigationTargets.length - 1;
-      final safeIndex = (currentIndex ?? 0).clamp(0, maxIndex);
-      _currentDirectoryNavigationIndex = safeIndex;
-    }
-
-    if (withSetState) {
-      setState(updater);
-    } else {
-      updater();
-    }
+  @override
+  void dispose() {
+    _marqueeController.dispose();
+    super.dispose();
   }
 
   @override
@@ -124,42 +95,19 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       bookmarkData: widget.bookmarkData,
       navigateToDirectory:
           (path, name, bookmarkData, siblingDirectories, currentIndex) {
-            final targetIndex =
-                currentIndex ?? _currentDirectoryNavigationIndex;
-            final hasSiblingNavigation =
-                (siblingDirectories?.isNotEmpty ?? false) &&
-                _siblingNavigationTargets.isNotEmpty;
-            final isBackwardNavigation = hasSiblingNavigation
-                ? targetIndex < _currentDirectoryNavigationIndex
-                : false;
+            final destination = MediaGridScreen(
+              directoryPath: path,
+              directoryName: name,
+              bookmarkData: bookmarkData,
+              siblingDirectories: siblingDirectories,
+              currentDirectoryIndex: currentIndex,
+            );
 
             Navigator.of(context).pushReplacement(
-              PageRouteBuilder(
-                transitionDuration: const Duration(milliseconds: 250),
-                reverseTransitionDuration: const Duration(milliseconds: 250),
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    MediaGridScreen(
-                      directoryPath: path,
-                      directoryName: name,
-                      bookmarkData: bookmarkData,
-                      siblingDirectories: siblingDirectories,
-                      currentDirectoryIndex: currentIndex,
-                    ),
-                transitionsBuilder:
-                    (context, animation, secondaryAnimation, child) {
-                      final beginOffset = isBackwardNavigation
-                          ? const Offset(-1, 0)
-                          : const Offset(1, 0);
-                      final tween = Tween(
-                        begin: beginOffset,
-                        end: Offset.zero,
-                      ).chain(CurveTween(curve: Curves.easeInOutCubic));
-
-                      return SlideTransition(
-                        position: animation.drive(tween),
-                        child: child,
-                      );
-                    },
+              _navigationHandler.buildNavigationRoute(
+                destination: destination,
+                isBackwardNavigation:
+                    _navigationHandler.isBackwardNavigation(currentIndex),
               ),
             );
           },
@@ -180,7 +128,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final sortOption = state is MediaLoaded
         ? state.sortOption
         : _viewModel?.currentSortOption ?? MediaSortOption.nameAscending;
-    final hasSiblingNavigation = _siblingNavigationTargets.length > 1;
+    final hasSiblingNavigation = _navigationHandler.hasSiblingNavigation;
+    final favoritesState = ref.watch(favoritesViewModelProvider);
 
     return Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
@@ -253,19 +202,32 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
               children: [
                 Column(
                   children: [
-                    _buildTagFilter(_viewModel!, state, isSelectionMode),
+                    MediaFilterBar(
+                      viewModel: _viewModel!,
+                      state: state,
+                      favoritesState: favoritesState,
+                      isSelectionMode: isSelectionMode,
+                    ),
                     Expanded(
                       child: switch (state) {
                         MediaLoading() => const Center(
                           child: CircularProgressIndicator(),
                         ),
-                        MediaLoaded(:final media, :final columns) => _buildGrid(
-                          media,
-                          columns,
-                          _viewModel!,
-                          selectedMediaIds,
-                          isSelectionMode,
-                        ),
+                        MediaLoaded(:final media, :final columns) => MediaGridView(
+                            media: media,
+                            columns: columns,
+                            viewModel: _viewModel!,
+                            selectedMediaIds: selectedMediaIds,
+                            isSelectionMode: isSelectionMode,
+                            marqueeController: _marqueeController,
+                            onMediaTap: (media) => _onMediaTap(context, media),
+                            onMediaDoubleTap: (media) =>
+                                _onMediaDoubleTap(context, media),
+                            onMediaLongPress: (media) =>
+                                _onMediaLongPress(context, media),
+                            onMediaSecondaryTap: (media) =>
+                                _onMediaSecondaryTap(context, media),
+                          ),
                         MediaPermissionRevoked(
                           :final directoryPath,
                           :final directoryName,
@@ -297,7 +259,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     bottom: 0,
                     child: Center(
                       child: IconButton(
-                        onPressed: _currentDirectoryNavigationIndex > 0
+                        onPressed: _navigationHandler.canNavigateToPrevious
                             ? () => _navigateToSibling(-1)
                             : null,
                         icon: Icon(
@@ -315,9 +277,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     bottom: 0,
                     child: Center(
                       child: IconButton(
-                        onPressed:
-                            _currentDirectoryNavigationIndex <
-                                _siblingNavigationTargets.length - 1
+                        onPressed: _navigationHandler.canNavigateToNext
                             ? () => _navigateToSibling(1)
                             : null,
                         icon: Icon(
@@ -455,121 +415,6 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     return 'Toggle Favorites';
   }
 
-  Widget _buildTagFilter(
-    MediaViewModel viewModel,
-    MediaState state,
-    bool isSelectionMode,
-  ) {
-    final selectedTagIds = state is MediaLoaded
-        ? state.selectedTagIds
-        : const <String>[];
-    final showFavoritesOnly = state is MediaLoaded
-        ? state.showFavoritesOnly
-        : viewModel.showFavoritesOnly;
-    final showUntaggedOnly = state is MediaLoaded
-        ? state.showUntaggedOnly
-        : viewModel.showUntaggedOnly;
-    final visibleMediaTypes = state is MediaLoaded
-        ? state.visibleMediaTypes
-        : viewModel.visibleMediaTypes;
-    final favoritesState = ref.watch(favoritesViewModelProvider);
-    final hasFavoriteMedia = switch (favoritesState) {
-      FavoritesLoaded(:final favorites) => favorites.isNotEmpty,
-      _ => false,
-    };
-    final shouldShowFavoritesChip = hasFavoriteMedia || showFavoritesOnly;
-
-    return Container(
-      padding: UiSpacing.tagFilterPadding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              for (final type in [
-                MediaType.image,
-                MediaType.video,
-                MediaType.directory,
-              ])
-                FilterChip(
-                  label: Text(type.label),
-                  avatar: Icon(_iconForType(type)),
-                  selected: visibleMediaTypes.contains(type),
-                  onSelected: (selected) => _onMediaTypeSelected(
-                    type,
-                    selected,
-                    visibleMediaTypes,
-                    viewModel,
-                  ),
-                ),
-              if (shouldShowFavoritesChip)
-                FilterChip(
-                  label: const Text('Favorites'),
-                  avatar: const Icon(Icons.star, color: Colors.amber),
-                  selected: showFavoritesOnly,
-                  onSelected: (value) {
-                    if (!hasFavoriteMedia && value) {
-                      return;
-                    }
-                    viewModel.setShowFavoritesOnly(value);
-                  },
-                ),
-              FilterChip(
-                label: const Text('Untagged'),
-                avatar: const Icon(Icons.label_off),
-                selected: showUntaggedOnly,
-                onSelected: (value) async {
-                  await viewModel.setShowUntaggedOnly(value);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TagFilterChips(
-            selectedTagIds: isSelectionMode
-                ? viewModel.tagIdsInSelection()
-                : selectedTagIds,
-            onSelectionChanged: isSelectionMode
-                ? (_) {}
-                : viewModel.filterByTags,
-            onTagTapped: isSelectionMode
-                ? (tag, _) => viewModel.toggleTagForSelection(tag)
-                : null,
-            showAllButton: !isSelectionMode,
-          ),
-        ],
-      ),
-    );
-  }
-
-  IconData _iconForType(MediaType type) => switch (type) {
-    MediaType.image => Icons.image_outlined,
-    MediaType.video => Icons.movie_creation_outlined,
-    MediaType.directory => Icons.folder,
-    MediaType.text => Icons.description_outlined,
-  };
-
-  void _onMediaTypeSelected(
-    MediaType type,
-    bool isSelected,
-    Set<MediaType> currentSelection,
-    MediaViewModel viewModel,
-  ) {
-    final updatedSelection = Set<MediaType>.from(currentSelection);
-    if (isSelected) {
-      updatedSelection.add(type);
-    } else {
-      if (updatedSelection.length == 1) {
-        return; // Prevent clearing all types
-      }
-      updatedSelection.remove(type);
-    }
-
-    viewModel.setVisibleMediaTypes(updatedSelection);
-  }
-
   Future<void> _assignTagsToSelectedMedia(MediaViewModel viewModel) async {
     final selectionCount = viewModel.selectedMediaCount;
     final initialTags = viewModel.commonTagIdsForSelection();
@@ -635,271 +480,6 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Widget _buildGrid(
-    List<MediaEntity> media,
-    int columns,
-    MediaViewModel viewModel,
-    Set<String> selectedMediaIds,
-    bool isSelectionMode,
-  ) {
-    debugPrint(
-      'MediaGridScreen: Building grid with ${media.length} items, $columns columns, screen size: ${MediaQuery.of(context).size}',
-    );
-    _pruneMediaItemKeys(media);
-    final gridView = GridView.builder(
-      padding: UiSpacing.gridPadding,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns,
-        crossAxisSpacing: UiGrid.crossAxisSpacing,
-        mainAxisSpacing: UiGrid.mainAxisSpacing,
-        childAspectRatio: UiGrid.childAspectRatio,
-      ),
-      itemCount: media.length,
-      itemBuilder: (context, index) {
-        final mediaItem = media[index];
-        final isSelected = selectedMediaIds.contains(mediaItem.id);
-        final itemKey = _mediaItemKeys.putIfAbsent(
-          mediaItem.id,
-          () => GlobalKey(),
-        );
-        return MediaGridItem(
-          key: itemKey,
-          media: mediaItem,
-          onTap: () => _onMediaTap(context, mediaItem),
-          onDoubleTap: () => _onMediaDoubleTap(context, mediaItem),
-          onLongPress: () => _onMediaLongPress(context, mediaItem),
-          onSecondaryTap: () => _onMediaSecondaryTap(context, mediaItem),
-          onOperationComplete: () =>
-              viewModel.loadMedia(), // Refresh after delete
-          onSelectionToggle: () => viewModel.toggleMediaSelection(mediaItem.id),
-          isSelected: isSelected,
-          isSelectionMode: isSelectionMode,
-        );
-      },
-    );
-    return _buildMediaMarqueeWrapper(viewModel: viewModel, child: gridView);
-  }
-
-  Widget _buildMediaMarqueeWrapper({
-    required Widget child,
-    required MediaViewModel viewModel,
-  }) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (event) => _handleMediaPointerDown(event, viewModel),
-      onPointerMove: (event) => _handleMediaPointerMove(event, viewModel),
-      onPointerUp: (_) => _endMediaMarquee(),
-      onPointerCancel: (_) => _endMediaMarquee(),
-      child: Stack(
-        key: _mediaGridOverlayKey,
-        children: [
-          Positioned.fill(child: child),
-          if (_mediaSelectionRect != null)
-            Positioned.fromRect(
-              rect: _mediaSelectionRect!,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withOpacity(0.12),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: UiSizing.borderWidth,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  void _handleMediaPointerDown(
-    PointerDownEvent event,
-    MediaViewModel viewModel,
-  ) {
-    if (event.kind != PointerDeviceKind.mouse ||
-        (event.buttons & kPrimaryMouseButton) == 0) {
-      return;
-    }
-
-    final overlayContext = _mediaGridOverlayKey.currentContext;
-    if (overlayContext == null) {
-      return;
-    }
-    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
-    if (overlayBox == null || !overlayBox.attached) {
-      return;
-    }
-
-    _mediaCachedItemRects = _computeMediaItemRects();
-    final localPosition = overlayBox.globalToLocal(event.position);
-    if (_isPointInsideAnyRect(localPosition, _mediaCachedItemRects.values)) {
-      return;
-    }
-
-    final baseSelection = viewModel.selectedMediaIds;
-    _mediaMarqueeBaseSelection = Set<String>.from(baseSelection);
-    _mediaLastMarqueeSelection = Set<String>.from(baseSelection);
-    _mediaAppendMode = _isMultiSelectModifierPressed();
-    _isMediaMarqueeActive = true;
-    _mediaDragStart = localPosition;
-
-    setState(() {
-      _mediaSelectionRect = Rect.fromPoints(localPosition, localPosition);
-    });
-
-    _updateMediaMarqueeSelection(viewModel);
-  }
-
-  void _handleMediaPointerMove(
-    PointerMoveEvent event,
-    MediaViewModel viewModel,
-  ) {
-    if (!_isMediaMarqueeActive || _mediaDragStart == null) {
-      return;
-    }
-
-    if (event.kind == PointerDeviceKind.mouse &&
-        (event.buttons & kPrimaryMouseButton) == 0) {
-      _endMediaMarquee();
-      return;
-    }
-
-    final overlayContext = _mediaGridOverlayKey.currentContext;
-    if (overlayContext == null) {
-      return;
-    }
-    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
-    if (overlayBox == null || !overlayBox.attached) {
-      return;
-    }
-
-    final localPosition = overlayBox.globalToLocal(event.position);
-    setState(() {
-      _mediaSelectionRect = Rect.fromPoints(_mediaDragStart!, localPosition);
-    });
-
-    _mediaCachedItemRects = _computeMediaItemRects();
-    _updateMediaMarqueeSelection(viewModel);
-  }
-
-  void _endMediaMarquee() {
-    if (!_isMediaMarqueeActive && _mediaSelectionRect == null) {
-      return;
-    }
-
-    setState(() {
-      _mediaSelectionRect = null;
-    });
-    _isMediaMarqueeActive = false;
-    _mediaDragStart = null;
-    _mediaAppendMode = false;
-    _mediaMarqueeBaseSelection = <String>{};
-    _mediaLastMarqueeSelection = <String>{};
-    _mediaCachedItemRects = <String, Rect>{};
-  }
-
-  void _updateMediaMarqueeSelection(MediaViewModel viewModel) {
-    if (!_isMediaMarqueeActive) {
-      return;
-    }
-
-    final selectionRect = _mediaSelectionRect;
-    final rects = _mediaCachedItemRects;
-    final intersectingIds = <String>{};
-
-    if (selectionRect != null) {
-      for (final entry in rects.entries) {
-        if (entry.value.overlaps(selectionRect)) {
-          intersectingIds.add(entry.key);
-        }
-      }
-    }
-
-    final desiredSelection = _mediaAppendMode
-        ? {..._mediaMarqueeBaseSelection, ...intersectingIds}
-        : intersectingIds;
-
-    if (setEquals(desiredSelection, _mediaLastMarqueeSelection)) {
-      return;
-    }
-
-    _mediaLastMarqueeSelection = desiredSelection;
-    viewModel.selectMediaRange(desiredSelection, append: false);
-  }
-
-  Map<String, Rect> _computeMediaItemRects() {
-    final overlayContext = _mediaGridOverlayKey.currentContext;
-    if (overlayContext == null) {
-      return <String, Rect>{};
-    }
-
-    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
-    if (overlayBox == null || !overlayBox.attached) {
-      return <String, Rect>{};
-    }
-
-    final rects = <String, Rect>{};
-    final staleKeys = <String>[];
-    _mediaItemKeys.forEach((id, key) {
-      final context = key.currentContext;
-      if (context == null) {
-        staleKeys.add(id);
-        return;
-      }
-      final renderObject = context.findRenderObject();
-      if (renderObject is! RenderBox || !renderObject.attached) {
-        staleKeys.add(id);
-        return;
-      }
-      final topLeft = renderObject.localToGlobal(
-        Offset.zero,
-        ancestor: overlayBox,
-      );
-      rects[id] = Rect.fromLTWH(
-        topLeft.dx,
-        topLeft.dy,
-        renderObject.size.width,
-        renderObject.size.height,
-      );
-    });
-
-    for (final id in staleKeys) {
-      _mediaItemKeys.remove(id);
-    }
-
-    return rects;
-  }
-
-  void _pruneMediaItemKeys(Iterable<MediaEntity> media) {
-    final validIds = media.map((item) => item.id).toSet();
-    _mediaItemKeys.removeWhere((id, _) => !validIds.contains(id));
-  }
-
-  bool _isPointInsideAnyRect(Offset point, Iterable<Rect> rects) {
-    for (final rect in rects) {
-      if (rect.contains(point)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool _isMultiSelectModifierPressed() {
-    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
-    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
-        pressed.contains(LogicalKeyboardKey.shiftRight) ||
-        pressed.contains(LogicalKeyboardKey.controlLeft) ||
-        pressed.contains(LogicalKeyboardKey.controlRight) ||
-        pressed.contains(LogicalKeyboardKey.metaLeft) ||
-        pressed.contains(LogicalKeyboardKey.metaRight) ||
-        pressed.contains(LogicalKeyboardKey.altLeft) ||
-        pressed.contains(LogicalKeyboardKey.altRight);
   }
 
   Widget _buildError(String message, MediaViewModel viewModel) {
@@ -1002,32 +582,40 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   }
 
   void _navigateToSibling(int offset) {
-    if (_siblingNavigationTargets.length < 2 || _viewModel == null) {
+    if (_viewModel == null) {
       return;
     }
 
-    final targetIndex = _currentDirectoryNavigationIndex + offset;
-    if (targetIndex < 0 || targetIndex >= _siblingNavigationTargets.length) {
-      return;
-    }
-
-    final target = _siblingNavigationTargets[targetIndex];
-    _viewModel!.navigateToDirectory(
-      target.path,
-      target.name,
-      bookmarkData: target.bookmarkData,
-      siblingDirectories: _siblingNavigationTargets,
-      currentIndex: targetIndex,
+    _navigationHandler.navigateToSibling(
+      context,
+      offset,
+      _navigateToTarget,
     );
   }
 
   void _handleSiblingSwipe(DragEndDetails details) {
-    final velocity = details.primaryVelocity ?? 0;
-    if (velocity < -100) {
-      _navigateToSibling(1);
-    } else if (velocity > 100) {
-      _navigateToSibling(-1);
+    if (_viewModel == null) {
+      return;
     }
+
+    _navigationHandler.handleSwipe(
+      details,
+      context,
+      _navigateToTarget,
+    );
+  }
+
+  void _navigateToTarget(
+    DirectoryNavigationTarget target,
+    int targetIndex,
+  ) {
+    _viewModel!.navigateToDirectory(
+      target.path,
+      target.name,
+      bookmarkData: target.bookmarkData,
+      siblingDirectories: _navigationHandler.siblingNavigationTargets,
+      currentIndex: targetIndex,
+    );
   }
 
   List<DirectoryNavigationTarget> _buildSiblingNavigationTargetsFromCache() {
@@ -1070,19 +658,21 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
             mediaList: _visibleMediaCache.isNotEmpty
                 ? _visibleMediaCache
                 : null,
-            siblingDirectories: _siblingNavigationTargets,
-            currentDirectoryIndex: _currentDirectoryNavigationIndex,
+            siblingDirectories: _navigationHandler.siblingNavigationTargets,
+            currentDirectoryIndex:
+                _navigationHandler.currentDirectoryNavigationIndex,
           ),
         ),
       );
 
       if (!context.mounted || result == null) return;
 
-      _applyNavigationContext(
-        result.siblingDirectories,
-        result.currentDirectoryIndex,
-        withSetState: true,
-      );
+      setState(() {
+        _navigationHandler.updateNavigationContext(
+          result.siblingDirectories,
+          result.currentDirectoryIndex,
+        );
+      });
 
       if (result.currentDirectory.path != widget.directoryPath) {
         _viewModel?.navigateToDirectory(

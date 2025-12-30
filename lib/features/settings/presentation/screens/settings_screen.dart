@@ -11,6 +11,8 @@ import '../../../../shared/providers/auto_navigate_sibling_directories_provider.
 import '../../../../shared/providers/slideshow_controls_hide_delay_provider.dart';
 import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/widgets/app_bar.dart';
+import '../widgets/destructive_confirmation_dialog.dart';
+import '../widgets/settings_switch_tile.dart';
 
 /// Screen for displaying application settings.
 class SettingsScreen extends ConsumerWidget {
@@ -48,13 +50,17 @@ class SettingsScreen extends ConsumerWidget {
           _buildThemeSetting(themeMode, themeNotifier),
           const Divider(),
           _buildSectionHeader('Playback'),
-          _buildAutoplaySetting(
-            playbackSettings.autoplayVideos,
-            playbackSettingsNotifier,
+          SettingsSwitchTile(
+            title: 'Autoplay Videos',
+            subtitle: 'Automatically start playback when a video loads',
+            value: playbackSettings.autoplayVideos,
+            onChanged: playbackSettingsNotifier.setAutoplayVideos,
           ),
-          _buildLoopSetting(
-            playbackSettings.loopVideos,
-            playbackSettingsNotifier,
+          SettingsSwitchTile(
+            title: 'Loop Videos',
+            subtitle: 'Repeat videos automatically when they finish',
+            value: playbackSettings.loopVideos,
+            onChanged: playbackSettingsNotifier.setLoopVideos,
           ),
           _buildSlideshowControlsHideDelaySetting(
             slideshowControlsHideDelay,
@@ -62,19 +68,29 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const Divider(),
           _buildSectionHeader('Navigation'),
-          _buildSiblingNavigationSetting(
-            autoNavigateSiblingDirectories,
-            autoNavigateSiblingDirectoriesNotifier,
+          SettingsSwitchTile(
+            title: 'Auto-Navigate Sibling Directories',
+            subtitle:
+                'Skip confirmation prompts when moving between sibling directories in full-screen view.',
+            value: autoNavigateSiblingDirectories,
+            onChanged:
+                autoNavigateSiblingDirectoriesNotifier.setAutoNavigateSiblingDirectories,
           ),
           const Divider(),
           _buildSectionHeader('Data Management'),
-          _buildThumbnailCachingSetting(
-            isThumbnailCachingEnabled,
-            thumbnailCachingNotifier,
+          SettingsSwitchTile(
+            title: 'Thumbnail Caching',
+            subtitle:
+                'Cache thumbnails for faster loading (uses more storage)',
+            value: isThumbnailCachingEnabled,
+            onChanged: thumbnailCachingNotifier.setThumbnailCaching,
           ),
-          _buildDeleteFromSourceSetting(
-            deleteFromSourceEnabled,
-            deleteFromSourceNotifier,
+          SettingsSwitchTile(
+            title: 'Delete From Source',
+            subtitle:
+                'When enabled, delete operations remove the original files or directories from disk. When disabled, files remain on disk.',
+            value: deleteFromSourceEnabled,
+            onChanged: deleteFromSourceNotifier.setDeleteFromSource,
           ),
           _buildClearCacheTile(context, ref),
           _buildClearFavoritesTile(context, ref),
@@ -123,70 +139,6 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildThumbnailCachingSetting(bool isEnabled, ThumbnailCachingNotifier notifier) {
-    return ListTile(
-      title: const Text('Thumbnail Caching'),
-      subtitle: const Text('Cache thumbnails for faster loading (uses more storage)'),
-      trailing: Switch(
-        value: isEnabled,
-        onChanged: (bool value) {
-          notifier.setThumbnailCaching(value);
-        },
-      ),
-    );
-  }
-
-  Widget _buildDeleteFromSourceSetting(
-    bool isEnabled,
-    DeleteFromSourceNotifier notifier,
-  ) {
-    return ListTile(
-      title: const Text('Delete From Source'),
-      subtitle: const Text(
-        'When enabled, delete operations remove the original files or directories '
-        'from disk. When disabled, files remain on disk.',
-      ),
-      trailing: Switch(
-        value: isEnabled,
-        onChanged: (bool value) {
-          notifier.setDeleteFromSource(value);
-        },
-      ),
-    );
-  }
-
-  Widget _buildAutoplaySetting(
-    bool isEnabled,
-    VideoPlaybackSettingsNotifier notifier,
-  ) {
-    return ListTile(
-      title: const Text('Autoplay Videos'),
-      subtitle: const Text('Automatically start playback when a video loads'),
-      trailing: Switch(
-        value: isEnabled,
-        onChanged: (bool value) {
-          notifier.setAutoplayVideos(value);
-        },
-      ),
-    );
-  }
-
-  Widget _buildLoopSetting(
-    bool isEnabled,
-    VideoPlaybackSettingsNotifier notifier,
-  ) {
-    return ListTile(
-      title: const Text('Loop Videos'),
-      subtitle: const Text('Repeat videos automatically when they finish'),
-      trailing: Switch(
-        value: isEnabled,
-        onChanged: (bool value) {
-          notifier.setLoopVideos(value);
-        },
-      ),
-    );
-  }
-
   Widget _buildSlideshowControlsHideDelaySetting(
     Duration delay,
     SlideshowControlsHideDelayNotifier notifier,
@@ -223,24 +175,6 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSiblingNavigationSetting(
-    bool isEnabled,
-    AutoNavigateSiblingDirectoriesNotifier notifier,
-  ) {
-    return ListTile(
-      title: const Text('Auto-Navigate Sibling Directories'),
-      subtitle: const Text(
-        'Skip confirmation prompts when moving between sibling directories in full-screen view.',
-      ),
-      trailing: Switch(
-        value: isEnabled,
-        onChanged: (bool value) {
-          notifier.setAutoNavigateSiblingDirectories(value);
-        },
-      ),
     );
   }
 
@@ -291,186 +225,62 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   void _showClearCacheDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear Directory Cache'),
-        content: const Text(
-          'This will remove all stored directory data and bookmarks. '
+    showDestructiveConfirmationDialog(
+      context,
+      title: 'Clear Directory Cache',
+      content: 'This will remove all stored directory data and bookmarks. '
           'You will need to re-add your directories after clearing the cache. '
           'This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              try {
-                final directoryViewModel = ref.read(directoryViewModelProvider.notifier);
-                await directoryViewModel.clearDirectories();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Directory cache cleared successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to clear cache: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Clear', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Clear',
+      successMessage: 'Directory cache cleared successfully',
+      errorPrefix: 'Failed to clear cache',
+      onConfirm: () async {
+        final directoryViewModel = ref.read(directoryViewModelProvider.notifier);
+        await directoryViewModel.clearDirectories();
+      },
     );
   }
 
   void _showClearFavoritesDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear All Favorites'),
-        content: const Text(
-          'This will remove all favorited media items. '
+    showDestructiveConfirmationDialog(
+      context,
+      title: 'Clear All Favorites',
+      content: 'This will remove all favorited media items. '
           'You can re-favorite items after clearing. '
           'This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              try {
-                final favoritesViewModel = ref.read(favoritesViewModelProvider.notifier);
-                await favoritesViewModel.clearAllFavorites();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('All favorites cleared successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to clear favorites: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Clear', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Clear',
+      successMessage: 'All favorites cleared successfully',
+      errorPrefix: 'Failed to clear favorites',
+      onConfirm: () async {
+        final favoritesViewModel = ref.read(favoritesViewModelProvider.notifier);
+        await favoritesViewModel.clearAllFavorites();
+      },
     );
   }
 
   void _showClearTagAssignmentsDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear All Assigned Tags'),
-        content: const Text(
-          'This will remove tag assignments from all media items and '
+    showDestructiveConfirmationDialog(
+      context,
+      title: 'Clear All Assigned Tags',
+      content: 'This will remove tag assignments from all media items and '
           'directories while keeping your tags. This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              try {
-                await ref.read(clearTagAssignmentsUseCaseProvider)();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('All tag assignments cleared successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to clear tag assignments: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Clear', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Clear',
+      successMessage: 'All tag assignments cleared successfully',
+      errorPrefix: 'Failed to clear tag assignments',
+      onConfirm: () => ref.read(clearTagAssignmentsUseCaseProvider)(),
     );
   }
 
   void _showClearTagsDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear All Tags'),
-        content: const Text(
-          'This will delete all tags and remove their assignments from your '
+    showDestructiveConfirmationDialog(
+      context,
+      title: 'Clear All Tags',
+      content: 'This will delete all tags and remove their assignments from your '
           'library. This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              try {
-                await ref.read(clearTagsUseCaseProvider)();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('All tags cleared successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to clear tags: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Clear', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Clear',
+      successMessage: 'All tags cleared successfully',
+      errorPrefix: 'Failed to clear tags',
+      onConfirm: () => ref.read(clearTagsUseCaseProvider)(),
     );
   }
 
