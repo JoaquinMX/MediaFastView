@@ -17,14 +17,28 @@ void main() {
       expect(firstIsarId, isNot(equals(secondIsarId)));
     });
 
-    test('matches the first 64 bits of the SHA-256 hash', () {
+    test('matches the masked first 64 bits of the SHA-256 hash', () {
       final directoryId = generateDirectoryId('/tmp/sample');
-      final expected = int.parse(
+      final parsed = BigInt.parse(
         sha256.convert(utf8.encode(directoryId)).toString().substring(0, 16),
         radix: 16,
       );
 
+      const maxSignedInt64 = 0x7FFFFFFFFFFFFFFF;
+      final expected = (parsed & BigInt.from(maxSignedInt64)).toInt();
+
       expect(computeDirectoryCollectionId(directoryId), expected);
+    });
+
+    test('clamps ids to the max signed 64-bit range to avoid format errors', () {
+      final highHashDirectoryId = generateDirectoryId(
+        '/tmp/some/really/long/path/that/produces/a/hash/starting/with/f',
+      );
+
+      expect(
+        computeDirectoryCollectionId(highHashDirectoryId),
+        lessThanOrEqualTo(0x7FFFFFFFFFFFFFFF),
+      );
     });
   });
 }

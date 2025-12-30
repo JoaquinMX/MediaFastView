@@ -9,12 +9,21 @@ part 'directory_collection.g.dart';
 
 /// Converts a directory identifier into a deterministic Isar [Id].
 ///
-/// The first 16 hex characters (64 bits) of the SHA-256 hash are parsed to
-/// avoid collisions caused by previously summing the hash bytes.
+/// The first 16 hex characters (64 bits) of the SHA-256 hash are parsed and
+/// masked to the maximum signed 64-bit integer value. This avoids
+/// `FormatException` on platforms where `int` cannot represent unsigned 64-bit
+/// values while keeping the high-entropy portion of the hash for collision
+/// resistance.
 Id computeDirectoryCollectionId(String directoryId) {
   final hash = sha256.convert(utf8.encode(directoryId)).toString();
   final first64Bits = hash.substring(0, 16);
-  return int.parse(first64Bits, radix: 16);
+
+  // Use BigInt to safely parse large unsigned values, then clamp to the
+  // maximum signed 64-bit integer to stay within Isar's `Id` range.
+  final parsed = BigInt.parse(first64Bits, radix: 16);
+  const maxSignedInt64 = 0x7FFFFFFFFFFFFFFF;
+
+  return (parsed & BigInt.from(maxSignedInt64)).toInt();
 }
 
 /// Isar collection representing a directory record stored on disk.
