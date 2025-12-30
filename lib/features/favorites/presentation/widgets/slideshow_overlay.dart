@@ -9,6 +9,7 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
+import '../widgets/favorite_toggle_button.dart';
 import '../view_models/slideshow_view_model.dart';
 
 final _slideshowTagsProvider = FutureProvider.autoDispose<List<TagEntity>>((ref) {
@@ -33,36 +34,103 @@ class SlideshowOverlay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controlsHideDelay = ref.watch(slideshowControlsHideDelayProvider);
-    final sections = <Widget>[
-      _ProgressSection(viewModel: viewModel),
-      if (viewModel.currentMedia != null)
-        _TagSection(media: viewModel.currentMedia!),
-      _PlaybackSection(state: state, viewModel: viewModel, onPlayPause: onPlayPause),
-      _CloseSection(onClose: onClose),
-    ];
-
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
-          ),
+    final topDisplay = _SlideshowOverlayDisplay(
+      alignment: Alignment.topCenter,
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.black.withValues(alpha: 0.7), Colors.transparent],
+      ),
+      padding: const EdgeInsets.all(16),
+      safeAreaTop: true,
+      sections: [
+        _HeaderSection(
+          media: viewModel.currentMedia,
+          onClose: onClose,
         ),
+      ],
+      sectionSpacing: 0,
+    );
+
+    final bottomDisplay = _SlideshowOverlayDisplay(
+      alignment: Alignment.bottomCenter,
+      gradient: LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
+      ),
+      padding: const EdgeInsets.all(16),
+      safeAreaBottom: true,
+      sections: [
+        _ProgressSection(viewModel: viewModel),
+        if (viewModel.currentMedia != null)
+          _TagSection(media: viewModel.currentMedia!),
+        _PlaybackSection(
+          state: state,
+          viewModel: viewModel,
+          onPlayPause: onPlayPause,
+        ),
+      ],
+      footer: _ControlsHint(delay: controlsHideDelay),
+      footerSpacing: 8,
+    );
+
+    return Stack(
+      children: [
+        topDisplay,
+        bottomDisplay,
+      ],
+    );
+  }
+}
+
+class _SlideshowOverlayDisplay extends StatelessWidget {
+  const _SlideshowOverlayDisplay({
+    required this.gradient,
+    required this.sections,
+    required this.padding,
+    this.footer,
+    this.footerSpacing = 16,
+    this.alignment = Alignment.bottomCenter,
+    this.safeAreaTop = false,
+    this.safeAreaBottom = false,
+    this.sectionSpacing = 16,
+  });
+
+  final Alignment alignment;
+  final LinearGradient gradient;
+  final List<Widget> sections;
+  final Widget? footer;
+  final double footerSpacing;
+  final EdgeInsets padding;
+  final bool safeAreaTop;
+  final bool safeAreaBottom;
+  final double sectionSpacing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(gradient: gradient),
         child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ..._buildSectionsWithSpacing(sections),
-              const SizedBox(height: 8),
-              _ControlsHint(delay: controlsHideDelay),
-            ],
+          top: safeAreaTop,
+          bottom: safeAreaBottom,
+          child: Padding(
+            padding: padding,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ..._buildSectionsWithSpacing(sections),
+                if (footer != null) ...[
+                  if (sections.isNotEmpty && footerSpacing > 0)
+                    SizedBox(height: footerSpacing),
+                  footer!,
+                ],
+              ],
+            ),
           ),
         ),
       ),
@@ -74,7 +142,7 @@ class SlideshowOverlay extends ConsumerWidget {
     for (var i = 0; i < sections.length; i++) {
       builtSections.add(sections[i]);
       if (i != sections.length - 1) {
-        builtSections.add(const SizedBox(height: 16));
+        builtSections.add(SizedBox(height: sectionSpacing));
       }
     }
     return builtSections;
@@ -101,6 +169,28 @@ class _ProgressSection extends StatelessWidget {
       ),
       progressColor: Colors.white,
       backgroundColor: Colors.white.withValues(alpha: 0.3),
+    );
+  }
+}
+
+class _HeaderSection extends StatelessWidget {
+  const _HeaderSection({required this.media, required this.onClose});
+
+  final MediaEntity? media;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          tooltip: 'Close slideshow',
+          onPressed: onClose,
+        ),
+        const Spacer(),
+        if (media != null) FavoriteToggleButton(media: media!),
+      ],
     );
   }
 }
@@ -174,24 +264,6 @@ class _PlaybackSection extends StatelessWidget {
       ),
       style: MediaPlaybackControlStyle(
         progressBackgroundColor: Colors.white.withValues(alpha: 0.3),
-      ),
-    );
-  }
-}
-
-class _CloseSection extends StatelessWidget {
-  const _CloseSection({required this.onClose});
-
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: IconButton(
-        icon: const Icon(Icons.close, color: Colors.white),
-        onPressed: onClose,
-        tooltip: 'Close slideshow',
       ),
     );
   }
