@@ -9,7 +9,6 @@ import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/models/directory_navigation_target.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/view_models/tags_view_model.dart';
-import '../../../tagging/presentation/widgets/tag_chip.dart';
 import '../../domain/entities/viewer_state_entity.dart';
 import '../models/full_screen_exit_result.dart';
 import '../view_models/full_screen_view_model.dart';
@@ -21,6 +20,7 @@ import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
 import '../../../../shared/providers/auto_navigate_sibling_directories_provider.dart';
+import '../../../../shared/widgets/tag_overlay.dart';
 
 /// Full-screen media viewer screen
 class FullScreenViewerScreen extends ConsumerStatefulWidget {
@@ -162,7 +162,11 @@ class _FullScreenViewerScreenState
                 child: SafeArea(
                   top: true,
                   bottom: false,
-                  child: _buildTagOverlay(state),
+                  child: TagOverlay(
+                    tags: state.allTags,
+                    selectedTagIds: state.currentMedia.tagIds.toSet(),
+                    onTagTapped: _handleTagChipTapped,
+                  ),
                 ),
               ),
 
@@ -353,64 +357,6 @@ class _FullScreenViewerScreenState
           },
         ),
       ],
-    );
-  }
-
-  Widget _buildTagOverlay(FullScreenLoaded state) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    final chipWidgets = <Widget>[];
-    if (state.allTags.isEmpty) {
-      chipWidgets.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text(
-            'No tags available',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
-    } else {
-      for (final tag in state.allTags) {
-        chipWidgets.add(
-          TagChip(
-            key: ValueKey('fullscreen_tag_${tag.id}'),
-            tag: tag,
-            selected: state.currentMedia.tagIds.contains(tag.id),
-            compact: true,
-            onTap: () => _handleTagChipTapped(tag),
-          ),
-        );
-        chipWidgets.add(const SizedBox(width: 8));
-      }
-      if (chipWidgets.isNotEmpty) {
-        chipWidgets.removeLast();
-      }
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.45),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white24),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: chipWidgets),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
