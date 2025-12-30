@@ -48,8 +48,10 @@ class SlideshowOverlay extends ConsumerWidget {
           media: viewModel.currentMedia,
           onClose: onClose,
         ),
+        if (viewModel.currentMedia != null)
+          _TagSection(media: viewModel.currentMedia!),
       ],
-      sectionSpacing: 0,
+      sectionSpacing: 12,
     );
 
     final bottomDisplay = _SlideshowOverlayDisplay(
@@ -63,8 +65,6 @@ class SlideshowOverlay extends ConsumerWidget {
       safeAreaBottom: true,
       sections: [
         _ProgressSection(viewModel: viewModel),
-        if (viewModel.currentMedia != null)
-          _TagSection(media: viewModel.currentMedia!),
         _PlaybackSection(
           state: state,
           viewModel: viewModel,
