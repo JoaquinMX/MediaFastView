@@ -247,9 +247,7 @@ class IsarDirectoryCollectionStore implements DirectoryCollectionStore {
 
   @override
   Future<DirectoryCollection?> getByDirectoryId(String directoryId) {
-    final hash = sha256.convert(utf8.encode(directoryId)).bytes;
-    final id = hash.fold<int>(0, (prev, element) => prev + element);
-    return _collection.get(id);
+    return _collection.get(computeDirectoryCollectionId(directoryId));
   }
 
   @override
