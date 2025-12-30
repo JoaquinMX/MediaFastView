@@ -5,13 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_fast_view/core/config/app_config.dart';
-import 'package:media_fast_view/shared/widgets/media_playback_controls.dart';
-import 'package:media_fast_view/shared/widgets/media_progress_indicator.dart';
 import 'package:media_fast_view/shared/providers/slideshow_controls_hide_delay_provider.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
 
 import '../view_models/slideshow_view_model.dart';
+import '../widgets/slideshow_overlay.dart';
 import '../widgets/slideshow_video_player.dart';
 
 /// Full-screen slideshow screen for viewing favorite media items.
@@ -51,7 +50,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = ref.watch(slideshowViewModelProvider(widget.mediaList));
+    final state = ref.watch(slideshowViewModelProvider(widget.mediaList));
     final slideshowViewModel = ref.read(
       slideshowViewModelProvider(widget.mediaList).notifier,
     );
@@ -76,11 +75,16 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
             fit: StackFit.expand,
             children: [
               // Main content area
-              _buildSlideshowContent(viewModel, slideshowViewModel),
+              _buildSlideshowContent(state, slideshowViewModel),
 
               // Controls overlay
               if (_areControlsVisible)
-                _buildControlsOverlay(viewModel, slideshowViewModel),
+                SlideshowOverlay(
+                  state: state,
+                  viewModel: slideshowViewModel,
+                  onClose: () => Navigator.of(context).pop(),
+                  onPlayPause: _handlePlayPause,
+                ),
             ],
           ),
         ),
@@ -139,105 +143,6 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildControlsOverlay(
-    SlideshowState state,
-    SlideshowViewModel viewModel,
-  ) {
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
-          ),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              MediaProgressIndicator(
-                currentIndex: viewModel.currentIndex,
-                totalItems: viewModel.totalItems,
-                progress: viewModel.totalItems > 0
-                    ? (viewModel.currentIndex + 1) / viewModel.totalItems
-                    : 0,
-                counterTextStyle: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-                progressColor: Colors.white,
-                backgroundColor: Colors.white.withValues(alpha: 0.3),
-              ),
-
-              const SizedBox(height: 16),
-
-              MediaPlaybackControls(
-                isPlaying: viewModel.isPlaying,
-                isLooping: viewModel.isLooping,
-                isShuffleEnabled: switch (state) {
-                  SlideshowPlaying(:final isShuffleEnabled) => isShuffleEnabled,
-                  SlideshowPaused(:final isShuffleEnabled) => isShuffleEnabled,
-                  _ => false,
-                },
-                isMuted: viewModel.isMuted,
-                isVideoLooping: viewModel.isVideoLooping,
-                progress: switch (state) {
-                  SlideshowPlaying(:final progress) => progress,
-                  SlideshowPaused(:final progress) => progress,
-                  _ => 0.0,
-                },
-                minDuration: AppConfig.slideshowMinDuration,
-                maxDuration: AppConfig.slideshowMaxDuration,
-                currentItemDuration: switch (state) {
-                  SlideshowPlaying(:final imageDisplayDuration) =>
-                    imageDisplayDuration,
-                  SlideshowPaused(:final imageDisplayDuration) =>
-                    imageDisplayDuration,
-                  _ => const Duration(seconds: 5),
-                },
-                onPlayPause: _handlePlayPause,
-                onNext: viewModel.nextItem,
-                onPrevious: viewModel.previousItem,
-                onToggleLoop: viewModel.toggleLoop,
-                onToggleShuffle: viewModel.toggleShuffle,
-                onToggleMute: viewModel.toggleMute,
-                onToggleVideoLoop: viewModel.toggleVideoLoop,
-                onDurationSelected: viewModel.setImageDisplayDuration,
-                visibility: MediaPlaybackControlVisibility(
-                  showProgressBar:
-                      viewModel.currentMedia?.type == MediaType.video,
-                  showVideoLoop:
-                      viewModel.currentMedia?.type == MediaType.video,
-                ),
-                style: MediaPlaybackControlStyle(
-                  progressBackgroundColor: Colors.white.withValues(alpha: 0.3),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.of(context).pop(),
-                  tooltip: 'Close slideshow',
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
