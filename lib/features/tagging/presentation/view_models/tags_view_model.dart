@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../../core/services/logging_service.dart';
 import '../../../favorites/domain/repositories/favorites_repository.dart';
@@ -227,21 +228,15 @@ class TagsViewModel extends StateNotifier<TagsState> {
     try {
       final sections = <TagSection>[];
 
-      _libraryDirectories =
+      final allDirectories =
           await _filterByTagsUseCase.filterDirectories(const []);
+      _libraryDirectories = _extractTopLevelDirectories(allDirectories);
 
       final cachedMediaModels = await _mediaDataSource.getMedia();
       final cachedMediaEntities = cachedMediaModels
           .map(_toEntity)
           .toList(growable: false);
-      _directoryMediaCounts = <String, int>{};
-      for (final media in cachedMediaEntities) {
-        _directoryMediaCounts.update(
-          media.directoryId,
-          (value) => value + 1,
-          ifAbsent: () => 1,
-        );
-      }
+      _directoryMediaCounts = _countMediaByTopDirectory(cachedMediaEntities);
       final cachedMediaById = {
         for (final media in cachedMediaEntities) media.id: media,
       };
@@ -544,33 +539,25 @@ class TagsViewModel extends StateNotifier<TagsState> {
     }
 
     final directories = await _filterByTagsUseCase.filterDirectories(const []);
-    final directoryById = {
-      for (final directory in directories) directory.id: directory,
-    };
-
-    final mediaByDirectoryId = <String, List<MediaEntity>>{};
-    for (final media in untaggedMedia) {
-      mediaByDirectoryId
-          .putIfAbsent(media.directoryId, () => <MediaEntity>[])
-          .add(media);
-    }
-
     final directoryContents = <TagDirectoryContent>[];
     final collectedMediaIds = <String>{};
-    mediaByDirectoryId.forEach((directoryId, media) {
-      final directory = directoryById[directoryId];
-      if (directory == null) {
-        return;
+    for (final directory in directories) {
+      final mediaForDirectory = untaggedMedia
+          .where((media) => _isPathWithin(directory.path, media.path))
+          .toList();
+
+      if (mediaForDirectory.isEmpty) {
+        continue;
       }
 
-      collectedMediaIds.addAll(media.map((item) => item.id));
+      collectedMediaIds.addAll(mediaForDirectory.map((item) => item.id));
       directoryContents.add(
         TagDirectoryContent(
           directory: directory,
-          media: media,
+          media: mediaForDirectory,
         ),
       );
-    });
+    }
 
     final standaloneMedia = untaggedMedia
         .where((media) => !collectedMediaIds.contains(media.id))
@@ -596,34 +583,15 @@ class TagsViewModel extends StateNotifier<TagsState> {
     final cachedMediaForTag = List<MediaEntity>.from(
       cachedMediaByTag[tag.id] ?? const [],
     );
-    final cachedMediaByDirectoryId = <String, List<MediaEntity>>{};
-    for (final media in cachedMediaForTag) {
-      cachedMediaByDirectoryId
-          .putIfAbsent(media.directoryId, () => <MediaEntity>[])
-          .add(media);
-    }
-
     final collectedMediaIds = <String>{};
     final directorySections = <TagDirectoryContent>[];
 
     for (final directory in filterResults.directories) {
-      List<MediaEntity> directoryMedia = const [];
-      try {
-        directoryMedia = await _filterByTagsUseCase.filterMediaInDirectory(
-          directory,
-          [tag.id],
-        );
-      } catch (e) {
-        LoggingService.instance.error(
-          'Failed to load media for directory ${directory.id} and tag ${tag.id}: $e',
-        );
-      }
-
-      if (directoryMedia.isEmpty) {
-        directoryMedia = List<MediaEntity>.from(
-          cachedMediaByDirectoryId[directory.id] ?? const <MediaEntity>[],
-        );
-      }
+      final directoryMedia = await _loadMediaForDirectory(
+        directory,
+        tag.id,
+        cachedMediaForTag,
+      );
 
       if (directoryMedia.isNotEmpty) {
         collectedMediaIds.addAll(directoryMedia.map((media) => media.id));
@@ -653,6 +621,97 @@ class TagsViewModel extends StateNotifier<TagsState> {
       media: uniqueStandalone.values.toList(),
       color: Color(tag.color),
     );
+  }
+
+  Map<String, int> _countMediaByTopDirectory(List<MediaEntity> media) {
+    if (media.isEmpty || _libraryDirectories.isEmpty) {
+      return const {};
+    }
+
+    final counts = <String, int>{};
+    for (final item in media) {
+      final directoryId = _findTopDirectoryIdForPath(item.path);
+      if (directoryId == null) {
+        continue;
+      }
+      counts.update(directoryId, (value) => value + 1, ifAbsent: () => 1);
+    }
+    return counts;
+  }
+
+  List<DirectoryEntity> _extractTopLevelDirectories(
+    List<DirectoryEntity> directories,
+  ) {
+    if (directories.isEmpty) {
+      return const [];
+    }
+
+    final normalized = directories
+        .map(
+          (directory) => directory.copyWith(path: p.normalize(directory.path)),
+        )
+        .toList()
+      ..sort((a, b) => a.path.length.compareTo(b.path.length));
+
+    final topDirectories = <DirectoryEntity>[];
+    for (final directory in normalized) {
+      final isNested = topDirectories.any(
+        (top) => _isPathWithin(top.path, directory.path),
+      );
+      if (!isNested) {
+        topDirectories.add(directory);
+      }
+    }
+
+    topDirectories.sort((a, b) => a.name.compareTo(b.name));
+    return topDirectories;
+  }
+
+  Future<List<MediaEntity>> _loadMediaForDirectory(
+    DirectoryEntity directory,
+    String tagId,
+    List<MediaEntity> cachedMedia,
+  ) async {
+    List<MediaEntity> directoryMedia = const [];
+    try {
+      directoryMedia = await _filterByTagsUseCase.filterMediaInDirectory(
+        directory,
+        [tagId],
+      );
+    } catch (e) {
+      LoggingService.instance.error(
+        'Failed to load media for directory ${directory.id} and tag $tagId: $e',
+      );
+    }
+
+    if (directoryMedia.isEmpty) {
+      directoryMedia = cachedMedia
+          .where((media) => _isPathWithin(directory.path, media.path))
+          .toList();
+    }
+
+    return directoryMedia;
+  }
+
+  String? _findTopDirectoryIdForPath(String path) {
+    if (_libraryDirectories.isEmpty) {
+      return null;
+    }
+
+    final normalized = p.normalize(path);
+    for (final directory in _libraryDirectories) {
+      if (_isPathWithin(directory.path, normalized)) {
+        return directory.id;
+      }
+    }
+    return null;
+  }
+
+  bool _isPathWithin(String parentPath, String childPath) {
+    final normalizedParent = p.normalize(parentPath);
+    final normalizedChild = p.normalize(childPath);
+    return normalizedChild == normalizedParent ||
+        p.isWithin(normalizedParent, normalizedChild);
   }
 
   Future<List<MediaEntity>> _loadMediaByIds(
