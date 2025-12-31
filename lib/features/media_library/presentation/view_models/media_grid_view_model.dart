@@ -160,11 +160,6 @@ class MediaViewModel extends StateNotifier<MediaState> {
         };
         if (!listEquals(favorites, _favoriteMediaIds)) {
           _favoriteMediaIds = favorites;
-          if (_showFavoritesOnly && _favoriteMediaIds.isEmpty) {
-            _showFavoritesOnly = false;
-            _emitLoadedStateFromCache();
-            return;
-          }
           if (_showFavoritesOnly) {
             _emitLoadedStateFromCache();
           }
@@ -625,9 +620,6 @@ class MediaViewModel extends StateNotifier<MediaState> {
   /// Filters media to only show favorites when [value] is true.
   void setShowFavoritesOnly(bool value) {
     if (_showFavoritesOnly == value) {
-      return;
-    }
-    if (value && _favoriteMediaIds.isEmpty) {
       return;
     }
     _showFavoritesOnly = value;
