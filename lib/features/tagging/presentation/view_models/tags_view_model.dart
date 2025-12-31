@@ -227,6 +227,13 @@ class TagsViewModel extends StateNotifier<TagsState> {
         sections.add(favoritesSection);
       }
 
+      final untaggedSection = await _buildUntaggedSection(
+        cachedMediaEntities,
+      );
+      if (untaggedSection != null) {
+        sections.add(untaggedSection);
+      }
+
       final tags = await _getTagsUseCase();
       for (final tag in tags) {
         final section = await _buildSectionForTag(tag, mediaByTagId);
@@ -456,6 +463,57 @@ class TagsViewModel extends StateNotifier<TagsState> {
       isFavorites: true,
       directories: const [],
       media: favoritesMedia,
+    );
+  }
+
+  Future<TagSection?> _buildUntaggedSection(
+    List<MediaEntity> cachedMedia,
+  ) async {
+    final untaggedMedia =
+        cachedMedia.where((media) => media.tagIds.isEmpty).toList();
+    if (untaggedMedia.isEmpty) {
+      return null;
+    }
+
+    final directories = await _filterByTagsUseCase.filterDirectories(const []);
+    final directoryById = {
+      for (final directory in directories) directory.id: directory,
+    };
+
+    final mediaByDirectoryId = <String, List<MediaEntity>>{};
+    for (final media in untaggedMedia) {
+      mediaByDirectoryId
+          .putIfAbsent(media.directoryId, () => <MediaEntity>[])
+          .add(media);
+    }
+
+    final directoryContents = <TagDirectoryContent>[];
+    final collectedMediaIds = <String>{};
+    mediaByDirectoryId.forEach((directoryId, media) {
+      final directory = directoryById[directoryId];
+      if (directory == null) {
+        return;
+      }
+
+      collectedMediaIds.addAll(media.map((item) => item.id));
+      directoryContents.add(
+        TagDirectoryContent(
+          directory: directory,
+          media: media,
+        ),
+      );
+    });
+
+    final standaloneMedia = untaggedMedia
+        .where((media) => !collectedMediaIds.contains(media.id))
+        .toList();
+
+    return TagSection(
+      id: 'untagged',
+      name: 'Untagged',
+      isFavorites: false,
+      directories: directoryContents,
+      media: standaloneMedia,
     );
   }
 
