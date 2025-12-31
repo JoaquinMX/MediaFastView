@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/media_library/domain/entities/media_entity.dart';
 import '../../features/tagging/domain/entities/tag_entity.dart';
 import '../../features/tagging/domain/use_cases/assign_tag_use_case.dart';
+import '../../core/services/logging_service.dart';
 import '../providers/repository_providers.dart';
 import 'tag_cache_refresher.dart';
 import 'tag_lookup.dart';
@@ -60,8 +63,7 @@ class TagMutationService {
     );
     final resolvedTags = await _tagLookup.getTagsByIds(updatedTagIds);
 
-    await _tagLookup.refresh();
-    await _tagCacheRefresher.refresh();
+    _refreshCaches();
 
     return TagMutationResult(
       outcome:
@@ -69,6 +71,18 @@ class TagMutationService {
       updatedMedia: updatedMedia,
       resolvedTags: resolvedTags,
     );
+  }
+
+  void _refreshCaches() {
+    unawaited(Future.wait(<Future<void>>[
+      _tagLookup.refresh(),
+      _tagCacheRefresher.refresh(),
+    ], eagerError: false).catchError((error, stackTrace) {
+      LoggingService.instance
+          .error('Tag cache refresh failed: $error');
+      LoggingService.instance
+          .debug('Tag cache refresh stack trace: $stackTrace');
+    }));
   }
 }
 
