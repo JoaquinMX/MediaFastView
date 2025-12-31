@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
+import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/widgets/media_grid_item.dart';
 import '../../../media_library/presentation/widgets/column_selector_popup.dart';
@@ -105,6 +106,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final mediaMatchingDirectories = _filterMediaByDirectory(
       aggregatedMedia,
       state.selectedDirectoryIds,
+      state.libraryDirectories,
     );
     final filteredMedia = _filterMediaByType(
       mediaMatchingDirectories,
@@ -127,6 +129,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               state.excludedTagIds.isEmpty,
             ),
             state.selectedDirectoryIds,
+            state.libraryDirectories,
           );
     final selectedDirectories = _collectDirectoriesFromSections(
       sectionsForDirectories,
@@ -583,22 +586,43 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   List<TagSection> _filterSectionsByDirectory(
     List<TagSection> sections,
     List<String> selectedDirectoryIds,
+    List<DirectoryEntity> availableDirectories,
   ) {
     if (selectedDirectoryIds.isEmpty) {
       return sections;
     }
 
     final selectedIds = selectedDirectoryIds.toSet();
+    final selectedDirectories = availableDirectories
+        .where((directory) => selectedIds.contains(directory.id))
+        .toList();
     final filtered = <TagSection>[];
+
+    bool isInSelectedDirectory(String directoryPath) {
+      return selectedDirectories.any(
+        (directory) =>
+            p.equals(directory.path, directoryPath) ||
+            p.isWithin(directory.path, directoryPath),
+      );
+    }
+
+    String _mediaDirectoryPath(MediaEntity media) {
+      return media.type == MediaType.directory
+          ? media.path
+          : p.dirname(media.path);
+    }
 
     for (final section in sections) {
       final filteredDirectories = section.directories
-          .where((content) => selectedIds.contains(content.directory.id))
+          .where((content) => isInSelectedDirectory(content.directory.path))
           .map(
             (content) => TagDirectoryContent(
               directory: content.directory,
               media: content.media
-                  .where((media) => selectedIds.contains(media.directoryId))
+                  .where(
+                    (media) =>
+                        isInSelectedDirectory(_mediaDirectoryPath(media)),
+                  )
                   .toList(),
             ),
           )
@@ -606,7 +630,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           .toList();
 
       final filteredMedia = section.media
-          .where((media) => selectedIds.contains(media.directoryId))
+          .where(
+            (media) => isInSelectedDirectory(_mediaDirectoryPath(media)),
+          )
           .toList();
 
       if (filteredDirectories.isEmpty && filteredMedia.isEmpty) {
@@ -631,15 +657,26 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   List<MediaEntity> _filterMediaByDirectory(
     List<MediaEntity> media,
     List<String> selectedDirectoryIds,
+    List<DirectoryEntity> availableDirectories,
   ) {
     if (selectedDirectoryIds.isEmpty) {
       return media;
     }
 
     final selectedIds = selectedDirectoryIds.toSet();
-    return media
-        .where((item) => selectedIds.contains(item.directoryId))
+    final selectedDirectories = availableDirectories
+        .where((directory) => selectedIds.contains(directory.id))
         .toList();
+
+    return media.where((item) {
+      final directoryPath = item.type == MediaType.directory
+          ? item.path
+          : p.dirname(item.path);
+
+      return selectedDirectories.any((directory) =>
+          p.equals(directory.path, directoryPath) ||
+          p.isWithin(directory.path, directoryPath));
+    }).toList();
   }
 
   List<MediaEntity> _collectMediaFromSections(
