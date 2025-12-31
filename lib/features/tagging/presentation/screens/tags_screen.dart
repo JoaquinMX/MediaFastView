@@ -106,6 +106,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       aggregatedMedia,
       state.mediaTypeFilter,
     );
+    final directoryFilteredMedia = _filterMediaByDirectory(
+      filteredMedia,
+      state.directoryFilterIds,
+    );
     final sectionsForDirectories = _resolveFilterSections(
       sections,
       selectedSections,
@@ -116,7 +120,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final selectedDirectories = _collectDirectoriesFromSections(
       sectionsForDirectories,
       state.excludedTagIds,
+      state.directoryFilterIds,
     );
+    final hasDirectoryFilters = state.directoryFilterIds.isNotEmpty;
 
     final headerWidgets = <Widget>[
       _buildSearchField(),
@@ -130,15 +136,21 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ],
       const SizedBox(height: 12),
       _buildMediaTypeFilter(state, viewModel),
+      if (state.availableDirectories.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        _buildDirectoryFilter(state, viewModel),
+      ],
       const SizedBox(height: 24),
     ];
 
-    if (selectedSections.isEmpty && state.excludedTagIds.isEmpty) {
+    if (selectedSections.isEmpty &&
+        state.excludedTagIds.isEmpty &&
+        !hasDirectoryFilters) {
       headerWidgets.add(_buildSelectionPlaceholder());
     } else {
       headerWidgets.addAll([
         _buildSelectionSummary(
-          filteredMedia,
+          directoryFilteredMedia,
           viewModel,
           state.filterMode,
           state.selectedTagIds.length,
@@ -155,7 +167,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         ]);
       }
 
-      if (filteredMedia.isEmpty) {
+      if (directoryFilteredMedia.isEmpty) {
         headerWidgets.add(_buildNoResultsMessage());
       } else {
         headerWidgets.add(const SizedBox(height: 12));
@@ -171,12 +183,18 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ),
     ];
 
-    if (filteredMedia.isNotEmpty &&
-        (selectedSections.isNotEmpty || state.excludedTagIds.isNotEmpty)) {
+    if (directoryFilteredMedia.isNotEmpty &&
+        (selectedSections.isNotEmpty ||
+            state.excludedTagIds.isNotEmpty ||
+            hasDirectoryFilters)) {
       slivers.add(
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          sliver: _buildMediaGrid(filteredMedia, filteredMedia, gridColumns),
+          sliver: _buildMediaGrid(
+            directoryFilteredMedia,
+            directoryFilteredMedia,
+            gridColumns,
+          ),
         ),
       );
     }
@@ -463,6 +481,18 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     }).toList();
   }
 
+  List<MediaEntity> _filterMediaByDirectory(
+    List<MediaEntity> media,
+    List<String> directoryIds,
+  ) {
+    if (directoryIds.isEmpty) {
+      return media;
+    }
+
+    final directorySet = directoryIds.toSet();
+    return media.where((item) => directorySet.contains(item.directoryId)).toList();
+  }
+
   List<TagSection> _resolveFilterSections(
     List<TagSection> allSections,
     List<TagSection> requiredSections,
@@ -587,15 +617,21 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   List<TagDirectoryContent> _collectDirectoriesFromSections(
     List<TagSection> sections,
     List<String> excludedTagIds,
+    List<String> directoryFilterIds,
   ) {
     if (sections.isEmpty) {
       return const <TagDirectoryContent>[];
     }
 
     final excludedSet = excludedTagIds.toSet();
+    final directoryFilterSet = directoryFilterIds.toSet();
     final map = <String, TagDirectoryContent>{};
     for (final section in sections) {
       for (final directoryContent in section.directories) {
+        if (directoryFilterSet.isNotEmpty &&
+            !directoryFilterSet.contains(directoryContent.directory.id)) {
+          continue;
+        }
         if (excludedSet.isNotEmpty &&
             directoryContent.directory.tagIds.any(excludedSet.contains)) {
           continue;
@@ -742,6 +778,72 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildDirectoryFilter(
+    TagsLoaded state,
+    TagsViewModel viewModel,
+  ) {
+    final theme = Theme.of(context);
+    final mediaCounts = _buildDirectoryMediaCounts(state.sections);
+
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Filter by directory',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                if (state.directoryFilterIds.isNotEmpty)
+                  TextButton(
+                    onPressed: viewModel.clearDirectoryFilters,
+                    child: const Text('Clear'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: state.availableDirectories.map((directory) {
+                final isSelected = state.directoryFilterIds.contains(directory.id);
+                final mediaCount = mediaCounts[directory.id] ?? 0;
+
+                return TagDirectoryChip(
+                  directory: directory,
+                  mediaCount: mediaCount,
+                  onTap: () => viewModel.toggleDirectoryFilter(directory.id),
+                  togglable: true,
+                  selected: isSelected,
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Map<String, int> _buildDirectoryMediaCounts(List<TagSection> sections) {
+    final counts = <String, int>{};
+    for (final section in sections) {
+      for (final directoryContent in section.directories) {
+        counts.update(
+          directoryContent.directory.id,
+          (value) => value + directoryContent.media.length,
+          ifAbsent: () => directoryContent.media.length,
+        );
+      }
+    }
+    return counts;
   }
 
   Widget _buildDirectorySection(List<TagDirectoryContent> directories) {

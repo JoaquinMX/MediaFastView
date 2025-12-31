@@ -85,6 +85,8 @@ class TagsLoaded extends TagsState {
     required this.filterMode,
     required this.mediaTypeFilter,
     required this.selectionMode,
+    required this.availableDirectories,
+    required this.directoryFilterIds,
   });
 
   final List<TagSection> sections;
@@ -94,6 +96,8 @@ class TagsLoaded extends TagsState {
   final TagFilterMode filterMode;
   final TagMediaTypeFilter mediaTypeFilter;
   final TagSelectionMode selectionMode;
+  final List<DirectoryEntity> availableDirectories;
+  final List<String> directoryFilterIds;
 
   TagsLoaded copyWith({
     List<TagSection>? sections,
@@ -103,6 +107,8 @@ class TagsLoaded extends TagsState {
     TagFilterMode? filterMode,
     TagMediaTypeFilter? mediaTypeFilter,
     TagSelectionMode? selectionMode,
+    List<DirectoryEntity>? availableDirectories,
+    List<String>? directoryFilterIds,
   }) {
     return TagsLoaded(
       sections: sections ?? this.sections,
@@ -112,6 +118,8 @@ class TagsLoaded extends TagsState {
       filterMode: filterMode ?? this.filterMode,
       mediaTypeFilter: mediaTypeFilter ?? this.mediaTypeFilter,
       selectionMode: selectionMode ?? this.selectionMode,
+      availableDirectories: availableDirectories ?? this.availableDirectories,
+      directoryFilterIds: directoryFilterIds ?? this.directoryFilterIds,
     );
   }
 }
@@ -141,9 +149,11 @@ class TagsViewModel extends StateNotifier<TagsState> {
   List<String> _selectedTagIds = const [];
   List<String> _optionalTagIds = const [];
   List<String> _excludedTagIds = const [];
+  List<String> _directoryFilterIds = const [];
   TagFilterMode _filterMode = TagFilterMode.any;
   TagMediaTypeFilter _mediaTypeFilter = TagMediaTypeFilter.all;
   TagSelectionMode _selectionMode = TagSelectionMode.required;
+  List<DirectoryEntity> _availableDirectories = const [];
 
   Future<void> loadTags() async {
     state = const TagsLoading();
@@ -177,11 +187,14 @@ class TagsViewModel extends StateNotifier<TagsState> {
             filterMode: _filterMode,
             mediaTypeFilter: _mediaTypeFilter,
             selectionMode: _selectionMode,
+            availableDirectories: _availableDirectories,
+            directoryFilterIds: List<String>.from(_directoryFilterIds),
           );
         } else if (otherSections.isEmpty) {
           _selectedTagIds = const [];
           _optionalTagIds = const [];
           _excludedTagIds = const [];
+          _directoryFilterIds = const [];
           state = const TagsEmpty();
         } else {
           state = TagsLoaded(
@@ -192,6 +205,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
             filterMode: _filterMode,
             mediaTypeFilter: _mediaTypeFilter,
             selectionMode: _selectionMode,
+            availableDirectories: _availableDirectories,
+            directoryFilterIds: List<String>.from(_directoryFilterIds),
           );
         }
       } else {
@@ -205,6 +220,18 @@ class TagsViewModel extends StateNotifier<TagsState> {
   Future<void> _reloadSections() async {
     try {
       final sections = <TagSection>[];
+
+      final allDirectories = await _filterByTagsUseCase.filterDirectories(const []);
+      _availableDirectories = List<DirectoryEntity>.unmodifiable(allDirectories
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase())));
+
+      final directoriesById = {
+        for (final directory in _availableDirectories) directory.id: directory,
+      };
+
+      _directoryFilterIds = _directoryFilterIds
+          .where((id) => directoriesById.containsKey(id))
+          .toList();
 
       final cachedMediaModels = await _mediaDataSource.getMedia();
       final cachedMediaEntities = cachedMediaModels
@@ -229,6 +256,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
       final untaggedSection = await _buildUntaggedSection(
         cachedMediaEntities,
+        directoriesById,
       );
       if (untaggedSection != null) {
         sections.add(untaggedSection);
@@ -248,6 +276,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
         _selectedTagIds = const [];
         _optionalTagIds = const [];
         _excludedTagIds = const [];
+        _directoryFilterIds = const [];
         state = const TagsEmpty();
       } else {
         state = TagsLoaded(
@@ -258,6 +287,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
           filterMode: _filterMode,
           mediaTypeFilter: _mediaTypeFilter,
           selectionMode: _selectionMode,
+          availableDirectories: _availableDirectories,
+          directoryFilterIds: List<String>.from(_directoryFilterIds),
         );
       }
     } catch (e) {
@@ -405,6 +436,33 @@ class TagsViewModel extends StateNotifier<TagsState> {
     }
   }
 
+  void toggleDirectoryFilter(String directoryId) {
+    final updatedFilters = List<String>.from(_directoryFilterIds);
+    if (updatedFilters.contains(directoryId)) {
+      updatedFilters.remove(directoryId);
+    } else {
+      updatedFilters.add(directoryId);
+    }
+    _updateDirectoryFilters(updatedFilters);
+  }
+
+  void clearDirectoryFilters() {
+    if (_directoryFilterIds.isEmpty) {
+      return;
+    }
+    _updateDirectoryFilters(const []);
+  }
+
+  void _updateDirectoryFilters(List<String> directoryIds) {
+    _directoryFilterIds = directoryIds;
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(
+        directoryFilterIds: List<String>.from(_directoryFilterIds),
+      );
+    }
+  }
+
   void setFilterMode(TagFilterMode mode) {
     if (_filterMode == mode) {
       return;
@@ -468,17 +526,13 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
   Future<TagSection?> _buildUntaggedSection(
     List<MediaEntity> cachedMedia,
+    Map<String, DirectoryEntity> directoriesById,
   ) async {
     final untaggedMedia =
         cachedMedia.where((media) => media.tagIds.isEmpty).toList();
     if (untaggedMedia.isEmpty) {
       return null;
     }
-
-    final directories = await _filterByTagsUseCase.filterDirectories(const []);
-    final directoryById = {
-      for (final directory in directories) directory.id: directory,
-    };
 
     final mediaByDirectoryId = <String, List<MediaEntity>>{};
     for (final media in untaggedMedia) {
@@ -490,7 +544,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
     final directoryContents = <TagDirectoryContent>[];
     final collectedMediaIds = <String>{};
     mediaByDirectoryId.forEach((directoryId, media) {
-      final directory = directoryById[directoryId];
+      final directory = directoriesById[directoryId];
       if (directory == null) {
         return;
       }

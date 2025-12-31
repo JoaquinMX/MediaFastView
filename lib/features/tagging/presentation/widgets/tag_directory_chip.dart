@@ -12,11 +12,15 @@ class TagDirectoryChip extends ConsumerStatefulWidget {
     required this.directory,
     required this.mediaCount,
     required this.onTap,
+    this.togglable = false,
+    this.selected = false,
   });
 
   final DirectoryEntity directory;
   final int mediaCount;
   final VoidCallback onTap;
+  final bool togglable;
+  final bool selected;
 
   @override
   ConsumerState<TagDirectoryChip> createState() => _TagDirectoryChipState();
@@ -93,14 +97,24 @@ class _TagDirectoryChipState extends ConsumerState<TagDirectoryChip> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final chip = ActionChip(
-      onPressed: () {
-        _removeOverlay();
-        widget.onTap();
-      },
-      avatar: Icon(Icons.folder, color: theme.colorScheme.primary),
-      label: Text('${widget.directory.name} (${widget.mediaCount})'),
-    );
+    final chip = widget.togglable
+        ? FilterChip(
+            selected: widget.selected,
+            onSelected: (_) {
+              _removeOverlay();
+              widget.onTap();
+            },
+            avatar: Icon(Icons.folder, color: theme.colorScheme.primary),
+            label: Text('${widget.directory.name} (${widget.mediaCount})'),
+          )
+        : ActionChip(
+            onPressed: () {
+              _removeOverlay();
+              widget.onTap();
+            },
+            avatar: Icon(Icons.folder, color: theme.colorScheme.primary),
+            label: Text('${widget.directory.name} (${widget.mediaCount})'),
+          );
 
     return MouseRegion(
       onEnter: (_) => _showOverlay(),
