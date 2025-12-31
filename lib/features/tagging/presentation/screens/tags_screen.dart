@@ -626,15 +626,19 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final hasRequired = requiredSections.isNotEmpty;
     final hasOptional = optionalSections.isNotEmpty;
 
-    final sectionsToScan = filterMode.isHybrid
-        ? _resolveFilterSections(
-            allSections,
-            requiredSections,
-            optionalSections,
-            hasRequired || hasOptional,
-            excludedTagIds.isEmpty,
-          )
-        : (hasRequired || excludedTagIds.isEmpty ? requiredSections : allSections);
+    final sectionsToScan = !hasRequired && !hasOptional
+        ? allSections
+        : filterMode.isHybrid
+            ? _resolveFilterSections(
+                allSections,
+                requiredSections,
+                optionalSections,
+                hasRequired || hasOptional,
+                excludedTagIds.isEmpty,
+              )
+            : (hasRequired || excludedTagIds.isEmpty
+                ? requiredSections
+                : allSections);
 
     if (sectionsToScan.isEmpty) {
       return const <MediaEntity>[];
