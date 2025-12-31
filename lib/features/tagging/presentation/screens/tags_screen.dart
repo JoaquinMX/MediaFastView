@@ -85,7 +85,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     TagsViewModel viewModel,
     int gridColumns,
   ) {
-    final sections = state.sections;
+    final sections =
+        _filterSectionsByDirectory(state.sections, state.selectedDirectoryIds);
     final selectedSections = sections
         .where((section) => state.selectedTagIds.contains(section.id))
         .toList();
@@ -121,7 +122,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final headerWidgets = <Widget>[
       _buildSearchField(),
       const SizedBox(height: 12),
-      _buildTagSelectionChips(state, viewModel),
+      _buildDirectoryFilter(state, viewModel),
+      const SizedBox(height: 12),
+      _buildTagSelectionChips(state, viewModel, sections),
       const SizedBox(height: 12),
       _buildFilterModeToggle(state, viewModel),
       if (state.filterMode.isHybrid) ...[
@@ -201,12 +204,77 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  Widget _buildTagSelectionChips(
+  Widget _buildDirectoryFilter(
     TagsLoaded state,
     TagsViewModel viewModel,
   ) {
+    if (state.libraryDirectories.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final selected = state.selectedDirectoryIds.toSet();
+
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Filter by directory',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (selected.isNotEmpty)
+                  TextButton(
+                    onPressed: viewModel.clearDirectorySelection,
+                    child: const Text('Clear directory filter'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: state.libraryDirectories.map((directory) {
+                final mediaCount =
+                    state.directoryMediaCounts[directory.id] ?? 0;
+                return TagDirectoryChip(
+                  directory: directory,
+                  mediaCount: mediaCount,
+                  isSelected: selected.contains(directory.id),
+                  onTap: () => viewModel.toggleDirectorySelection(directory.id),
+                );
+              }).toList(),
+            ),
+            if (selected.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  'Select directories to limit results. Hover to preview their contents.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant,
+                      ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagSelectionChips(
+    TagsLoaded state,
+    TagsViewModel viewModel,
+    List<TagSection> sections,
+  ) {
     final query = _searchQuery.trim().toLowerCase();
-    final filteredSections = state.sections.where((section) {
+    final filteredSections = sections.where((section) {
       if (query.isEmpty) {
         return true;
       }
@@ -487,6 +555,54 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       map.putIfAbsent(section.id, () => section);
     }
     return map.values.toList();
+  }
+
+  List<TagSection> _filterSectionsByDirectory(
+    List<TagSection> sections,
+    List<String> selectedDirectoryIds,
+  ) {
+    if (selectedDirectoryIds.isEmpty) {
+      return sections;
+    }
+
+    final selectedIds = selectedDirectoryIds.toSet();
+    final filtered = <TagSection>[];
+
+    for (final section in sections) {
+      final filteredDirectories = section.directories
+          .where((content) => selectedIds.contains(content.directory.id))
+          .map(
+            (content) => TagDirectoryContent(
+              directory: content.directory,
+              media: content.media
+                  .where((media) => selectedIds.contains(media.directoryId))
+                  .toList(),
+            ),
+          )
+          .where((content) => content.media.isNotEmpty)
+          .toList();
+
+      final filteredMedia = section.media
+          .where((media) => selectedIds.contains(media.directoryId))
+          .toList();
+
+      if (filteredDirectories.isEmpty && filteredMedia.isEmpty) {
+        continue;
+      }
+
+      filtered.add(
+        TagSection(
+          id: section.id,
+          name: section.name,
+          isFavorites: section.isFavorites,
+          directories: filteredDirectories,
+          media: filteredMedia,
+          color: section.color,
+        ),
+      );
+    }
+
+    return filtered;
   }
 
   List<MediaEntity> _collectMediaFromSections(
