@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
+import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/widgets/media_grid_item.dart';
 import '../../../media_library/presentation/widgets/column_selector_popup.dart';
@@ -105,6 +106,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final mediaMatchingDirectories = _filterMediaByDirectory(
       aggregatedMedia,
       state.selectedDirectoryIds,
+      state.libraryDirectories,
     );
     final filteredMedia = _filterMediaByType(
       mediaMatchingDirectories,
@@ -127,6 +129,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               state.excludedTagIds.isEmpty,
             ),
             state.selectedDirectoryIds,
+            state.libraryDirectories,
           );
     final selectedDirectories = _collectDirectoriesFromSections(
       sectionsForDirectories,
@@ -583,6 +586,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   List<TagSection> _filterSectionsByDirectory(
     List<TagSection> sections,
     List<String> selectedDirectoryIds,
+    List<DirectoryEntity> topDirectories,
   ) {
     if (selectedDirectoryIds.isEmpty) {
       return sections;
@@ -593,12 +597,24 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
     for (final section in sections) {
       final filteredDirectories = section.directories
-          .where((content) => selectedIds.contains(content.directory.id))
+          .where((content) {
+            final directoryId = _findTopDirectoryIdForPath(
+              content.directory.path,
+              topDirectories,
+            );
+            return directoryId != null && selectedIds.contains(directoryId);
+          })
           .map(
             (content) => TagDirectoryContent(
               directory: content.directory,
               media: content.media
-                  .where((media) => selectedIds.contains(media.directoryId))
+                  .where((media) {
+                    final directoryId = _findTopDirectoryIdForPath(
+                      media.path,
+                      topDirectories,
+                    );
+                    return directoryId != null && selectedIds.contains(directoryId);
+                  })
                   .toList(),
             ),
           )
@@ -606,7 +622,13 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           .toList();
 
       final filteredMedia = section.media
-          .where((media) => selectedIds.contains(media.directoryId))
+          .where((media) {
+            final directoryId = _findTopDirectoryIdForPath(
+              media.path,
+              topDirectories,
+            );
+            return directoryId != null && selectedIds.contains(directoryId);
+          })
           .toList();
 
       if (filteredDirectories.isEmpty && filteredMedia.isEmpty) {
@@ -631,6 +653,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   List<MediaEntity> _filterMediaByDirectory(
     List<MediaEntity> media,
     List<String> selectedDirectoryIds,
+    List<DirectoryEntity> topDirectories,
   ) {
     if (selectedDirectoryIds.isEmpty) {
       return media;
@@ -638,8 +661,33 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
     final selectedIds = selectedDirectoryIds.toSet();
     return media
-        .where((item) => selectedIds.contains(item.directoryId))
+        .where((item) {
+          final directoryId = _findTopDirectoryIdForPath(
+            item.path,
+            topDirectories,
+          );
+          return directoryId != null && selectedIds.contains(directoryId);
+        })
         .toList();
+  }
+
+  String? _findTopDirectoryIdForPath(
+    String path,
+    List<DirectoryEntity> topDirectories,
+  ) {
+    if (topDirectories.isEmpty) {
+      return null;
+    }
+
+    final normalized = p.normalize(path);
+    for (final directory in topDirectories) {
+      final directoryPath = p.normalize(directory.path);
+      if (normalized == directoryPath ||
+          p.isWithin(directoryPath, normalized)) {
+        return directory.id;
+      }
+    }
+    return null;
   }
 
   List<MediaEntity> _collectMediaFromSections(
