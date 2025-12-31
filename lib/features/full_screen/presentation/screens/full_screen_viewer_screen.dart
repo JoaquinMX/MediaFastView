@@ -21,6 +21,8 @@ import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
 import '../../../../shared/providers/auto_navigate_sibling_directories_provider.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
+import '../../../../shared/widgets/tag_selection_dialog.dart';
+import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
 
 /// Full-screen media viewer screen
 class FullScreenViewerScreen extends ConsumerStatefulWidget {
@@ -162,11 +164,7 @@ class _FullScreenViewerScreenState
                 child: SafeArea(
                   top: true,
                   bottom: false,
-                  child: TagOverlay(
-                    tags: state.allTags,
-                    selectedTagIds: state.currentMedia.tagIds.toSet(),
-                    onTagTapped: _handleTagChipTapped,
-                  ),
+                  child: _buildTagHeader(state),
                 ),
               ),
 
@@ -270,6 +268,25 @@ class _FullScreenViewerScreenState
             ),
           ),
         },
+      ),
+    );
+  }
+
+  Widget _buildTagHeader(FullScreenLoaded state) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return TagOverlay(
+      tags: state.allTags,
+      selectedTagIds: state.currentMedia.tagIds.toSet(),
+      onTagTapped: _handleTagChipTapped,
+      trailing: IconButton.filledTonal(
+        onPressed: () => _openTagEditor(state),
+        icon: const Icon(Icons.add),
+        tooltip: 'Add or edit tags',
+        style: IconButton.styleFrom(
+          foregroundColor: colorScheme.onSurface,
+          backgroundColor: colorScheme.primary.withOpacity(0.2),
+        ),
       ),
     );
   }
@@ -634,6 +651,34 @@ class _FullScreenViewerScreenState
         siblingDirectories: _viewModel.siblingDirectories,
       ),
     );
+  }
+
+  Future<void> _openTagEditor(FullScreenLoaded state) async {
+    final result = await showDialog<TagUpdateResult>(
+      context: context,
+      builder: (context) => TagSelectionDialog<TagUpdateResult>(
+        title: 'Edit Tags',
+        assignmentTargetLabel: 'Assign tags to "${state.currentMedia.name}"',
+        initialSelectedTagIds: state.currentMedia.tagIds,
+        onConfirm: (selectedIds) =>
+            _viewModel.setTagsForCurrentMedia(selectedIds),
+        confirmLabel: 'Save Tags',
+        cancelLabel: 'Close',
+        cancelResult: null,
+        showCreateButton: true,
+        onCreateTag: (context) => TagCreationDialog.show(context),
+        showDeleteButtons: false,
+      ),
+    );
+
+    if (result == null || !mounted) {
+      return;
+    }
+
+    final message = (result.addedCount == 0 && result.removedCount == 0)
+        ? 'No tag changes applied'
+        : 'Updated tags (${result.addedCount} added, ${result.removedCount} removed)';
+    _showTagFeedback(message);
   }
 
   Widget _buildPermissionRevoked() {
