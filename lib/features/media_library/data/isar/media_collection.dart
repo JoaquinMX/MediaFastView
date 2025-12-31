@@ -22,6 +22,7 @@ class MediaCollection {
     required this.tagIds,
     required this.directoryId,
     this.bookmarkData,
+    this.durationMs,
   });
 
   /// Unique hash-based identifier used by Isar for this record.
@@ -62,6 +63,9 @@ class MediaCollection {
   /// Optional bookmark information for restoring access on macOS.
   String? bookmarkData;
 
+  /// Duration of the video in milliseconds, if known. Null for images or when unknown.
+  int? durationMs;
+
   /// Link to the parent directory record.
   final IsarLink<DirectoryCollection> directory = IsarLink<DirectoryCollection>();
 }
@@ -89,6 +93,7 @@ extension MediaCollectionMapper on MediaCollection {
       tagIds: List.unmodifiable(tagIds),
       directoryId: directoryId,
       bookmarkData: bookmarkData,
+      durationMs: durationMs,
     );
   }
 }
@@ -106,6 +111,7 @@ extension MediaModelIsarMapper on MediaModel {
       tagIds: tagIds,
       directoryId: directoryId,
       bookmarkData: bookmarkData,
+      durationMs: durationMs,
     );
   }
 }

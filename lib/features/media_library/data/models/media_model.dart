@@ -19,6 +19,7 @@ class MediaModel with _$MediaModel {
     @Default(<String>[]) List<String> tagIds,
     required String directoryId,
     String? bookmarkData,
+    int? durationMs,
   }) = _MediaModel;
 
   factory MediaModel.fromJson(Map<String, dynamic> json) =>

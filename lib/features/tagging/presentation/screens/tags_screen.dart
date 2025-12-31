@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
@@ -23,12 +24,16 @@ class TagsScreen extends ConsumerStatefulWidget {
 
 class _TagsScreenState extends ConsumerState<TagsScreen> {
   late final TextEditingController _searchController;
+  late final TextEditingController _minDurationController;
+  late final TextEditingController _maxDurationController;
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+    _minDurationController = TextEditingController();
+    _maxDurationController = TextEditingController();
     _searchController.addListener(_onSearchChanged);
     Future.microtask(() async {
       await ref.read(tagsViewModelProvider.notifier).loadTags();
@@ -40,6 +45,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _minDurationController.dispose();
+    _maxDurationController.dispose();
     super.dispose();
   }
 
@@ -80,11 +87,41 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     });
   }
 
+  void _syncDurationControllers(TagsLoaded state) {
+    final minText = _durationToMinutesText(state.minVideoDuration);
+    final maxText = _durationToMinutesText(state.maxVideoDuration);
+
+    if (_minDurationController.text != minText) {
+      _minDurationController.text = minText;
+    }
+    if (_maxDurationController.text != maxText) {
+      _maxDurationController.text = maxText;
+    }
+  }
+
+  String _durationToMinutesText(Duration? duration) {
+    if (duration == null) return '';
+    return duration.inMinutes.toString();
+  }
+
+  void _onDurationFieldChanged(
+    String value,
+    void Function(Duration?) onDurationChanged,
+  ) {
+    final minutes = int.tryParse(value);
+    if (minutes == null || minutes <= 0) {
+      onDurationChanged(null);
+      return;
+    }
+    onDurationChanged(Duration(minutes: minutes));
+  }
+
   Widget _buildContent(
     TagsLoaded state,
     TagsViewModel viewModel,
     int gridColumns,
   ) {
+    _syncDurationControllers(state);
     final sections = state.sections;
     final selectedSections = sections
         .where((section) => state.selectedTagIds.contains(section.id))
@@ -105,6 +142,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final filteredMedia = _filterMediaByType(
       aggregatedMedia,
       state.mediaTypeFilter,
+      state.minVideoDuration,
+      state.maxVideoDuration,
     );
     final sectionsForDirectories = _resolveFilterSections(
       sections,
@@ -130,6 +169,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ],
       const SizedBox(height: 12),
       _buildMediaTypeFilter(state, viewModel),
+      if (state.mediaTypeFilter != TagMediaTypeFilter.images) ...[
+        const SizedBox(height: 12),
+        _buildVideoDurationFilter(viewModel),
+      ],
       const SizedBox(height: 24),
     ];
 
@@ -450,16 +493,34 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   List<MediaEntity> _filterMediaByType(
     List<MediaEntity> media,
     TagMediaTypeFilter filter,
+    Duration? minVideoDuration,
+    Duration? maxVideoDuration,
   ) {
+    final minMs = minVideoDuration?.inMilliseconds;
+    final maxMs = maxVideoDuration?.inMilliseconds;
+
     return media.where((item) {
-      switch (filter) {
-        case TagMediaTypeFilter.images:
-          return item.type == MediaType.image;
-        case TagMediaTypeFilter.videos:
-          return item.type == MediaType.video;
-        case TagMediaTypeFilter.all:
-          return item.type == MediaType.image || item.type == MediaType.video;
+      final matchesType = switch (filter) {
+        TagMediaTypeFilter.images => item.type == MediaType.image,
+        TagMediaTypeFilter.videos => item.type == MediaType.video,
+        TagMediaTypeFilter.all =>
+            item.type == MediaType.image || item.type == MediaType.video,
+      };
+
+      if (!matchesType) return false;
+
+      if (item.type != MediaType.video) {
+        return true;
       }
+
+      final durationMs = item.durationMs;
+      if (minMs != null && durationMs != null && durationMs < minMs) {
+        return false;
+      }
+      if (maxMs != null && durationMs != null && durationMs > maxMs) {
+        return false;
+      }
+      return true;
     }).toList();
   }
 
@@ -737,6 +798,68 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                   onSelected: (_) => viewModel.setMediaTypeFilter(filter),
                 );
               }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoDurationFilter(
+    TagsViewModel viewModel,
+  ) {
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Video duration',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Set minimum or maximum lengths (in minutes) to hide clips outside your preferred range.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _minDurationController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'Min minutes',
+                      hintText: 'e.g. 1',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) =>
+                        _onDurationFieldChanged(value, viewModel.setMinVideoDuration),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _maxDurationController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'Max minutes',
+                      hintText: 'e.g. 10',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) =>
+                        _onDurationFieldChanged(value, viewModel.setMaxVideoDuration),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

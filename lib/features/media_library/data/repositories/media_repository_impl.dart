@@ -109,6 +109,7 @@ class MediaRepositoryImpl implements MediaRepository {
       lastModified: model.lastModified,
       tagIds: model.tagIds,
       directoryId: model.directoryId,
+      durationMs: model.durationMs,
     );
   }
 
