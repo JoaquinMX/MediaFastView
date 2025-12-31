@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../../core/services/logging_service.dart';
 import '../../../favorites/domain/repositories/favorites_repository.dart';
@@ -227,21 +228,15 @@ class TagsViewModel extends StateNotifier<TagsState> {
     try {
       final sections = <TagSection>[];
 
-      _libraryDirectories =
+      final allDirectories =
           await _filterByTagsUseCase.filterDirectories(const []);
+      _libraryDirectories = _extractTopLevelDirectories(allDirectories);
 
       final cachedMediaModels = await _mediaDataSource.getMedia();
       final cachedMediaEntities = cachedMediaModels
           .map(_toEntity)
           .toList(growable: false);
-      _directoryMediaCounts = <String, int>{};
-      for (final media in cachedMediaEntities) {
-        _directoryMediaCounts.update(
-          media.directoryId,
-          (value) => value + 1,
-          ifAbsent: () => 1,
-        );
-      }
+      _directoryMediaCounts = _countMediaByTopDirectory(cachedMediaEntities);
       final cachedMediaById = {
         for (final media in cachedMediaEntities) media.id: media,
       };
@@ -653,6 +648,71 @@ class TagsViewModel extends StateNotifier<TagsState> {
       media: uniqueStandalone.values.toList(),
       color: Color(tag.color),
     );
+  }
+
+  Map<String, int> _countMediaByTopDirectory(List<MediaEntity> media) {
+    if (media.isEmpty || _libraryDirectories.isEmpty) {
+      return const {};
+    }
+
+    final counts = <String, int>{};
+    for (final item in media) {
+      final directoryId = _findTopDirectoryIdForPath(item.path);
+      if (directoryId == null) {
+        continue;
+      }
+      counts.update(directoryId, (value) => value + 1, ifAbsent: () => 1);
+    }
+    return counts;
+  }
+
+  List<DirectoryEntity> _extractTopLevelDirectories(
+    List<DirectoryEntity> directories,
+  ) {
+    if (directories.isEmpty) {
+      return const [];
+    }
+
+    final normalized = directories
+        .map(
+          (directory) => directory.copyWith(path: p.normalize(directory.path)),
+        )
+        .toList()
+      ..sort((a, b) => a.path.length.compareTo(b.path.length));
+
+    final topDirectories = <DirectoryEntity>[];
+    for (final directory in normalized) {
+      final isNested = topDirectories.any(
+        (top) => _isPathWithin(top.path, directory.path),
+      );
+      if (!isNested) {
+        topDirectories.add(directory);
+      }
+    }
+
+    topDirectories.sort((a, b) => a.name.compareTo(b.name));
+    return topDirectories;
+  }
+
+  String? _findTopDirectoryIdForPath(String path) {
+    if (_libraryDirectories.isEmpty) {
+      return null;
+    }
+
+    final normalized = p.normalize(path);
+    for (final directory in _libraryDirectories) {
+      if (_isPathWithin(directory.path, normalized)) {
+        return directory.id;
+      }
+    }
+    return null;
+  }
+
+  bool _isPathWithin(String parentPath, String childPath) {
+    final normalizedParent = p.normalize(parentPath);
+    final normalizedChild = p.normalize(childPath);
+    return normalizedChild == normalizedParent ||
+        p.isWithin(normalizedParent, normalizedChild);
   }
 
   Future<List<MediaEntity>> _loadMediaByIds(
