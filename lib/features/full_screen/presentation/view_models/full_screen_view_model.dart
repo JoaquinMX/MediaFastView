@@ -15,6 +15,7 @@ import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../../../shared/utils/tag_cache_refresher.dart';
 import '../../../../shared/utils/tag_lookup.dart';
+import '../../../../shared/utils/tag_mutation_service.dart';
 import '../../../../shared/utils/tag_usage_ranker.dart';
 import '../../domain/use_cases/load_media_for_viewing_use_case.dart';
 import '../../domain/entities/viewer_state_entity.dart';
@@ -30,8 +31,15 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     this._tagLookup,
     this._tagCacheRefresher,
     VideoPlaybackSettings playbackSettings, {
+    TagMutationService? tagMutationService,
     TagUsageRanker? tagUsageRanker,
   })  : _playbackSettings = playbackSettings,
+        _tagMutationService = tagMutationService ??
+            TagMutationService(
+              assignTagUseCase: _assignTagUseCase,
+              tagLookup: _tagLookup,
+              tagCacheRefresher: _tagCacheRefresher,
+            ),
         _tagUsageRanker = tagUsageRanker ?? const TagUsageRanker(),
         super(const FullScreenInitial());
 
@@ -41,6 +49,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   final AssignTagUseCase _assignTagUseCase;
   final TagLookup _tagLookup;
   final TagCacheRefresher _tagCacheRefresher;
+  final TagMutationService _tagMutationService;
   final TagUsageRanker _tagUsageRanker;
 
   VideoPlaybackSettings _playbackSettings;
@@ -340,41 +349,30 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   Future<TagMutationResult> toggleTagOnCurrentMedia(TagEntity tag) async {
     final currentState = state;
     if (currentState is! FullScreenLoaded) {
-      return const TagMutationResult(TagMutationOutcome.unchanged);
+      return const TagMutationResult(outcome: TagMutationOutcome.unchanged);
     }
 
-    final media = currentState.currentMedia;
-    final hasTag = media.tagIds.contains(tag.id);
-
     try {
-      if (hasTag) {
-        await _assignTagUseCase.removeTagFromMedia(media.id, tag);
-      } else {
-        await _assignTagUseCase.assignTagToMedia(media.id, tag);
+      final result = await _tagMutationService.toggleTagForMedia(
+        currentState.currentMedia,
+        tag,
+      );
+
+      if (result.updatedMedia == null) {
+        return const TagMutationResult(outcome: TagMutationOutcome.unchanged);
       }
 
-      final updatedTagIds = hasTag
-          ? media.tagIds.where((id) => id != tag.id).toList(growable: false)
-          : [...media.tagIds, tag.id];
-
-      final updatedMedia = media.copyWith(tagIds: List<String>.unmodifiable(updatedTagIds));
       final updatedMediaList = [...currentState.mediaList];
-      updatedMediaList[currentState.currentIndex] = updatedMedia;
-
-      final resolvedTags = await _tagLookup.getTagsByIds(updatedTagIds);
+      updatedMediaList[currentState.currentIndex] = result.updatedMedia!;
       final shortcutTags = await _buildShortcutTags(updatedMediaList);
 
       state = currentState.copyWith(
         mediaList: updatedMediaList,
-        currentMediaTags: resolvedTags,
+        currentMediaTags: result.resolvedTags,
         shortcutTags: shortcutTags,
       );
 
-      await _refreshTagCaches();
-
-      return hasTag
-          ? const TagMutationResult(TagMutationOutcome.removed)
-          : const TagMutationResult(TagMutationOutcome.added);
+      return result;
     } catch (error, stackTrace) {
       LoggingService.instance.error('Failed to toggle tag on media: $error');
       LoggingService.instance.debug('Toggle tag stack trace: $stackTrace');
@@ -603,16 +601,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   }
 }
 
-/// Outcome of a tag toggle operation.
-enum TagMutationOutcome { added, removed, unchanged }
-
-/// Result describing the outcome of a single tag toggle.
-class TagMutationResult {
-  const TagMutationResult(this.outcome);
-
-  final TagMutationOutcome outcome;
-}
-
 /// Summary describing how many tags were added or removed by a batch update.
 class TagUpdateResult {
   const TagUpdateResult({required this.addedCount, required this.removedCount});
@@ -648,6 +636,7 @@ final fullScreenViewModelProvider =
       ref.watch(tagLookupProvider),
       ref.watch(tagCacheRefresherProvider),
       ref.read(videoPlaybackSettingsProvider),
+      tagMutationService: ref.watch(tagMutationServiceProvider),
     );
 
     ref.listen<VideoPlaybackSettings>(

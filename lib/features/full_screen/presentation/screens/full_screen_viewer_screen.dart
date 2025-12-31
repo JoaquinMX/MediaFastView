@@ -22,6 +22,7 @@ import '../../../../shared/widgets/favorite_toggle_button.dart';
 import '../../../../shared/providers/auto_navigate_sibling_directories_provider.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../../shared/widgets/tag_selection_dialog.dart';
+import '../../../../shared/utils/tag_mutation_service.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
 
 /// Full-screen media viewer screen
