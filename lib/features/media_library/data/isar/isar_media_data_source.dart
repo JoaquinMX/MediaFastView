@@ -239,6 +239,14 @@ class IsarMediaDataSource {
     }, 'Failed to migrate media directory references');
   }
 
+  /// Removes every persisted media entry.
+  Future<void> clearMedia() async {
+    await _executeSafely(
+      () async => _mediaStore.clear(),
+      'Failed to clear media cache',
+    );
+  }
+
   Future<void> _executeSafely(
     Future<void> Function() action,
     String errorMessage,

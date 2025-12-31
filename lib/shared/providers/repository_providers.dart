@@ -24,6 +24,7 @@ import '../../features/media_library/domain/use_cases/add_directory_use_case.dar
 import '../../features/media_library/domain/use_cases/clear_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/delete_directory_use_case.dart';
 import '../../features/media_library/domain/use_cases/delete_file_use_case.dart';
+import '../../features/media_library/domain/use_cases/clear_media_cache_use_case.dart';
 import '../../features/media_library/domain/use_cases/get_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/get_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/remove_directory_use_case.dart';
@@ -211,6 +212,10 @@ final updateDirectoryAccessUseCaseProvider =
 
 final clearDirectoriesUseCaseProvider = Provider<ClearDirectoriesUseCase>((ref) {
   return ClearDirectoriesUseCase(ref.watch(directoryRepositoryProvider));
+});
+
+final clearMediaCacheUseCaseProvider = Provider<ClearMediaCacheUseCase>((ref) {
+  return ClearMediaCacheUseCase(ref.watch(mediaRepositoryProvider));
 });
 
 final deleteFileUseCaseProvider = Provider<DeleteFileUseCase>((ref) {
