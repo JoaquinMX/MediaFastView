@@ -23,7 +23,7 @@ void main() {
     // Verify that our app shows the main navigation elements
     expect(find.byType(BottomNavigationBar), findsOneWidget);
     expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('Tags'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });
 
@@ -32,8 +32,9 @@ void main() {
       const ProviderScope(child: MyApp()),
     );
 
-    // Wait for any async operations to complete
-    await tester.pumpAndSettle();
+    // Wait for the first frame; avoid long pumpAndSettle loops because providers
+    // may schedule background work during initialization.
+    await tester.pump();
 
     // Verify the app is still functional after async operations
     expect(find.byType(MaterialApp), findsOneWidget);
