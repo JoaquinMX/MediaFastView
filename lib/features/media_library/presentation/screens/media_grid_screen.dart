@@ -472,13 +472,6 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final visibleMediaTypes = state is MediaLoaded
         ? state.visibleMediaTypes
         : viewModel.visibleMediaTypes;
-    final favoritesState = ref.watch(favoritesViewModelProvider);
-    final hasFavoriteMedia = switch (favoritesState) {
-      FavoritesLoaded(:final favorites) => favorites.isNotEmpty,
-      _ => false,
-    };
-    final shouldShowFavoritesChip = hasFavoriteMedia || showFavoritesOnly;
-
     return Container(
       padding: UiSpacing.tagFilterPadding,
       child: Column(
@@ -504,18 +497,12 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                     viewModel,
                   ),
                 ),
-              if (shouldShowFavoritesChip)
-                FilterChip(
-                  label: const Text('Favorites'),
-                  avatar: const Icon(Icons.star, color: Colors.amber),
-                  selected: showFavoritesOnly,
-                  onSelected: (value) {
-                    if (!hasFavoriteMedia && value) {
-                      return;
-                    }
-                    viewModel.setShowFavoritesOnly(value);
-                  },
-                ),
+              FilterChip(
+                label: const Text('Favorites'),
+                avatar: const Icon(Icons.star, color: Colors.amber),
+                selected: showFavoritesOnly,
+                onSelected: viewModel.setShowFavoritesOnly,
+              ),
               FilterChip(
                 label: const Text('Untagged'),
                 avatar: const Icon(Icons.label_off),
