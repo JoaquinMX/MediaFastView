@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/favorite_entity.dart';
@@ -271,7 +273,7 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       }
 
       if (additions.isNotEmpty || removals.isNotEmpty) {
-        await loadFavorites();
+        _refreshFavoritesInBackground();
       }
 
       return FavoritesBatchResult(
@@ -336,7 +338,7 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       }
 
       if (additions.isNotEmpty || removals.isNotEmpty) {
-        await loadFavorites();
+        _refreshFavoritesInBackground();
       }
 
       return FavoritesBatchResult(
@@ -349,6 +351,19 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       }
       return const FavoritesBatchResult.empty();
     }
+  }
+
+  void _refreshFavoritesInBackground() {
+    unawaited(() async {
+      try {
+        await loadFavorites();
+      } catch (e, stackTrace) {
+        LoggingService.instance.error(
+          'Failed to refresh favorites: $e',
+          stackTrace: stackTrace,
+        );
+      }
+    }());
   }
 
   /// Checks if a media item is favorited.
