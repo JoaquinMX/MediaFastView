@@ -9,6 +9,7 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
+import '../../../../shared/utils/tag_mutation_service.dart';
 import '../widgets/favorite_toggle_button.dart';
 import '../view_models/slideshow_view_model.dart';
 
@@ -49,7 +50,10 @@ class SlideshowOverlay extends ConsumerWidget {
           onClose: onClose,
         ),
         if (viewModel.currentMedia != null)
-          _TagSection(media: viewModel.currentMedia!),
+          _TagSection(
+            media: viewModel.currentMedia!,
+            viewModel: viewModel,
+          ),
       ],
       sectionSpacing: 12,
     );
@@ -196,9 +200,10 @@ class _HeaderSection extends StatelessWidget {
 }
 
 class _TagSection extends ConsumerWidget {
-  const _TagSection({required this.media});
+  const _TagSection({required this.media, required this.viewModel});
 
   final MediaEntity media;
+  final SlideshowViewModel viewModel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -207,10 +212,42 @@ class _TagSection extends ConsumerWidget {
       data: (tags) => TagOverlay(
         tags: tags,
         selectedTagIds: media.tagIds.toSet(),
-        onTagTapped: null,
+        onTagTapped: (tag) => _handleTagTap(context, tag),
       ),
       loading: () => const SizedBox.shrink(),
       error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Future<void> _handleTagTap(BuildContext context, TagEntity tag) async {
+    try {
+      final result = await viewModel.toggleTag(tag);
+      final message = switch (result.outcome) {
+        TagMutationOutcome.added => 'Added "${tag.name}"',
+        TagMutationOutcome.removed => 'Removed "${tag.name}"',
+        TagMutationOutcome.unchanged => 'No changes to "${tag.name}"',
+      };
+      _showFeedback(context, message, isError: false);
+    } catch (error) {
+      _showFeedback(
+        context,
+        'Failed to update "${tag.name}": $error',
+        isError: true,
+      );
+    }
+  }
+
+  void _showFeedback(BuildContext context, String message,
+      {required bool isError}) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final colorScheme = Theme.of(context).colorScheme;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? colorScheme.error : colorScheme.primary,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 }

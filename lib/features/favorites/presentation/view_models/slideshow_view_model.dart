@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../../shared/utils/tag_mutation_service.dart';
+import '../../../tagging/domain/entities/tag_entity.dart';
 
 /// Sealed class representing the state of slideshow.
 sealed class SlideshowState {
@@ -89,13 +91,18 @@ class SlideshowFinished extends SlideshowState {
 
 /// ViewModel for managing slideshow state and operations.
 class SlideshowViewModel extends StateNotifier<SlideshowState> {
-  SlideshowViewModel(this._mediaList) : super(const SlideshowIdle()) {
+  SlideshowViewModel(
+    this._mediaList, {
+    required TagMutationService tagMutationService,
+  })  : _tagMutationService = tagMutationService,
+        super(const SlideshowIdle()) {
     if (_mediaList.isNotEmpty) {
       _initializeSlideshow();
     }
   }
 
   final List<MediaEntity> _mediaList;
+  final TagMutationService _tagMutationService;
   Timer? _timer;
   final Random _random = Random();
   bool _isShuffleEnabled = false;
@@ -133,6 +140,26 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     return index;
   }
 
+  Future<TagMutationResult> toggleTag(TagEntity tag) async {
+    final media = currentMedia;
+    if (media == null) {
+      return const TagMutationResult(outcome: TagMutationOutcome.unchanged);
+    }
+
+    final result = await _tagMutationService.toggleTagForMedia(media, tag);
+    final mediaIndex =
+        _playOrder.isNotEmpty ? _playOrder[currentIndex] : currentIndex;
+
+    if (result.updatedMedia != null &&
+        mediaIndex >= 0 &&
+        mediaIndex < _mediaList.length) {
+      _mediaList[mediaIndex] = result.updatedMedia!;
+      _emitStateUpdate();
+    }
+
+    return result;
+  }
+
   bool get isPlaying =>
       state is SlideshowPlaying && (state as SlideshowPlaying).isPlaying;
   bool get isLooping => switch (state) {
@@ -167,6 +194,50 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
   }
 
   int get totalItems => _playOrder.isNotEmpty ? _playOrder.length : _mediaList.length;
+
+  void _emitStateUpdate() {
+    state = switch (state) {
+      SlideshowPlaying(
+        :final currentIndex,
+        :final isPlaying,
+        :final isLooping,
+        :final isVideoLooping,
+        :final isMuted,
+        :final progress,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
+      ) =>
+        SlideshowPlaying(
+          currentIndex: currentIndex,
+          isPlaying: isPlaying,
+          isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
+          isMuted: isMuted,
+          progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
+        ),
+      SlideshowPaused(
+        :final currentIndex,
+        :final isLooping,
+        :final isVideoLooping,
+        :final isMuted,
+        :final progress,
+        :final isShuffleEnabled,
+        :final imageDisplayDuration,
+      ) =>
+        SlideshowPaused(
+          currentIndex: currentIndex,
+          isLooping: isLooping,
+          isVideoLooping: isVideoLooping,
+          isMuted: isMuted,
+          progress: progress,
+          isShuffleEnabled: isShuffleEnabled,
+          imageDisplayDuration: imageDisplayDuration,
+        ),
+      _ => state,
+    };
+  }
 
   void _initializeSlideshow() {
     _rebuildPlayOrder();
@@ -651,5 +722,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
 /// Provider for SlideshowViewModel with auto-dispose.
 final slideshowViewModelProvider = StateNotifierProvider.autoDispose
     .family<SlideshowViewModel, SlideshowState, List<MediaEntity>>(
-      (ref, mediaList) => SlideshowViewModel(mediaList),
+      (ref, mediaList) => SlideshowViewModel(
+        mediaList,
+        tagMutationService: ref.watch(tagMutationServiceProvider),
+      ),
     );
