@@ -85,6 +85,8 @@ class TagsLoaded extends TagsState {
     required this.filterMode,
     required this.mediaTypeFilter,
     required this.selectionMode,
+    required this.minVideoDuration,
+    required this.maxVideoDuration,
   });
 
   final List<TagSection> sections;
@@ -94,6 +96,8 @@ class TagsLoaded extends TagsState {
   final TagFilterMode filterMode;
   final TagMediaTypeFilter mediaTypeFilter;
   final TagSelectionMode selectionMode;
+  final Duration? minVideoDuration;
+  final Duration? maxVideoDuration;
 
   TagsLoaded copyWith({
     List<TagSection>? sections,
@@ -103,6 +107,8 @@ class TagsLoaded extends TagsState {
     TagFilterMode? filterMode,
     TagMediaTypeFilter? mediaTypeFilter,
     TagSelectionMode? selectionMode,
+    Duration? minVideoDuration,
+    Duration? maxVideoDuration,
   }) {
     return TagsLoaded(
       sections: sections ?? this.sections,
@@ -112,6 +118,8 @@ class TagsLoaded extends TagsState {
       filterMode: filterMode ?? this.filterMode,
       mediaTypeFilter: mediaTypeFilter ?? this.mediaTypeFilter,
       selectionMode: selectionMode ?? this.selectionMode,
+      minVideoDuration: minVideoDuration ?? this.minVideoDuration,
+      maxVideoDuration: maxVideoDuration ?? this.maxVideoDuration,
     );
   }
 }
@@ -144,6 +152,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
   TagFilterMode _filterMode = TagFilterMode.any;
   TagMediaTypeFilter _mediaTypeFilter = TagMediaTypeFilter.all;
   TagSelectionMode _selectionMode = TagSelectionMode.required;
+  Duration? _minVideoDuration;
+  Duration? _maxVideoDuration;
 
   Future<void> loadTags() async {
     state = const TagsLoading();
@@ -177,6 +187,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
             filterMode: _filterMode,
             mediaTypeFilter: _mediaTypeFilter,
             selectionMode: _selectionMode,
+            minVideoDuration: _minVideoDuration,
+            maxVideoDuration: _maxVideoDuration,
           );
         } else if (otherSections.isEmpty) {
           _selectedTagIds = const [];
@@ -192,6 +204,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
             filterMode: _filterMode,
             mediaTypeFilter: _mediaTypeFilter,
             selectionMode: _selectionMode,
+            minVideoDuration: _minVideoDuration,
+            maxVideoDuration: _maxVideoDuration,
           );
         }
       } else {
@@ -251,6 +265,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
           filterMode: _filterMode,
           mediaTypeFilter: _mediaTypeFilter,
           selectionMode: _selectionMode,
+          minVideoDuration: _minVideoDuration,
+          maxVideoDuration: _maxVideoDuration,
         );
       }
     } catch (e) {
@@ -434,6 +450,28 @@ class TagsViewModel extends StateNotifier<TagsState> {
     }
   }
 
+  void setVideoDurationFilter({
+    Duration? minVideoDuration,
+    Duration? maxVideoDuration,
+  }) {
+    if (minVideoDuration != null &&
+        maxVideoDuration != null &&
+        maxVideoDuration < minVideoDuration) {
+      maxVideoDuration = minVideoDuration;
+    }
+
+    _minVideoDuration = minVideoDuration;
+    _maxVideoDuration = maxVideoDuration;
+
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(
+        minVideoDuration: _minVideoDuration,
+        maxVideoDuration: _maxVideoDuration,
+      );
+    }
+  }
+
   Future<TagSection?> _buildFavoritesSection({
     Map<String, MediaEntity>? cachedMediaById,
   }) async {
@@ -564,6 +602,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
       tagIds: model.tagIds,
       directoryId: model.directoryId,
       bookmarkData: model.bookmarkData,
+      duration: model.durationMs != null
+          ? Duration(milliseconds: model.durationMs!)
+          : null,
     );
   }
 }

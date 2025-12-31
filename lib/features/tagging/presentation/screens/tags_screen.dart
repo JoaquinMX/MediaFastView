@@ -23,13 +23,19 @@ class TagsScreen extends ConsumerStatefulWidget {
 
 class _TagsScreenState extends ConsumerState<TagsScreen> {
   late final TextEditingController _searchController;
+  late final TextEditingController _minDurationController;
+  late final TextEditingController _maxDurationController;
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+    _minDurationController = TextEditingController();
+    _maxDurationController = TextEditingController();
     _searchController.addListener(_onSearchChanged);
+    _minDurationController.addListener(_onDurationChanged);
+    _maxDurationController.addListener(_onDurationChanged);
     Future.microtask(() async {
       await ref.read(tagsViewModelProvider.notifier).loadTags();
       await ref.read(favoritesViewModelProvider.notifier).loadFavorites();
@@ -40,6 +46,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _minDurationController.removeListener(_onDurationChanged);
+    _maxDurationController.removeListener(_onDurationChanged);
+    _minDurationController.dispose();
+    _maxDurationController.dispose();
     super.dispose();
   }
 
@@ -48,6 +58,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final state = ref.watch(tagsViewModelProvider);
     final viewModel = ref.read(tagsViewModelProvider.notifier);
     final gridColumns = ref.watch(gridColumnsProvider);
+
+    if (state is TagsLoaded) {
+      _syncDurationControllers(state);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -80,6 +94,40 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     });
   }
 
+  void _onDurationChanged() {
+    final minDuration = _parseDurationFromController(_minDurationController);
+    final maxDuration = _parseDurationFromController(_maxDurationController);
+
+    if (minDuration != null && maxDuration != null && maxDuration < minDuration) {
+      _maxDurationController.text = minDuration.inSeconds.toString();
+    }
+
+    ref.read(tagsViewModelProvider.notifier).setVideoDurationFilter(
+          minVideoDuration: _parseDurationFromController(_minDurationController),
+          maxVideoDuration: _parseDurationFromController(_maxDurationController),
+        );
+  }
+
+  void _syncDurationControllers(TagsLoaded state) {
+    final minText = state.minVideoDuration?.inSeconds.toString() ?? '';
+    final maxText = state.maxVideoDuration?.inSeconds.toString() ?? '';
+
+    if (_minDurationController.text != minText) {
+      _minDurationController.text = minText;
+    }
+    if (_maxDurationController.text != maxText) {
+      _maxDurationController.text = maxText;
+    }
+  }
+
+  Duration? _parseDurationFromController(TextEditingController controller) {
+    final value = int.tryParse(controller.text.trim());
+    if (value == null || value <= 0) {
+      return null;
+    }
+    return Duration(seconds: value);
+  }
+
   Widget _buildContent(
     TagsLoaded state,
     TagsViewModel viewModel,
@@ -105,6 +153,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final filteredMedia = _filterMediaByType(
       aggregatedMedia,
       state.mediaTypeFilter,
+      state.minVideoDuration,
+      state.maxVideoDuration,
     );
     final sectionsForDirectories = _resolveFilterSections(
       sections,
@@ -130,6 +180,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ],
       const SizedBox(height: 12),
       _buildMediaTypeFilter(state, viewModel),
+      if (state.mediaTypeFilter != TagMediaTypeFilter.images) ...[
+        const SizedBox(height: 12),
+        _buildVideoDurationFilter(state, viewModel),
+      ],
       const SizedBox(height: 24),
     ];
 
@@ -450,8 +504,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   List<MediaEntity> _filterMediaByType(
     List<MediaEntity> media,
     TagMediaTypeFilter filter,
+    Duration? minVideoDuration,
+    Duration? maxVideoDuration,
   ) {
-    return media.where((item) {
+    bool matchesType(MediaEntity item) {
       switch (filter) {
         case TagMediaTypeFilter.images:
           return item.type == MediaType.image;
@@ -460,7 +516,28 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         case TagMediaTypeFilter.all:
           return item.type == MediaType.image || item.type == MediaType.video;
       }
-    }).toList();
+    }
+
+    bool matchesDuration(MediaEntity item) {
+      if (item.type != MediaType.video) {
+        return true;
+      }
+      final duration = item.duration;
+      if (duration == null) {
+        return true;
+      }
+      if (minVideoDuration != null && duration < minVideoDuration) {
+        return false;
+      }
+      if (maxVideoDuration != null && duration > maxVideoDuration) {
+        return false;
+      }
+      return true;
+    }
+
+    return media
+        .where((item) => matchesType(item) && matchesDuration(item))
+        .toList();
   }
 
   List<TagSection> _resolveFilterSections(
@@ -738,6 +815,76 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                 );
               }).toList(),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoDurationFilter(
+    TagsLoaded state,
+    TagsViewModel viewModel,
+  ) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Video duration',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Hide videos shorter or longer than the selected duration (in seconds).',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _minDurationController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Min seconds',
+                      prefixIcon: Icon(Icons.timer_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _maxDurationController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Max seconds',
+                      prefixIcon: Icon(Icons.timer),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (state.minVideoDuration != null || state.maxVideoDuration != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  [
+                    if (state.minVideoDuration != null)
+                      'Min: ${state.minVideoDuration!.inSeconds}s',
+                    if (state.maxVideoDuration != null)
+                      'Max: ${state.maxVideoDuration!.inSeconds}s',
+                  ].join(' • '),
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
           ],
         ),
       ),
