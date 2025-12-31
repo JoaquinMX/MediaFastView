@@ -365,7 +365,7 @@ class IsarMediaCollectionStore implements MediaCollectionStore {
 
   @override
   Future<void> clear() async {
-    await _collection.clear();
+    await _isar.writeTxn(() async => _collection.clear());
   }
 
   @override

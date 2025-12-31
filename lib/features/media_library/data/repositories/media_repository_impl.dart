@@ -116,5 +116,10 @@ class MediaRepositoryImpl implements MediaRepository {
       directoryId: model.directoryId,
     );
   }
+  
+  @override
+  Future<void> clearAllMedia() {
+    return _mediaDataSource.clearMedia();
+  }
 
 }

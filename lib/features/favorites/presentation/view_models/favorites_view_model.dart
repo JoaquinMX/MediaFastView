@@ -359,8 +359,8 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
         await loadFavorites();
       } catch (e, stackTrace) {
         LoggingService.instance.error(
-          'Failed to refresh favorites: $e',
-          stackTrace: stackTrace,
+          'Failed to refresh favorites: $e', 
+
         );
       }
     }());
