@@ -16,6 +16,7 @@ class TagOverlay extends StatelessWidget {
     this.onTagTapped,
     this.emptyLabel = 'No tags available',
     this.compact = true,
+    this.trailing,
   });
 
   final List<TagEntity> tags;
@@ -23,6 +24,7 @@ class TagOverlay extends StatelessWidget {
   final ValueChanged<TagEntity>? onTagTapped;
   final String emptyLabel;
   final bool compact;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +48,10 @@ class TagOverlay extends StatelessWidget {
                 child: Row(children: _buildChips(theme, colorScheme)),
               ),
             ),
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              trailing!,
+            ],
           ],
         ),
       ),
