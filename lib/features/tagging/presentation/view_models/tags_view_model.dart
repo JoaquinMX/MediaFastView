@@ -85,6 +85,9 @@ class TagsLoaded extends TagsState {
     required this.filterMode,
     required this.mediaTypeFilter,
     required this.selectionMode,
+    required this.libraryDirectories,
+    required this.selectedDirectoryIds,
+    required this.directoryMediaCounts,
   });
 
   final List<TagSection> sections;
@@ -94,6 +97,9 @@ class TagsLoaded extends TagsState {
   final TagFilterMode filterMode;
   final TagMediaTypeFilter mediaTypeFilter;
   final TagSelectionMode selectionMode;
+  final List<DirectoryEntity> libraryDirectories;
+  final List<String> selectedDirectoryIds;
+  final Map<String, int> directoryMediaCounts;
 
   TagsLoaded copyWith({
     List<TagSection>? sections,
@@ -103,6 +109,9 @@ class TagsLoaded extends TagsState {
     TagFilterMode? filterMode,
     TagMediaTypeFilter? mediaTypeFilter,
     TagSelectionMode? selectionMode,
+    List<DirectoryEntity>? libraryDirectories,
+    List<String>? selectedDirectoryIds,
+    Map<String, int>? directoryMediaCounts,
   }) {
     return TagsLoaded(
       sections: sections ?? this.sections,
@@ -112,6 +121,9 @@ class TagsLoaded extends TagsState {
       filterMode: filterMode ?? this.filterMode,
       mediaTypeFilter: mediaTypeFilter ?? this.mediaTypeFilter,
       selectionMode: selectionMode ?? this.selectionMode,
+      libraryDirectories: libraryDirectories ?? this.libraryDirectories,
+      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
+      directoryMediaCounts: directoryMediaCounts ?? this.directoryMediaCounts,
     );
   }
 }
@@ -141,9 +153,12 @@ class TagsViewModel extends StateNotifier<TagsState> {
   List<String> _selectedTagIds = const [];
   List<String> _optionalTagIds = const [];
   List<String> _excludedTagIds = const [];
+  List<String> _selectedDirectoryIds = const [];
   TagFilterMode _filterMode = TagFilterMode.any;
   TagMediaTypeFilter _mediaTypeFilter = TagMediaTypeFilter.all;
   TagSelectionMode _selectionMode = TagSelectionMode.required;
+  List<DirectoryEntity> _libraryDirectories = const [];
+  Map<String, int> _directoryMediaCounts = const {};
 
   Future<void> loadTags() async {
     state = const TagsLoading();
@@ -177,6 +192,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
             filterMode: _filterMode,
             mediaTypeFilter: _mediaTypeFilter,
             selectionMode: _selectionMode,
+            libraryDirectories: _libraryDirectories,
+            selectedDirectoryIds: List<String>.from(_selectedDirectoryIds),
+            directoryMediaCounts: _directoryMediaCounts,
           );
         } else if (otherSections.isEmpty) {
           _selectedTagIds = const [];
@@ -192,6 +210,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
             filterMode: _filterMode,
             mediaTypeFilter: _mediaTypeFilter,
             selectionMode: _selectionMode,
+            libraryDirectories: _libraryDirectories,
+            selectedDirectoryIds: List<String>.from(_selectedDirectoryIds),
+            directoryMediaCounts: _directoryMediaCounts,
           );
         }
       } else {
@@ -206,10 +227,21 @@ class TagsViewModel extends StateNotifier<TagsState> {
     try {
       final sections = <TagSection>[];
 
+      _libraryDirectories =
+          await _filterByTagsUseCase.filterDirectories(const []);
+
       final cachedMediaModels = await _mediaDataSource.getMedia();
       final cachedMediaEntities = cachedMediaModels
           .map(_toEntity)
           .toList(growable: false);
+      _directoryMediaCounts = <String, int>{};
+      for (final media in cachedMediaEntities) {
+        _directoryMediaCounts.update(
+          media.directoryId,
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+      }
       final cachedMediaById = {
         for (final media in cachedMediaEntities) media.id: media,
       };
@@ -244,6 +276,10 @@ class TagsViewModel extends StateNotifier<TagsState> {
         return;
       }
 
+      _selectedDirectoryIds = _selectedDirectoryIds
+          .where((id) => _libraryDirectories.any((dir) => dir.id == id))
+          .toList();
+
       if (sections.isEmpty) {
         _selectedTagIds = const [];
         _optionalTagIds = const [];
@@ -258,6 +294,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
           filterMode: _filterMode,
           mediaTypeFilter: _mediaTypeFilter,
           selectionMode: _selectionMode,
+          libraryDirectories: _libraryDirectories,
+          selectedDirectoryIds: List<String>.from(_selectedDirectoryIds),
+          directoryMediaCounts: _directoryMediaCounts,
         );
       }
     } catch (e) {
@@ -438,6 +477,35 @@ class TagsViewModel extends StateNotifier<TagsState> {
     final currentState = state;
     if (currentState is TagsLoaded && mounted) {
       state = currentState.copyWith(mediaTypeFilter: _mediaTypeFilter);
+    }
+  }
+
+  void toggleDirectorySelection(String directoryId) {
+    final updatedSelection = List<String>.from(_selectedDirectoryIds);
+    if (updatedSelection.contains(directoryId)) {
+      updatedSelection.remove(directoryId);
+    } else {
+      updatedSelection.add(directoryId);
+    }
+
+    _selectedDirectoryIds = updatedSelection;
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(
+        selectedDirectoryIds: List<String>.from(_selectedDirectoryIds),
+      );
+    }
+  }
+
+  void clearDirectorySelection() {
+    if (_selectedDirectoryIds.isEmpty) {
+      return;
+    }
+
+    _selectedDirectoryIds = const [];
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(selectedDirectoryIds: const []);
     }
   }
 

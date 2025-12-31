@@ -12,11 +12,13 @@ class TagDirectoryChip extends ConsumerStatefulWidget {
     required this.directory,
     required this.mediaCount,
     required this.onTap,
+    this.isSelected = false,
   });
 
   final DirectoryEntity directory;
   final int mediaCount;
   final VoidCallback onTap;
+  final bool isSelected;
 
   @override
   ConsumerState<TagDirectoryChip> createState() => _TagDirectoryChipState();
@@ -93,8 +95,10 @@ class _TagDirectoryChipState extends ConsumerState<TagDirectoryChip> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final chip = ActionChip(
-      onPressed: () {
+    final chip = FilterChip(
+      selected: widget.isSelected,
+      showCheckmark: false,
+      onSelected: (_) {
         _removeOverlay();
         widget.onTap();
       },
