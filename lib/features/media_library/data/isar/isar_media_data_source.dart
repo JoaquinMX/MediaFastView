@@ -247,6 +247,27 @@ class IsarMediaDataSource {
     );
   }
 
+  /// Removes media whose [directoryId] values are absent from [directoryIds],
+  /// leaving entries (and their tag assignments) for known directories intact.
+  Future<void> removeMediaNotInDirectories(List<String> directoryIds) async {
+    if (directoryIds.isEmpty) {
+      return;
+    }
+
+    await _executeSafely(() async {
+      final allowedIds = directoryIds.toSet();
+      final allMedia = await _mediaStore.getAll();
+      final orphanedIds = allMedia
+          .where((media) => !allowedIds.contains(media.directoryId))
+          .map((media) => media.id)
+          .toList(growable: false);
+
+      await _mediaStore.writeTxn(() async {
+        await _mediaStore.deleteByIds(orphanedIds);
+      });
+    }, 'Failed to prune orphaned media cache');
+  }
+
   Future<void> _executeSafely(
     Future<void> Function() action,
     String errorMessage,

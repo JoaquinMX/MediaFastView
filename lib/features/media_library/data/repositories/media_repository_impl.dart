@@ -98,6 +98,11 @@ class MediaRepositoryImpl implements MediaRepository {
     await _mediaDataSource.removeMediaForDirectory(directoryId);
   }
 
+  @override
+  Future<void> removeMediaNotInDirectories(List<String> directoryIds) {
+    return _mediaDataSource.removeMediaNotInDirectories(directoryIds);
+  }
+
   /// Converts MediaModel to MediaEntity.
   MediaEntity _modelToEntity(MediaModel model) {
     return MediaEntity(
