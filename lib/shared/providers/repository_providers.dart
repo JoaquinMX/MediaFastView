@@ -215,7 +215,10 @@ final clearDirectoriesUseCaseProvider = Provider<ClearDirectoriesUseCase>((ref) 
 });
 
 final clearMediaCacheUseCaseProvider = Provider<ClearMediaCacheUseCase>((ref) {
-  return ClearMediaCacheUseCase(ref.watch(mediaRepositoryProvider));
+  return ClearMediaCacheUseCase(
+    ref.watch(mediaRepositoryProvider),
+    ref.watch(directoryRepositoryProvider),
+  );
 });
 
 final deleteFileUseCaseProvider = Provider<DeleteFileUseCase>((ref) {

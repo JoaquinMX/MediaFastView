@@ -344,6 +344,11 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   }
 
   @override
+  Future<void> removeMediaNotInDirectories(List<String> directoryIds) {
+    return _mediaDataSource.removeMediaNotInDirectories(directoryIds);
+  }
+
+  @override
   Future<void> clearAllMedia() {
     return _mediaDataSource.clearMedia();
   }
