@@ -343,6 +343,11 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     await _mediaDataSource.removeMediaForDirectory(directoryId);
   }
 
+  @override
+  Future<void> clearAllMedia() {
+    return _mediaDataSource.clearMedia();
+  }
+
   Future<MediaEntity?> _scanDirectoriesForMedia(String id) async {
     final directories = await _directoryRepository.getDirectories();
     for (final directory in directories) {

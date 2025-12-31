@@ -11,6 +11,7 @@ import '../../../../shared/providers/auto_navigate_sibling_directories_provider.
 import '../../../../shared/providers/slideshow_controls_hide_delay_provider.dart';
 import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/widgets/app_bar.dart';
+import '../../../../shared/utils/tag_cache_refresher.dart';
 
 /// Screen for displaying application settings.
 class SettingsScreen extends ConsumerWidget {
@@ -76,6 +77,7 @@ class SettingsScreen extends ConsumerWidget {
             deleteFromSourceEnabled,
             deleteFromSourceNotifier,
           ),
+          _buildClearMediaCacheTile(context, ref),
           _buildClearCacheTile(context, ref),
           _buildClearFavoritesTile(context, ref),
           _buildClearTagAssignmentsTile(context, ref),
@@ -244,6 +246,18 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildClearMediaCacheTile(BuildContext context, WidgetRef ref) {
+    return ListTile(
+      title: const Text('Clean Cached Media'),
+      subtitle: const Text(
+        'Remove stored media entries so deleted files or directories stop '
+        'appearing in tag filters.',
+      ),
+      trailing: const Icon(Icons.cleaning_services, color: Colors.red),
+      onTap: () => _showClearMediaCacheDialog(context, ref),
+    );
+  }
+
   Widget _buildClearCacheTile(BuildContext context, WidgetRef ref) {
     return ListTile(
       title: const Text('Clear Directory Cache'),
@@ -287,6 +301,52 @@ class SettingsScreen extends ConsumerWidget {
       title: const Text('About Media Fast View'),
       subtitle: const Text('Version 1.0.0'),
       onTap: () => _showAboutDialog(context),
+    );
+  }
+
+  void _showClearMediaCacheDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clean Cached Media'),
+        content: const Text(
+          'This will remove all cached media entries, including those from deleted '
+          'directories. Media will be rebuilt from disk on the next scan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              try {
+                await ref.read(clearMediaCacheUseCaseProvider)();
+                await ref.read(tagCacheRefresherProvider).refresh();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Cached media cleaned successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to clean media cache: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Clean', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
     );
   }
 

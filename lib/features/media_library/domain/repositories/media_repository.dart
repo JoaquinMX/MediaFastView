@@ -43,4 +43,8 @@ abstract class MediaRepository {
 
   /// Removes all cached media entries for a directory.
   Future<void> removeMediaForDirectory(String directoryId);
+
+  /// Removes every persisted media entry, clearing cached results across
+  /// directories.
+  Future<void> clearAllMedia();
 }
