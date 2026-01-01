@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/widgets/hover_scroll_view.dart';
 import '../../domain/entities/tag_entity.dart';
 import 'tag_chip.dart';
 
@@ -60,8 +61,9 @@ class SelectableTagChipStrip extends StatelessWidget {
     final remainingCount =
         showOverflowChip ? tags.length - maxChipsToShow! : 0;
 
-    return SingleChildScrollView(
+    return HoverScrollView(
       scrollDirection: Axis.horizontal,
+      physics: const ClampingScrollPhysics(),
       child: Row(
         children: [
           if (showAllChip) ...[
