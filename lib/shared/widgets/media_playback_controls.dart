@@ -46,6 +46,7 @@ class MediaPlaybackControlVisibility {
     this.showDurationSlider = true,
     this.showProgressBar = true,
     this.showVideoLoop = false,
+    this.showPlaybackSpeed = false,
   });
 
   final bool showPrevious;
@@ -57,6 +58,7 @@ class MediaPlaybackControlVisibility {
   final bool showDurationSlider;
   final bool showProgressBar;
   final bool showVideoLoop;
+  final bool showPlaybackSpeed;
 
   MediaPlaybackControlVisibility copyWith({
     bool? showPrevious,
@@ -68,6 +70,7 @@ class MediaPlaybackControlVisibility {
     bool? showDurationSlider,
     bool? showProgressBar,
     bool? showVideoLoop,
+    bool? showPlaybackSpeed,
   }) {
     return MediaPlaybackControlVisibility(
       showPrevious: showPrevious ?? this.showPrevious,
@@ -79,6 +82,7 @@ class MediaPlaybackControlVisibility {
       showDurationSlider: showDurationSlider ?? this.showDurationSlider,
       showProgressBar: showProgressBar ?? this.showProgressBar,
       showVideoLoop: showVideoLoop ?? this.showVideoLoop,
+      showPlaybackSpeed: showPlaybackSpeed ?? this.showPlaybackSpeed,
     );
   }
 }
@@ -94,6 +98,7 @@ class MediaPlaybackControlAvailability {
     this.enableMute = true,
     this.enableDurationSlider = true,
     this.enableVideoLoop = true,
+    this.enablePlaybackSpeed = true,
   });
 
   final bool enablePrevious;
@@ -104,6 +109,7 @@ class MediaPlaybackControlAvailability {
   final bool enableMute;
   final bool enableDurationSlider;
   final bool enableVideoLoop;
+  final bool enablePlaybackSpeed;
 
   MediaPlaybackControlAvailability copyWith({
     bool? enablePrevious,
@@ -114,6 +120,7 @@ class MediaPlaybackControlAvailability {
     bool? enableMute,
     bool? enableDurationSlider,
     bool? enableVideoLoop,
+    bool? enablePlaybackSpeed,
   }) {
     return MediaPlaybackControlAvailability(
       enablePrevious: enablePrevious ?? this.enablePrevious,
@@ -124,6 +131,7 @@ class MediaPlaybackControlAvailability {
       enableMute: enableMute ?? this.enableMute,
       enableDurationSlider: enableDurationSlider ?? this.enableDurationSlider,
       enableVideoLoop: enableVideoLoop ?? this.enableVideoLoop,
+      enablePlaybackSpeed: enablePlaybackSpeed ?? this.enablePlaybackSpeed,
     );
   }
 }
@@ -176,6 +184,8 @@ class MediaPlaybackControls extends StatelessWidget {
     this.isShuffleEnabled = false,
     this.isMuted = false,
     this.isVideoLooping = false,
+    this.playbackSpeed,
+    this.playbackSpeedOptions = const [1.0],
     this.progress,
     this.minDuration = const Duration(seconds: 1),
     this.maxDuration = const Duration(seconds: 10),
@@ -188,6 +198,7 @@ class MediaPlaybackControls extends StatelessWidget {
     this.onToggleMute,
     this.onToggleVideoLoop,
     this.onDurationSelected,
+    this.onPlaybackSpeedSelected,
     this.visibility = const MediaPlaybackControlVisibility(),
     this.availability = const MediaPlaybackControlAvailability(),
     this.icons = const MediaPlaybackControlIcons(),
@@ -200,6 +211,8 @@ class MediaPlaybackControls extends StatelessWidget {
   final bool isShuffleEnabled;
   final bool isMuted;
   final bool isVideoLooping;
+  final double? playbackSpeed;
+  final List<double> playbackSpeedOptions;
   final double? progress;
   final Duration minDuration;
   final Duration maxDuration;
@@ -212,6 +225,7 @@ class MediaPlaybackControls extends StatelessWidget {
   final VoidCallback? onToggleMute;
   final VoidCallback? onToggleVideoLoop;
   final ValueChanged<Duration>? onDurationSelected;
+  final ValueChanged<double>? onPlaybackSpeedSelected;
   final MediaPlaybackControlVisibility visibility;
   final MediaPlaybackControlAvailability availability;
   final MediaPlaybackControlIcons icons;
@@ -289,6 +303,11 @@ class MediaPlaybackControls extends StatelessWidget {
       ));
     }
 
+    if (visibility.showPlaybackSpeed) {
+      addControlSpacing();
+      children.add(_buildPlaybackSpeedButton());
+    }
+
     if (visibility.showDurationSlider) {
       addSectionSpacing();
       children.add(_buildDurationSlider(context));
@@ -359,6 +378,72 @@ class MediaPlaybackControls extends StatelessWidget {
       onPressed: onPressed,
       tooltip: tooltip,
     );
+  }
+
+  Widget _buildPlaybackSpeedButton() {
+    final speeds = (playbackSpeedOptions.isEmpty
+            ? const [1.0]
+            : playbackSpeedOptions)
+        .toSet()
+        .toList()
+      ..sort();
+    final currentSpeed = playbackSpeed ?? speeds.first;
+    final enabled =
+        availability.enablePlaybackSpeed && onPlaybackSpeedSelected != null;
+
+    return PopupMenuButton<double>(
+      tooltip: 'Playback speed',
+      enabled: enabled,
+      initialValue: currentSpeed,
+      onSelected: enabled ? onPlaybackSpeedSelected : null,
+      itemBuilder: (context) {
+        return speeds
+            .map(
+              (speed) => PopupMenuItem<double>(
+                value: speed,
+                child: Row(
+                  children: [
+                    if (speed == currentSpeed)
+                      Icon(Icons.check, color: style.activeColor, size: 18)
+                    else
+                      const SizedBox(width: 18),
+                    const SizedBox(width: 8),
+                    Text(_formatPlaybackSpeed(speed)),
+                  ],
+                ),
+              ),
+            )
+            .toList();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: style.inactiveColor.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.speed),
+            const SizedBox(width: 6),
+            Text(
+              '${_formatPlaybackSpeed(currentSpeed)}x',
+              style: TextStyle(
+                color: enabled ? style.inactiveColor : style.inactiveColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatPlaybackSpeed(double speed) {
+    return speed == speed.roundToDouble()
+        ? speed.toStringAsFixed(0)
+        : speed.toStringAsFixed(1);
   }
 
   Widget _buildDurationSlider(BuildContext context) {

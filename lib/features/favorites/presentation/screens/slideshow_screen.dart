@@ -123,6 +123,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
         isPlaying: viewModel.isPlaying,
         isMuted: viewModel.isMuted,
         isVideoLooping: viewModel.isVideoLooping,
+        playbackSpeed: viewModel.playbackSpeed,
         onProgress: viewModel.updateProgress,
         onCompleted: viewModel.nextItem,
       );
