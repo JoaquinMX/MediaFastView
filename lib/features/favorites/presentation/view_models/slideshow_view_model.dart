@@ -310,7 +310,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isMuted: isMuted,
           progress: progress,
           isShuffleEnabled: _isShuffleEnabled,
-          imageDisplayDuration: _imageDisplayDuration,
+          imageDisplayDuration: _imageDisplayDuration, 
+          playbackSpeed: _playbackSpeed,
         ),
       _ => state,
     };
@@ -336,7 +337,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isMuted: isMuted,
           progress: progress,
           isShuffleEnabled: _isShuffleEnabled,
-          imageDisplayDuration: _imageDisplayDuration,
+          imageDisplayDuration: _imageDisplayDuration, 
+          playbackSpeed: _playbackSpeed,
         ),
       _ => state,
     };
