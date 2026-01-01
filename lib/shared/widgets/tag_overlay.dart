@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/tagging/domain/entities/tag_entity.dart';
 import '../../features/tagging/presentation/widgets/tag_chip.dart';
+import 'hover_scroll_view.dart';
 
 /// Overlay widget that renders tag chips with a semi-transparent backdrop.
 ///
@@ -43,8 +44,9 @@ class TagOverlay extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: SingleChildScrollView(
+              child: HoverScrollView(
                 scrollDirection: Axis.horizontal,
+                physics: const ClampingScrollPhysics(),
                 child: Row(children: _buildChips(theme, colorScheme)),
               ),
             ),
