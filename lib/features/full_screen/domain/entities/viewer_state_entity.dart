@@ -24,6 +24,7 @@ class FullScreenLoaded extends FullScreenState {
     required this.isPlaying,
     required this.isMuted,
     required this.isLooping,
+    required this.playbackSpeed,
     required this.currentPosition,
     required this.totalDuration,
     required this.isFavorite,
@@ -37,6 +38,7 @@ class FullScreenLoaded extends FullScreenState {
   final bool isPlaying;
   final bool isMuted;
   final bool isLooping;
+  final double playbackSpeed;
   final Duration currentPosition;
   final Duration totalDuration;
   final bool isFavorite;
@@ -52,6 +54,7 @@ class FullScreenLoaded extends FullScreenState {
     bool? isPlaying,
     bool? isMuted,
     bool? isLooping,
+    double? playbackSpeed,
     Duration? currentPosition,
     Duration? totalDuration,
     bool? isFavorite,
@@ -65,6 +68,7 @@ class FullScreenLoaded extends FullScreenState {
       isPlaying: isPlaying ?? this.isPlaying,
       isMuted: isMuted ?? this.isMuted,
       isLooping: isLooping ?? this.isLooping,
+      playbackSpeed: playbackSpeed ?? this.playbackSpeed,
       currentPosition: currentPosition ?? this.currentPosition,
       totalDuration: totalDuration ?? this.totalDuration,
       isFavorite: isFavorite ?? this.isFavorite,

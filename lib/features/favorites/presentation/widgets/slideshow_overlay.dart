@@ -275,6 +275,9 @@ class _PlaybackSection extends StatelessWidget {
       },
       isMuted: viewModel.isMuted,
       isVideoLooping: viewModel.isVideoLooping,
+      playbackSpeed: viewModel.playbackSpeed,
+      playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+      onPlaybackSpeedSelected: viewModel.setPlaybackSpeed,
       progress: switch (state) {
         SlideshowPlaying(:final progress) => progress,
         SlideshowPaused(:final progress) => progress,
@@ -298,6 +301,7 @@ class _PlaybackSection extends StatelessWidget {
       visibility: MediaPlaybackControlVisibility(
         showProgressBar: viewModel.currentMedia?.type == MediaType.video,
         showVideoLoop: viewModel.currentMedia?.type == MediaType.video,
+        showPlaybackSpeed: viewModel.currentMedia?.type == MediaType.video,
       ),
       style: MediaPlaybackControlStyle(
         progressBackgroundColor: Colors.white.withValues(alpha: 0.3),

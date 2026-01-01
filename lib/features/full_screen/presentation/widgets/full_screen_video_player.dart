@@ -15,6 +15,7 @@ class FullScreenVideoPlayer extends StatefulWidget {
     required this.isPlaying,
     required this.isMuted,
     required this.isLooping,
+    required this.playbackSpeed,
     required this.onPositionUpdate,
     required this.onDurationUpdate,
     required this.onPlayingStateUpdate,
@@ -24,6 +25,7 @@ class FullScreenVideoPlayer extends StatefulWidget {
   final bool isPlaying;
   final bool isMuted;
   final bool isLooping;
+  final double playbackSpeed;
   final ValueChanged<Duration> onPositionUpdate;
   final ValueChanged<Duration> onDurationUpdate;
   final ValueChanged<bool> onPlayingStateUpdate;
@@ -61,6 +63,9 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       }
       if (widget.isLooping != oldWidget.isLooping) {
         _controller!.setLooping(widget.isLooping);
+      }
+      if (widget.playbackSpeed != oldWidget.playbackSpeed) {
+        _controller!.setPlaybackSpeed(widget.playbackSpeed);
       }
       if (widget.isPlaying != oldWidget.isPlaying) {
         if (widget.isPlaying) {
@@ -101,6 +106,7 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
         await controller.initialize();
         controller.setVolume(widget.isMuted ? 0.0 : 1.0);
         controller.setLooping(widget.isLooping);
+        await controller.setPlaybackSpeed(widget.playbackSpeed);
         controller.addListener(_onVideoUpdate);
 
         if (widget.isPlaying) {
@@ -138,6 +144,7 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       _controller!.setVolume(1.0);
     }
     _controller!.setLooping(widget.isLooping);
+    unawaited(_controller!.setPlaybackSpeed(widget.playbackSpeed));
     if (widget.isPlaying) {
       _controller!.play();
     } else {

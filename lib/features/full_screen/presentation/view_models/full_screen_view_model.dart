@@ -218,6 +218,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
           isPlaying: isVideo && _playbackSettings.autoplayVideos,
           isMuted: false,
           isLooping: isVideo && _playbackSettings.loopVideos,
+          playbackSpeed: 1.0,
           currentPosition: Duration.zero,
           totalDuration: Duration.zero,
           isFavorite: isFavorite,
@@ -457,6 +458,16 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       final newLooping = !currentState.isLooping;
       state = currentState.copyWith(isLooping: newLooping);
       _loopOverridden = true;
+    }
+  }
+
+  /// Update playback speed for the current video.
+  void setPlaybackSpeed(double speed) {
+    final currentState = state;
+    if (currentState is! FullScreenLoaded) return;
+
+    if (currentState.currentMedia.type == MediaType.video && speed > 0) {
+      state = currentState.copyWith(playbackSpeed: speed);
     }
   }
 

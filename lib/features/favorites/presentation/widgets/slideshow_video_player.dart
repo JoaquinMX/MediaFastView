@@ -17,6 +17,7 @@ class SlideshowVideoPlayer extends StatefulWidget {
     required this.isPlaying,
     required this.isMuted,
     required this.isVideoLooping,
+    required this.playbackSpeed,
     required this.onProgress,
     required this.onCompleted,
   });
@@ -25,6 +26,7 @@ class SlideshowVideoPlayer extends StatefulWidget {
   final bool isPlaying;
   final bool isMuted;
   final bool isVideoLooping;
+  final double playbackSpeed;
   final ValueChanged<double> onProgress;
   final VoidCallback onCompleted;
 
@@ -65,6 +67,9 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
       _hasCompleted = false;
       controller.setLooping(widget.isVideoLooping);
     }
+    if (widget.playbackSpeed != oldWidget.playbackSpeed) {
+      controller.setPlaybackSpeed(widget.playbackSpeed);
+    }
     if (widget.isPlaying != oldWidget.isPlaying) {
       _hasCompleted = false;
       if (widget.isPlaying) {
@@ -88,6 +93,7 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
       await controller.initialize();
       await controller.setVolume(widget.isMuted ? 0.0 : 1.0);
       await controller.setLooping(widget.isVideoLooping);
+      await controller.setPlaybackSpeed(widget.playbackSpeed);
       controller.addListener(_onVideoUpdate);
 
       if (widget.isPlaying) {

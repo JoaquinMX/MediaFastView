@@ -320,6 +320,9 @@ class _FullScreenViewerScreenState
           isPlaying: state.isPlaying,
           isLooping: state.isLooping,
           isMuted: state.isMuted,
+          playbackSpeed: state.playbackSpeed,
+          playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+          onPlaybackSpeedSelected: _viewModel.setPlaybackSpeed,
           progress: clampedProgress,
           onPlayPause: _viewModel.togglePlayPause,
           onNext: _handleNextNavigation,
@@ -330,6 +333,7 @@ class _FullScreenViewerScreenState
             showShuffle: false,
             showDurationSlider: false,
             showVideoLoop: false,
+            showPlaybackSpeed: true,
           ),
           availability: MediaPlaybackControlAvailability(
             enablePrevious: state.currentIndex > 0 ||
@@ -343,6 +347,7 @@ class _FullScreenViewerScreenState
             enableMute: true,
             enableDurationSlider: false,
             enableVideoLoop: false,
+            enablePlaybackSpeed: true,
           ),
           style: MediaPlaybackControlStyle(
             iconTheme: const IconThemeData(color: Colors.white, size: 28),
@@ -550,6 +555,7 @@ class _FullScreenViewerScreenState
       isPlaying: currentState.isPlaying,
       isMuted: currentState.isMuted,
       isLooping: currentState.isLooping,
+      playbackSpeed: currentState.playbackSpeed,
       onPositionUpdate: _viewModel.updateVideoPosition,
       onDurationUpdate: _viewModel.updateVideoDuration,
       onPlayingStateUpdate: _viewModel.updatePlayingState,
