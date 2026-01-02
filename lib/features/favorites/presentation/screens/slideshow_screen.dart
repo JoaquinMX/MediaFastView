@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_fast_view/core/config/app_config.dart';
-import 'package:media_fast_view/shared/providers/slideshow_controls_hide_delay_provider.dart';
+import 'package:media_fast_view/shared/providers/settings_providers.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
 

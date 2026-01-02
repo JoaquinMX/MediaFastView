@@ -4,7 +4,7 @@ import 'package:media_fast_view/shared/widgets/media_playback_controls.dart';
 import 'package:media_fast_view/shared/widgets/media_progress_indicator.dart';
 
 import '../../../../core/config/app_config.dart';
-import '../../../../shared/providers/slideshow_controls_hide_delay_provider.dart';
+import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../media_library/domain/entities/media_entity.dart';

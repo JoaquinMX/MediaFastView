@@ -1,17 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../features/media_library/presentation/view_models/directory_grid_view_model.dart';
-import '../../../../features/favorites/presentation/view_models/favorites_view_model.dart';
-import '../../../../shared/providers/delete_from_source_provider.dart';
-import '../../../../shared/providers/repository_providers.dart';
-import '../../../../shared/providers/theme_provider.dart';
-import '../../../../shared/providers/thumbnail_caching_provider.dart';
-import '../../../../shared/providers/auto_navigate_sibling_directories_provider.dart';
-import '../../../../shared/providers/slideshow_controls_hide_delay_provider.dart';
-import '../../../../shared/providers/video_playback_settings_provider.dart';
 import '../../../../shared/widgets/app_bar.dart';
-import '../../../../shared/utils/tag_cache_refresher.dart';
+import '../../domain/entities/app_settings.dart';
+import '../view_models/settings_view_model.dart';
 
 /// Screen for displaying application settings.
 class SettingsScreen extends ConsumerWidget {
@@ -19,25 +11,49 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeProvider);
-    final themeNotifier = ref.read(themeProvider.notifier);
-    final isThumbnailCachingEnabled = ref.watch(thumbnailCachingProvider);
-    final thumbnailCachingNotifier = ref.read(thumbnailCachingProvider.notifier);
-    final playbackSettings = ref.watch(videoPlaybackSettingsProvider);
-    final playbackSettingsNotifier =
-        ref.read(videoPlaybackSettingsProvider.notifier);
-    final deleteFromSourceEnabled = ref.watch(deleteFromSourceProvider);
-    final deleteFromSourceNotifier =
-        ref.read(deleteFromSourceProvider.notifier);
-    final autoNavigateSiblingDirectories =
-        ref.watch(autoNavigateSiblingDirectoriesProvider);
-    final autoNavigateSiblingDirectoriesNotifier =
-        ref.read(autoNavigateSiblingDirectoriesProvider.notifier);
-    final slideshowControlsHideDelay =
-        ref.watch(slideshowControlsHideDelayProvider);
-    final slideshowControlsHideDelayNotifier =
-        ref.read(slideshowControlsHideDelayProvider.notifier);
+    final settingsState = ref.watch(settingsViewModelProvider);
+    final viewModel = ref.read(settingsViewModelProvider.notifier);
 
+    return settingsState.when(
+      data: (settings) => _buildLoadedState(
+        context,
+        viewModel,
+        settings,
+      ),
+      loading: () => const Scaffold(
+        appBar: CustomAppBar(
+          title: 'Settings',
+        ),
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, _) => Scaffold(
+        appBar: const CustomAppBar(
+          title: 'Settings',
+        ),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Failed to load settings'),
+              const SizedBox(height: 8),
+              Text('$error'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: viewModel.refreshSettings,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadedState(
+    BuildContext context,
+    SettingsViewModel viewModel,
+    AppSettings settings,
+  ) {
     return Scaffold(
       appBar: const CustomAppBar(
         title: 'Settings',
@@ -46,42 +62,42 @@ class SettingsScreen extends ConsumerWidget {
         children: [
           const SizedBox(height: 16),
           _buildSectionHeader('Appearance'),
-          _buildThemeSetting(themeMode, themeNotifier),
+          _buildThemeSetting(settings.themeMode, viewModel),
           const Divider(),
           _buildSectionHeader('Playback'),
           _buildAutoplaySetting(
-            playbackSettings.autoplayVideos,
-            playbackSettingsNotifier,
+            settings.playbackSettings.autoplayVideos,
+            viewModel,
           ),
           _buildLoopSetting(
-            playbackSettings.loopVideos,
-            playbackSettingsNotifier,
+            settings.playbackSettings.loopVideos,
+            viewModel,
           ),
           _buildSlideshowControlsHideDelaySetting(
-            slideshowControlsHideDelay,
-            slideshowControlsHideDelayNotifier,
+            settings.slideshowControlsHideDelay,
+            viewModel,
           ),
           const Divider(),
           _buildSectionHeader('Navigation'),
           _buildSiblingNavigationSetting(
-            autoNavigateSiblingDirectories,
-            autoNavigateSiblingDirectoriesNotifier,
+            settings.autoNavigateSiblingDirectories,
+            viewModel,
           ),
           const Divider(),
           _buildSectionHeader('Data Management'),
           _buildThumbnailCachingSetting(
-            isThumbnailCachingEnabled,
-            thumbnailCachingNotifier,
+            settings.thumbnailCachingEnabled,
+            viewModel,
           ),
           _buildDeleteFromSourceSetting(
-            deleteFromSourceEnabled,
-            deleteFromSourceNotifier,
+            settings.deleteFromSourceEnabled,
+            viewModel,
           ),
-          _buildClearMediaCacheTile(context, ref),
-          _buildClearCacheTile(context, ref),
-          _buildClearFavoritesTile(context, ref),
-          _buildClearTagAssignmentsTile(context, ref),
-          _buildClearTagsTile(context, ref),
+          _buildClearMediaCacheTile(context, viewModel),
+          _buildClearCacheTile(context, viewModel),
+          _buildClearFavoritesTile(context, viewModel),
+          _buildClearTagAssignmentsTile(context, viewModel),
+          _buildClearTagsTile(context, viewModel),
           const Divider(),
           _buildSectionHeader('About'),
           _buildAboutTile(context),
@@ -104,7 +120,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildThemeSetting(ThemeMode themeMode, ThemeNotifier themeNotifier) {
+  Widget _buildThemeSetting(ThemeMode themeMode, SettingsViewModel viewModel) {
     return ListTile(
       title: const Text('Theme'),
       subtitle: Text(_getThemeModeText(themeMode)),
@@ -112,7 +128,7 @@ class SettingsScreen extends ConsumerWidget {
         value: themeMode,
         onChanged: (ThemeMode? newMode) {
           if (newMode != null) {
-            themeNotifier.setThemeMode(newMode);
+            viewModel.updateThemeMode(newMode);
           }
         },
         items: ThemeMode.values.map((ThemeMode mode) {
@@ -125,14 +141,17 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildThumbnailCachingSetting(bool isEnabled, ThumbnailCachingNotifier notifier) {
+  Widget _buildThumbnailCachingSetting(
+    bool isEnabled,
+    SettingsViewModel viewModel,
+  ) {
     return ListTile(
       title: const Text('Thumbnail Caching'),
       subtitle: const Text('Cache thumbnails for faster loading (uses more storage)'),
       trailing: Switch(
         value: isEnabled,
         onChanged: (bool value) {
-          notifier.setThumbnailCaching(value);
+          viewModel.updateThumbnailCaching(value);
         },
       ),
     );
@@ -140,7 +159,7 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildDeleteFromSourceSetting(
     bool isEnabled,
-    DeleteFromSourceNotifier notifier,
+    SettingsViewModel viewModel,
   ) {
     return ListTile(
       title: const Text('Delete From Source'),
@@ -151,7 +170,7 @@ class SettingsScreen extends ConsumerWidget {
       trailing: Switch(
         value: isEnabled,
         onChanged: (bool value) {
-          notifier.setDeleteFromSource(value);
+          viewModel.updateDeleteFromSource(value);
         },
       ),
     );
@@ -159,7 +178,7 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildAutoplaySetting(
     bool isEnabled,
-    VideoPlaybackSettingsNotifier notifier,
+    SettingsViewModel viewModel,
   ) {
     return ListTile(
       title: const Text('Autoplay Videos'),
@@ -167,7 +186,7 @@ class SettingsScreen extends ConsumerWidget {
       trailing: Switch(
         value: isEnabled,
         onChanged: (bool value) {
-          notifier.setAutoplayVideos(value);
+          viewModel.updateAutoplayVideos(value);
         },
       ),
     );
@@ -175,7 +194,7 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildLoopSetting(
     bool isEnabled,
-    VideoPlaybackSettingsNotifier notifier,
+    SettingsViewModel viewModel,
   ) {
     return ListTile(
       title: const Text('Loop Videos'),
@@ -183,7 +202,7 @@ class SettingsScreen extends ConsumerWidget {
       trailing: Switch(
         value: isEnabled,
         onChanged: (bool value) {
-          notifier.setLoopVideos(value);
+          viewModel.updateLoopVideos(value);
         },
       ),
     );
@@ -191,7 +210,7 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildSlideshowControlsHideDelaySetting(
     Duration delay,
-    SlideshowControlsHideDelayNotifier notifier,
+    SettingsViewModel viewModel,
   ) {
     final seconds = delay.inSeconds;
 
@@ -219,7 +238,7 @@ class SettingsScreen extends ConsumerWidget {
             divisions: slideshowControlsHideDelayMaxSeconds -
                 slideshowControlsHideDelayMinSeconds,
             label: '$seconds s',
-            onChanged: (value) => notifier.setDelay(
+            onChanged: (value) => viewModel.updateSlideshowControlsHideDelay(
               Duration(seconds: value.round()),
             ),
           ),
@@ -230,7 +249,7 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildSiblingNavigationSetting(
     bool isEnabled,
-    AutoNavigateSiblingDirectoriesNotifier notifier,
+    SettingsViewModel viewModel,
   ) {
     return ListTile(
       title: const Text('Auto-Navigate Sibling Directories'),
@@ -240,13 +259,16 @@ class SettingsScreen extends ConsumerWidget {
       trailing: Switch(
         value: isEnabled,
         onChanged: (bool value) {
-          notifier.setAutoNavigateSiblingDirectories(value);
+          viewModel.updateAutoNavigateSiblingDirectories(value);
         },
       ),
     );
   }
 
-  Widget _buildClearMediaCacheTile(BuildContext context, WidgetRef ref) {
+  Widget _buildClearMediaCacheTile(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     return ListTile(
       title: const Text('Clean Cached Media'),
       subtitle: const Text(
@@ -254,45 +276,57 @@ class SettingsScreen extends ConsumerWidget {
         'appearing in tag filters.',
       ),
       trailing: const Icon(Icons.cleaning_services, color: Colors.red),
-      onTap: () => _showClearMediaCacheDialog(context, ref),
+      onTap: () => _showClearMediaCacheDialog(context, viewModel),
     );
   }
 
-  Widget _buildClearCacheTile(BuildContext context, WidgetRef ref) {
+  Widget _buildClearCacheTile(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     return ListTile(
       title: const Text('Clear Directory Cache'),
       subtitle: const Text('Remove all stored directory data and bookmarks'),
       trailing: const Icon(Icons.delete_forever, color: Colors.red),
-      onTap: () => _showClearCacheDialog(context, ref),
+      onTap: () => _showClearCacheDialog(context, viewModel),
     );
   }
 
-  Widget _buildClearFavoritesTile(BuildContext context, WidgetRef ref) {
+  Widget _buildClearFavoritesTile(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     return ListTile(
       title: const Text('Clear All Favorites'),
       subtitle: const Text('Remove all favorited media items'),
       trailing: const Icon(Icons.favorite_border, color: Colors.red),
-      onTap: () => _showClearFavoritesDialog(context, ref),
+      onTap: () => _showClearFavoritesDialog(context, viewModel),
     );
   }
 
-  Widget _buildClearTagAssignmentsTile(BuildContext context, WidgetRef ref) {
+  Widget _buildClearTagAssignmentsTile(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     return ListTile(
       title: const Text('Clear All Assigned Tags'),
       subtitle: const Text(
         'Remove tag assignments from all media and directories',
       ),
       trailing: const Icon(Icons.label_off, color: Colors.red),
-      onTap: () => _showClearTagAssignmentsDialog(context, ref),
+      onTap: () => _showClearTagAssignmentsDialog(context, viewModel),
     );
   }
 
-  Widget _buildClearTagsTile(BuildContext context, WidgetRef ref) {
+  Widget _buildClearTagsTile(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     return ListTile(
       title: const Text('Clear All Tags'),
       subtitle: const Text('Delete all tags and their assignments'),
       trailing: const Icon(Icons.delete_sweep, color: Colors.red),
-      onTap: () => _showClearTagsDialog(context, ref),
+      onTap: () => _showClearTagsDialog(context, viewModel),
     );
   }
 
@@ -304,7 +338,10 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showClearMediaCacheDialog(BuildContext context, WidgetRef ref) {
+  void _showClearMediaCacheDialog(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -321,27 +358,13 @@ class SettingsScreen extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              try {
-                await ref.read(clearMediaCacheUseCaseProvider)();
-                await ref.read(tagCacheRefresherProvider).refresh();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Cached media cleaned successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to clean media cache: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
+              final success = await viewModel.clearMediaCache();
+              _showOperationResult(
+                context,
+                success,
+                successMessage: 'Cached media cleaned successfully',
+                failurePrefix: 'Failed to clean media cache',
+              );
             },
             child: const Text('Clean', style: TextStyle(color: Colors.red)),
           ),
@@ -350,7 +373,10 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showClearCacheDialog(BuildContext context, WidgetRef ref) {
+  void _showClearCacheDialog(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -368,27 +394,13 @@ class SettingsScreen extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              try {
-                final directoryViewModel = ref.read(directoryViewModelProvider.notifier);
-                await directoryViewModel.clearDirectories();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Directory cache cleared successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to clear cache: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
+              final success = await viewModel.clearDirectoryCache();
+              _showOperationResult(
+                context,
+                success,
+                successMessage: 'Directory cache cleared successfully',
+                failurePrefix: 'Failed to clear cache',
+              );
             },
             child: const Text('Clear', style: TextStyle(color: Colors.red)),
           ),
@@ -397,7 +409,10 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showClearFavoritesDialog(BuildContext context, WidgetRef ref) {
+  void _showClearFavoritesDialog(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -415,27 +430,13 @@ class SettingsScreen extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              try {
-                final favoritesViewModel = ref.read(favoritesViewModelProvider.notifier);
-                await favoritesViewModel.clearAllFavorites();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('All favorites cleared successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to clear favorites: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
+              final success = await viewModel.clearFavorites();
+              _showOperationResult(
+                context,
+                success,
+                successMessage: 'All favorites cleared successfully',
+                failurePrefix: 'Failed to clear favorites',
+              );
             },
             child: const Text('Clear', style: TextStyle(color: Colors.red)),
           ),
@@ -444,7 +445,10 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showClearTagAssignmentsDialog(BuildContext context, WidgetRef ref) {
+  void _showClearTagAssignmentsDialog(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -461,26 +465,13 @@ class SettingsScreen extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              try {
-                await ref.read(clearTagAssignmentsUseCaseProvider)();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('All tag assignments cleared successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to clear tag assignments: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
+              final success = await viewModel.clearTagAssignments();
+              _showOperationResult(
+                context,
+                success,
+                successMessage: 'All tag assignments cleared successfully',
+                failurePrefix: 'Failed to clear tag assignments',
+              );
             },
             child: const Text('Clear', style: TextStyle(color: Colors.red)),
           ),
@@ -489,7 +480,10 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showClearTagsDialog(BuildContext context, WidgetRef ref) {
+  void _showClearTagsDialog(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -506,30 +500,37 @@ class SettingsScreen extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              try {
-                await ref.read(clearTagsUseCaseProvider)();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('All tags cleared successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to clear tags: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
+              final success = await viewModel.clearTags();
+              _showOperationResult(
+                context,
+                success,
+                successMessage: 'All tags cleared successfully',
+                failurePrefix: 'Failed to clear tags',
+              );
             },
             child: const Text('Clear', style: TextStyle(color: Colors.red)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showOperationResult(
+    BuildContext context,
+    bool success, {
+    required String successMessage,
+    required String failurePrefix,
+  }) {
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success ? successMessage : '$failurePrefix.',
+        ),
+        backgroundColor: success ? Colors.green : Colors.red,
       ),
     );
   }

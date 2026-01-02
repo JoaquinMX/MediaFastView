@@ -47,6 +47,15 @@ import '../../features/media_library/data/repositories/tag_repository_impl.dart'
 import '../../features/tagging/data/isar/isar_tag_data_source.dart';
 import '../../features/media_library/domain/repositories/tag_repository.dart';
 import '../../features/favorites/data/isar/isar_favorites_data_source.dart';
+import '../../features/settings/data/repositories/settings_repository_impl.dart';
+import '../../features/settings/domain/repositories/settings_repository.dart';
+import '../../features/settings/domain/use_cases/get_app_settings_use_case.dart';
+import '../../features/settings/domain/use_cases/update_auto_navigate_sibling_directories_use_case.dart';
+import '../../features/settings/domain/use_cases/update_delete_from_source_use_case.dart';
+import '../../features/settings/domain/use_cases/update_playback_settings_use_case.dart';
+import '../../features/settings/domain/use_cases/update_slideshow_controls_hide_delay_use_case.dart';
+import '../../features/settings/domain/use_cases/update_theme_mode_use_case.dart';
+import '../../features/settings/domain/use_cases/update_thumbnail_caching_use_case.dart';
 import '../utils/tag_lookup.dart';
 
 // Isar database provider
@@ -150,6 +159,10 @@ final favoritesRepositoryProvider =
       },
     );
 
+final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
+  return const SettingsRepositoryImpl();
+});
+
 final fileOperationsRepositoryProvider = Provider<FileOperationsRepository>((
   ref,
 ) {
@@ -231,6 +244,44 @@ final deleteDirectoryUseCaseProvider = Provider<DeleteDirectoryUseCase>((ref) {
 
 final validatePathUseCaseProvider = Provider<ValidatePathUseCase>((ref) {
   return ValidatePathUseCase(ref.watch(fileOperationsRepositoryProvider));
+});
+
+// Settings use case providers
+final getAppSettingsUseCaseProvider = Provider<GetAppSettingsUseCase>((ref) {
+  return GetAppSettingsUseCase(ref.watch(settingsRepositoryProvider));
+});
+
+final updateThemeModeUseCaseProvider = Provider<UpdateThemeModeUseCase>((ref) {
+  return UpdateThemeModeUseCase(ref.watch(settingsRepositoryProvider));
+});
+
+final updateThumbnailCachingUseCaseProvider =
+    Provider<UpdateThumbnailCachingUseCase>((ref) {
+  return UpdateThumbnailCachingUseCase(ref.watch(settingsRepositoryProvider));
+});
+
+final updateDeleteFromSourceUseCaseProvider =
+    Provider<UpdateDeleteFromSourceUseCase>((ref) {
+  return UpdateDeleteFromSourceUseCase(ref.watch(settingsRepositoryProvider));
+});
+
+final updatePlaybackSettingsUseCaseProvider =
+    Provider<UpdatePlaybackSettingsUseCase>((ref) {
+  return UpdatePlaybackSettingsUseCase(ref.watch(settingsRepositoryProvider));
+});
+
+final updateAutoNavigateSiblingDirectoriesUseCaseProvider = Provider<
+    UpdateAutoNavigateSiblingDirectoriesUseCase>((ref) {
+  return UpdateAutoNavigateSiblingDirectoriesUseCase(
+    ref.watch(settingsRepositoryProvider),
+  );
+});
+
+final updateSlideshowControlsHideDelayUseCaseProvider =
+    Provider<UpdateSlideshowControlsHideDelayUseCase>((ref) {
+  return UpdateSlideshowControlsHideDelayUseCase(
+    ref.watch(settingsRepositoryProvider),
+  );
 });
 // Tag use case providers
 final getTagsUseCaseProvider = Provider<GetTagsUseCase>((ref) {
