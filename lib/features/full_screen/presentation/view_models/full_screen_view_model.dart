@@ -9,9 +9,10 @@ import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/domain/use_cases/assign_tag_use_case.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
 import '../../../tagging/presentation/view_models/tags_view_model.dart';
+import '../../../settings/domain/entities/playback_settings.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/repository_providers.dart';
-import '../../../../shared/providers/video_playback_settings_provider.dart';
+import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../../../shared/utils/tag_cache_refresher.dart';
 import '../../../../shared/utils/tag_lookup.dart';
@@ -30,7 +31,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     this._assignTagUseCase,
     this._tagLookup,
     this._tagCacheRefresher,
-    VideoPlaybackSettings playbackSettings, {
+    PlaybackSettings playbackSettings, {
     TagMutationService? tagMutationService,
     TagUsageRanker? tagUsageRanker,
   })  : _playbackSettings = playbackSettings,
@@ -52,7 +53,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   final TagMutationService _tagMutationService;
   final TagUsageRanker _tagUsageRanker;
 
-  VideoPlaybackSettings _playbackSettings;
+  PlaybackSettings _playbackSettings;
   bool _loopOverridden = false;
   DirectoryNavigationTarget? _currentDirectory;
   List<DirectoryNavigationTarget> _siblingDirectories = const [];
@@ -472,7 +473,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   }
 
   /// Update the persisted playback preferences.
-  void updatePlaybackPreferences(VideoPlaybackSettings settings) {
+  void updatePlaybackPreferences(PlaybackSettings settings) {
     _playbackSettings = settings;
 
     final currentState = state;
@@ -650,7 +651,7 @@ final fullScreenViewModelProvider =
       tagMutationService: ref.watch(tagMutationServiceProvider),
     );
 
-    ref.listen<VideoPlaybackSettings>(
+    ref.listen<PlaybackSettings>(
       videoPlaybackSettingsProvider,
       (previous, next) {
         viewModel.updatePlaybackPreferences(next);

@@ -7,7 +7,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/repository_providers.dart';
-import '../../../../shared/providers/thumbnail_caching_provider.dart';
+import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/widgets/file_operation_button.dart';
 import '../../../favorites/presentation/widgets/favorite_toggle_button.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';

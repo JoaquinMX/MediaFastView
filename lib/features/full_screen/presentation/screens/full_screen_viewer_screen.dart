@@ -19,7 +19,7 @@ import '../../../../shared/widgets/media_playback_controls.dart';
 import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
-import '../../../../shared/providers/auto_navigate_sibling_directories_provider.dart';
+import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../../shared/widgets/tag_selection_dialog.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';

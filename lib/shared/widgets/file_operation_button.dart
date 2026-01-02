@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/media_library/domain/entities/media_entity.dart';
 import '../../features/media_library/presentation/view_models/file_operations_view_model.dart';
-import '../providers/delete_from_source_provider.dart';
+import '../providers/settings_providers.dart';
 import 'confirmation_dialog.dart';
 import 'file_operation_progress_dialog.dart';
 

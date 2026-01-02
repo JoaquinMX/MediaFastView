@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'shared/providers/theme_provider.dart';
+import 'shared/providers/settings_providers.dart';
 import 'shared/widgets/main_navigation.dart';
 
 void main() async {

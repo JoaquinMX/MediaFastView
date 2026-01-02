@@ -9,7 +9,7 @@ import 'package:media_fast_view/features/full_screen/presentation/view_models/fu
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/tagging/domain/entities/tag_entity.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/assign_tag_use_case.dart';
-import 'package:media_fast_view/shared/providers/video_playback_settings_provider.dart';
+import 'package:media_fast_view/features/settings/domain/entities/playback_settings.dart';
 import 'package:media_fast_view/shared/utils/tag_cache_refresher.dart';
 import 'package:media_fast_view/shared/utils/tag_lookup.dart';
 import 'package:media_fast_view/shared/utils/tag_usage_ranker.dart';
@@ -25,7 +25,7 @@ void main() {
   late FullScreenViewModel viewModel;
 
   const playbackSettings =
-      VideoPlaybackSettings(autoplayVideos: false, loopVideos: false);
+      PlaybackSettings(autoplayVideos: false, loopVideos: false);
 
   setUp(() {
     loadMediaForViewingUseCase = MockLoadMediaForViewingUseCase();
