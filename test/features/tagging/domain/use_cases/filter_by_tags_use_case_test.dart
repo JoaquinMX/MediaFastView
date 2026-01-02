@@ -9,66 +9,12 @@ import 'package:media_fast_view/features/tagging/domain/use_cases/filter_by_tags
 
 class _MockMediaRepository extends Mock implements MediaRepository {}
 
-class _DummyDirectoryRepository implements DirectoryRepository {
-  @override
-  Future<void> addDirectory(DirectoryEntity directory, {bool silent = false}) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> clearAllDirectories() {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<DirectoryEntity?> getDirectoryById(String id) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<List<DirectoryEntity>> getDirectories() {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> removeDirectory(String id) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<List<DirectoryEntity>> searchDirectories(String query) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<List<DirectoryEntity>> filterDirectoriesByTags(List<String> tagIds) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> updateDirectoryBookmark(String directoryId, String? bookmarkData) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> updateDirectoryTags(String directoryId, List<String> tagIds) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> updateDirectoryMetadata(
-    String directoryId, {
-    String? path,
-    String? name,
-    String? bookmarkData,
-  }) {
-    throw UnimplementedError();
-  }
-}
+class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
 
 void main() {
   late _MockMediaRepository mediaRepository;
   late FilterByTagsUseCase useCase;
+  late _MockDirectoryRepository directoryRepository;
   const tagId = 'tag-1';
   final directory = DirectoryEntity(
     id: 'dir-1',
@@ -105,11 +51,50 @@ void main() {
   ];
 
   setUp(() {
+    directoryRepository = _MockDirectoryRepository();
     mediaRepository = _MockMediaRepository();
     useCase = FilterByTagsUseCase(
-      directoryRepository: _DummyDirectoryRepository(),
+      directoryRepository: directoryRepository,
       mediaRepository: mediaRepository,
     );
+  });
+
+  test('returns all directories when no tags are provided', () async {
+    when(directoryRepository.getDirectories()).thenAnswer((_) async => [directory]);
+
+    final result = await useCase.filterDirectories(const []);
+
+    expect(result, [directory]);
+    verify(directoryRepository.getDirectories()).called(1);
+    verifyNever(directoryRepository.filterDirectoriesByTags(any));
+  });
+
+  test('filters directories when tags are provided', () async {
+    when(directoryRepository.filterDirectoriesByTags(any))
+        .thenAnswer((_) async => [directory]);
+
+    final result = await useCase.filterDirectories(const ['tag-1']);
+
+    expect(result, [directory]);
+    verify(directoryRepository.filterDirectoriesByTags(const ['tag-1'])).called(1);
+    verifyNever(directoryRepository.getDirectories());
+  });
+
+  test('returns empty list for media when no tags are selected', () async {
+    final result = await useCase.filterMedia(const []);
+
+    expect(result, isEmpty);
+    verifyNever(mediaRepository.filterMediaByTags(any));
+  });
+
+  test('delegates media filtering when tags are provided', () async {
+    when(mediaRepository.filterMediaByTags(any))
+        .thenAnswer((_) async => [cachedMedia.first]);
+
+    final result = await useCase.filterMedia(const ['tag-1']);
+
+    expect(result, [cachedMedia.first]);
+    verify(mediaRepository.filterMediaByTags(const ['tag-1'])).called(1);
   });
 
   test('falls back to cached media when path filtering returns empty', () async {
