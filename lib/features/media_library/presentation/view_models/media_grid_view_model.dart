@@ -672,6 +672,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     String? bookmarkData,
     List<DirectoryNavigationTarget>? siblingDirectories,
     int? currentIndex,
+    bool replaceCurrentRoute = false,
   }) async {
     _params.navigateToDirectory?.call(
       directoryPath,
@@ -679,6 +680,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       bookmarkData,
       siblingDirectories,
       currentIndex,
+      replaceCurrentRoute: replaceCurrentRoute,
     );
   }
 
@@ -1062,6 +1064,7 @@ class MediaViewModelParams {
     String? bookmarkData,
     List<DirectoryNavigationTarget>? siblingDirectories,
     int? currentIndex,
+    {bool replaceCurrentRoute},
   )?
   navigateToDirectory;
   final Future<String?> Function()? onPermissionRecoveryNeeded;
