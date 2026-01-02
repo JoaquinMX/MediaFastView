@@ -5,9 +5,9 @@ import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_toggle_result.dart';
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
+import 'package:media_fast_view/features/favorites/domain/use_cases/favorite_media_use_case.dart';
 import 'package:media_fast_view/features/favorites/presentation/view_models/favorites_view_model.dart';
 import 'package:media_fast_view/features/media_library/data/data_sources/local_directory_data_source.dart';
-import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
@@ -34,6 +34,8 @@ class _MockMediaRepository extends Mock implements MediaRepository {}
 
 class _MockFavoritesRepository extends Mock implements FavoritesRepository {}
 
+class _MockFavoriteMediaUseCase extends Mock implements FavoriteMediaUseCase {}
+
 class _MockLocalDirectoryDataSource extends Mock
     implements LocalDirectoryDataSource {}
 
@@ -41,14 +43,11 @@ class _MockPermissionService extends Mock implements PermissionService {}
 
 class _MockTagRepository extends Mock implements TagRepository {}
 
-class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
-
 class _StubFavoritesViewModel extends FavoritesViewModel {
   _StubFavoritesViewModel()
       : super(
           _MockFavoritesRepository(),
-          _MockIsarMediaDataSource(),
-          GetMediaUseCase(_MockMediaRepository()),
+          _MockFavoriteMediaUseCase(),
         ) {
     state = const FavoritesLoaded(
       favorites: [],

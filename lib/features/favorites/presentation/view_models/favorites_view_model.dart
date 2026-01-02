@@ -2,16 +2,14 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/logging_service.dart';
+import '../../../../shared/providers/repository_providers.dart';
+import '../../../media_library/domain/entities/directory_entity.dart';
+import '../../../media_library/domain/entities/media_entity.dart';
 import '../../domain/entities/favorite_entity.dart';
 import '../../domain/entities/favorite_item_type.dart';
 import '../../domain/repositories/favorites_repository.dart';
-import '../../../media_library/domain/entities/directory_entity.dart';
-import '../../../media_library/domain/entities/media_entity.dart';
-import '../../../media_library/domain/use_cases/get_media_use_case.dart';
-import '../../../media_library/data/isar/isar_media_data_source.dart';
-import '../../../media_library/data/models/media_model.dart';
-import '../../../../shared/providers/repository_providers.dart';
-import '../../../../core/services/logging_service.dart';
+import '../../domain/use_cases/favorite_media_use_case.dart';
 
 /// Sealed class representing the state of favorites.
 sealed class FavoritesState {
@@ -132,13 +130,11 @@ class SlideshowFinished extends SlideshowState {
 class FavoritesViewModel extends StateNotifier<FavoritesState> {
   FavoritesViewModel(
     this._favoritesRepository,
-    this._mediaDataSource,
-    this._getMediaUseCase,
+    this._favoriteMediaUseCase,
   ) : super(const FavoritesInitial());
 
   final FavoritesRepository _favoritesRepository;
-  final IsarMediaDataSource _mediaDataSource;
-  final GetMediaUseCase _getMediaUseCase;
+  final FavoriteMediaUseCase _favoriteMediaUseCase;
   bool _hasLoadedFavorites = false;
 
   /// Tracks whether an initial load has completed.
@@ -166,7 +162,7 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
       // Get media entities for favorite IDs
       final media = favoriteIds.isEmpty
           ? const <MediaEntity>[]
-          : await _getMediaForFavorites(favoriteIds);
+          : await _favoriteMediaUseCase.resolveMediaForFavorites(favoriteIds);
       if (!mounted) {
         return;
       }
@@ -254,7 +250,7 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
             (favorite) async {
               final media = mediaById[favorite.itemId];
               if (media != null) {
-                await _persistMedia(media);
+                await _favoriteMediaUseCase.persistMedia(media);
               }
             },
           ),
@@ -418,98 +414,6 @@ class FavoritesViewModel extends StateNotifier<FavoritesState> {
     }
   }
 
-  /// Persists a media entity to local storage.
-  Future<void> _persistMedia(MediaEntity media) async {
-    final model = MediaModel(
-      id: media.id,
-      path: media.path,
-      name: media.name,
-      type: media.type,
-      size: media.size,
-      lastModified: media.lastModified,
-      tagIds: media.tagIds,
-      directoryId: media.directoryId,
-      bookmarkData: media.bookmarkData,
-    );
-    await _mediaDataSource.upsertMedia([model]);
-  }
-
-  MediaEntity _mediaModelToEntity(MediaModel media) {
-    return MediaEntity(
-      id: media.id,
-      path: media.path,
-      name: media.name,
-      type: media.type,
-      size: media.size,
-      lastModified: media.lastModified,
-      tagIds: media.tagIds,
-      directoryId: media.directoryId,
-      bookmarkData: media.bookmarkData,
-    );
-  }
-
-  /// Helper method to get media entities for favorite IDs.
-  Future<List<MediaEntity>> _getMediaForFavorites(
-    List<String> favoriteIds,
-  ) async {
-    LoggingService.instance.info(
-      'Loading media for ${favoriteIds.length} favorite IDs: $favoriteIds',
-    );
-
-    if (favoriteIds.isEmpty) {
-      LoggingService.instance.info('No favorite IDs provided, returning empty');
-      return const <MediaEntity>[];
-    }
-
-    final storedMedia = await _mediaDataSource.getMedia();
-    LoggingService.instance.info(
-      'Found ${storedMedia.length} stored media items',
-    );
-
-    final storedMediaMap = {for (final media in storedMedia) media.id: media};
-    final resolvedMedia = <MediaEntity>[];
-    final missingIds = <String>[];
-
-    for (final id in favoriteIds) {
-      final stored = storedMediaMap[id];
-      if (stored != null) {
-        final entity = _mediaModelToEntity(stored);
-        resolvedMedia.add(entity);
-        LoggingService.instance.debug(
-          'Successfully loaded cached media for ID $id: ${entity.name}, path: ${entity.path}',
-        );
-      } else {
-        missingIds.add(id);
-        LoggingService.instance.warning(
-          'No cached media found for favorite ID $id, will attempt repository lookup',
-        );
-      }
-    }
-
-    if (missingIds.isNotEmpty) {
-      LoggingService.instance.info(
-        'Attempting to resolve ${missingIds.length} missing favorites via repository',
-      );
-      for (final id in missingIds) {
-        final media = await _getMediaUseCase.byId(id);
-        if (media != null) {
-          resolvedMedia.add(media);
-          LoggingService.instance.debug(
-            'Resolved missing favorite $id via repository lookup',
-          );
-        } else {
-          LoggingService.instance.warning(
-            'Repository could not resolve favorite ID $id',
-          );
-        }
-      }
-    }
-
-    LoggingService.instance.info(
-      'Loaded ${resolvedMedia.length} valid media entities out of ${favoriteIds.length} favorites',
-    );
-    return resolvedMedia;
-  }
 }
 
 /// Result describing the outcome of a batch favorites toggle.
@@ -532,8 +436,7 @@ final favoritesViewModelProvider =
       (ref) {
         final viewModel = FavoritesViewModel(
           ref.watch(favoritesRepositoryProvider),
-          ref.watch(isarMediaDataSourceProvider),
-          ref.watch(getMediaUseCaseProvider),
+          ref.watch(favoriteMediaUseCaseProvider),
         );
         viewModel.loadFavorites();
         return viewModel;

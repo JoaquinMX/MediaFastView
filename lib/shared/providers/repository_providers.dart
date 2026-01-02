@@ -38,6 +38,7 @@ import '../../features/tagging/domain/use_cases/filter_by_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/clear_tag_assignments_use_case.dart';
 import '../../features/tagging/domain/use_cases/clear_tags_use_case.dart';
 import '../../features/favorites/domain/use_cases/get_favorites_use_case.dart';
+import '../../features/favorites/domain/use_cases/favorite_media_use_case.dart';
 import '../../features/favorites/domain/use_cases/toggle_favorite_use_case.dart';
 import '../../features/favorites/domain/use_cases/start_slideshow_use_case.dart';
 import '../../features/full_screen/data/repositories/media_viewer_repository_impl.dart';
@@ -322,6 +323,13 @@ final filterByTagsUseCaseProvider = Provider<FilterByTagsUseCase>((ref) {
 });
 
 // Favorites use case providers
+final favoriteMediaUseCaseProvider = Provider<FavoriteMediaUseCase>((ref) {
+  return FavoriteMediaUseCase(
+    ref.watch(mediaRepositoryProvider),
+    ref.watch(getMediaUseCaseProvider),
+  );
+});
+
 final getFavoritesUseCaseProvider = Provider<GetFavoritesUseCase>((ref) {
   return GetFavoritesUseCase(ref.watch(favoritesRepositoryProvider));
 });

@@ -51,4 +51,7 @@ abstract class MediaRepository {
   /// Removes every persisted media entry, clearing cached results across
   /// directories.
   Future<void> clearAllMedia();
+
+  /// Inserts or updates media entries in persistence.
+  Future<void> upsertMedia(List<MediaEntity> media);
 }
