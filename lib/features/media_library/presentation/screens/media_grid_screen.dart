@@ -123,46 +123,57 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       directoryName: widget.directoryName,
       bookmarkData: widget.bookmarkData,
       navigateToDirectory:
-          (path, name, bookmarkData, siblingDirectories, currentIndex) {
-            final targetIndex =
-                currentIndex ?? _currentDirectoryNavigationIndex;
-            final hasSiblingNavigation =
-                (siblingDirectories?.isNotEmpty ?? false) &&
-                _siblingNavigationTargets.isNotEmpty;
-            final isBackwardNavigation = hasSiblingNavigation
-                ? targetIndex < _currentDirectoryNavigationIndex
-                : false;
+          (
+        path,
+        name,
+        bookmarkData,
+        siblingDirectories,
+        currentIndex, {
+        bool replaceCurrentRoute = false,
+      }) {
+        final targetIndex =
+            currentIndex ?? _currentDirectoryNavigationIndex;
+        final hasSiblingNavigation =
+            (siblingDirectories?.isNotEmpty ?? false) &&
+            _siblingNavigationTargets.isNotEmpty;
+        final isBackwardNavigation = replaceCurrentRoute && hasSiblingNavigation
+            ? targetIndex < _currentDirectoryNavigationIndex
+            : false;
 
-            Navigator.of(context).pushReplacement(
-              PageRouteBuilder(
-                transitionDuration: const Duration(milliseconds: 250),
-                reverseTransitionDuration: const Duration(milliseconds: 250),
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    MediaGridScreen(
-                      directoryPath: path,
-                      directoryName: name,
-                      bookmarkData: bookmarkData,
-                      siblingDirectories: siblingDirectories,
-                      currentDirectoryIndex: currentIndex,
-                    ),
-                transitionsBuilder:
-                    (context, animation, secondaryAnimation, child) {
-                      final beginOffset = isBackwardNavigation
-                          ? const Offset(-1, 0)
-                          : const Offset(1, 0);
-                      final tween = Tween(
-                        begin: beginOffset,
-                        end: Offset.zero,
-                      ).chain(CurveTween(curve: Curves.easeInOutCubic));
+        final route = PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 250),
+          reverseTransitionDuration: const Duration(milliseconds: 250),
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              MediaGridScreen(
+            directoryPath: path,
+            directoryName: name,
+            bookmarkData: bookmarkData,
+            siblingDirectories: siblingDirectories,
+            currentDirectoryIndex: currentIndex,
+          ),
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
+            final beginOffset = isBackwardNavigation
+                ? const Offset(-1, 0)
+                : const Offset(1, 0);
+            final tween = Tween(
+              begin: beginOffset,
+              end: Offset.zero,
+            ).chain(CurveTween(curve: Curves.easeInOutCubic));
 
-                      return SlideTransition(
-                        position: animation.drive(tween),
-                        child: child,
-                      );
-                    },
-              ),
+            return SlideTransition(
+              position: animation.drive(tween),
+              child: child,
             );
           },
+        );
+
+        if (replaceCurrentRoute) {
+          Navigator.of(context).pushReplacement(route);
+        } else {
+          Navigator.of(context).push(route);
+        }
+      },
       onPermissionRecoveryNeeded: () async {
         return await FilePicker.platform.getDirectoryPath();
       },
@@ -1005,6 +1016,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       bookmarkData: target.bookmarkData,
       siblingDirectories: _siblingNavigationTargets,
       currentIndex: targetIndex,
+      replaceCurrentRoute: true,
     );
   }
 
@@ -1078,6 +1090,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           bookmarkData: result.currentDirectory.bookmarkData,
           siblingDirectories: result.siblingDirectories,
           currentIndex: result.currentDirectoryIndex,
+          replaceCurrentRoute: true,
         );
       }
     }
