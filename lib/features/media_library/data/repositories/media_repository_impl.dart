@@ -14,6 +14,20 @@ class MediaRepositoryImpl implements MediaRepository {
 
   final IsarMediaDataSource _mediaDataSource;
 
+  MediaModel _entityToModel(MediaEntity entity) {
+    return MediaModel(
+      id: entity.id,
+      path: entity.path,
+      name: entity.name,
+      type: entity.type,
+      size: entity.size,
+      lastModified: entity.lastModified,
+      tagIds: entity.tagIds,
+      directoryId: entity.directoryId,
+      bookmarkData: entity.bookmarkData,
+    );
+  }
+
   @override
   Future<List<MediaEntity>> getMediaForDirectory(String directoryId) async {
     final models = await _mediaDataSource.getMediaForDirectory(directoryId);
@@ -114,12 +128,23 @@ class MediaRepositoryImpl implements MediaRepository {
       lastModified: model.lastModified,
       tagIds: model.tagIds,
       directoryId: model.directoryId,
+      bookmarkData: model.bookmarkData,
     );
   }
-  
+
   @override
   Future<void> clearAllMedia() {
     return _mediaDataSource.clearMedia();
   }
 
+  @override
+  Future<void> upsertMedia(List<MediaEntity> media) async {
+    if (media.isEmpty) {
+      return;
+    }
+
+    await _mediaDataSource.upsertMedia(
+      media.map(_entityToModel).toList(growable: false),
+    );
+  }
 }

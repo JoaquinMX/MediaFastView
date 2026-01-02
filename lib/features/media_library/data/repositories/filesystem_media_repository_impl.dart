@@ -28,6 +28,20 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   final FilesystemMediaDataSource _filesystemDataSource;
   final PermissionService _permissionService;
 
+  MediaModel _entityToModel(MediaEntity entity) {
+    return MediaModel(
+      id: entity.id,
+      path: entity.path,
+      name: entity.name,
+      type: entity.type,
+      size: entity.size,
+      lastModified: entity.lastModified,
+      tagIds: entity.tagIds,
+      directoryId: entity.directoryId,
+      bookmarkData: entity.bookmarkData,
+    );
+  }
+
   @override
   Future<List<MediaEntity>> getMediaForDirectory(String directoryId) async {
     final directory = await _directoryRepository.getDirectoryById(directoryId);
@@ -351,6 +365,17 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   @override
   Future<void> clearAllMedia() {
     return _mediaDataSource.clearMedia();
+  }
+
+  @override
+  Future<void> upsertMedia(List<MediaEntity> media) async {
+    if (media.isEmpty) {
+      return;
+    }
+
+    await _mediaDataSource.upsertMedia(
+      media.map(_entityToModel).toList(growable: false),
+    );
   }
 
   Future<MediaEntity?> _scanDirectoriesForMedia(String id) async {
