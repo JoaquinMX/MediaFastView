@@ -1,5 +1,7 @@
 import 'package:media_fast_view/core/utils/batch_update_result.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/tag_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/assign_tag_use_case.dart';
@@ -164,6 +166,109 @@ void main() {
 
       expect(result, equals(BatchUpdateResult.empty));
       verifyNever(mediaRepository.updateMediaTagsBatch(any));
+    });
+  });
+
+  group('assignTagToMedia', () {
+    final tag = TagEntity(
+      id: 'tag-1',
+      name: 'Tag 1',
+      color: 0xFF00FF00,
+      createdAt: DateTime(2024, 1, 1),
+    );
+
+    test('appends tag when media exists and is missing tag', () async {
+      final media = MediaEntity(
+        id: 'media-1',
+        path: '/path',
+        name: 'file.jpg',
+        type: MediaType.image,
+        size: 10,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const [],
+        directoryId: 'dir-1',
+        bookmarkData: null,
+      );
+
+      when(mediaRepository.getMediaById(media.id)).thenAnswer((_) async => media);
+      when(mediaRepository.updateMediaTags(any, any)).thenAnswer((_) async {});
+
+      await useCase.assignTagToMedia(media.id, tag);
+
+      verify(mediaRepository.updateMediaTags(media.id, [tag.id])).called(1);
+    });
+
+    test('does nothing when media already contains tag', () async {
+      final media = MediaEntity(
+        id: 'media-1',
+        path: '/path',
+        name: 'file.jpg',
+        type: MediaType.image,
+        size: 10,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const ['tag-1'],
+        directoryId: 'dir-1',
+        bookmarkData: null,
+      );
+
+      when(mediaRepository.getMediaById(media.id)).thenAnswer((_) async => media);
+
+      await useCase.assignTagToMedia(media.id, tag);
+
+      verify(mediaRepository.getMediaById(media.id)).called(1);
+      verifyNever(mediaRepository.updateMediaTags(any, any));
+    });
+  });
+
+  group('toggleTagOnMedia', () {
+    final tag = TagEntity(
+      id: 'tag-1',
+      name: 'Tag 1',
+      color: 0xFF00FF00,
+      createdAt: DateTime(2024, 1, 1),
+    );
+
+    test('removes tag when already selected', () async {
+      final media = MediaEntity(
+        id: 'media-1',
+        path: '/path',
+        name: 'file.jpg',
+        type: MediaType.image,
+        size: 10,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const ['tag-1', 'tag-2'],
+        directoryId: 'dir-1',
+        bookmarkData: null,
+      );
+
+      when(mediaRepository.getMediaById(media.id)).thenAnswer((_) async => media);
+      when(mediaRepository.updateMediaTags(any, any)).thenAnswer((_) async {});
+
+      await useCase.toggleTagOnMedia(media.id, tag);
+
+      verify(mediaRepository.updateMediaTags(media.id, ['tag-2'])).called(1);
+    });
+
+    test('adds tag when not present', () async {
+      final media = MediaEntity(
+        id: 'media-1',
+        path: '/path',
+        name: 'file.jpg',
+        type: MediaType.image,
+        size: 10,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const ['tag-2'],
+        directoryId: 'dir-1',
+        bookmarkData: null,
+      );
+
+      when(mediaRepository.getMediaById(media.id)).thenAnswer((_) async => media);
+      when(mediaRepository.updateMediaTags(any, any)).thenAnswer((_) async {});
+
+      await useCase.toggleTagOnMedia(media.id, tag);
+
+      verify(mediaRepository.updateMediaTags(media.id, ['tag-2', 'tag-1']))
+          .called(1);
     });
   });
 }
