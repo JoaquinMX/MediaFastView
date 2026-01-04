@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'dart:developer' as developer;
 import 'dart:ui';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -64,6 +65,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     _focusNode.dispose();
     super.dispose();
   }
+  List<String> _lastLoggedSelectedTagIds = const [];
+  List<String> _lastLoggedAvailableTags = const [];
 
   @override
   Widget build(BuildContext context) {
@@ -417,10 +420,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     };
     final normalizedSelectedTagIds = List<String>.from(selectedTagIds);
 
-    // Debug logging for tag filter state
-    debugPrint(
-      'DirectoryGridScreen: Building tag filter with selectedTagIds: $normalizedSelectedTagIds',
-    );
+    _logDirectoryTagSelection(normalizedSelectedTagIds);
 
     final favoritesState = ref.watch(favoritesViewModelProvider);
     final hasFavoriteDirectories = switch (favoritesState) {
@@ -480,15 +480,19 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     List<String> selectedTagIds,
     DirectoryViewModel viewModel,
   ) {
-    debugPrint(
-      'DirectoryGridScreen: Available tags: ${tags.map((t) => t.name).toList()}',
-    );
+    final tagNames = tags.map((tag) => tag.name).toList(growable: false);
+    if (!listEquals(_lastLoggedAvailableTags, tagNames)) {
+      _lastLoggedAvailableTags = List<String>.from(tagNames);
+      _logDirectoryDebug(
+        'DirectoryGridScreen: Available tags: $_lastLoggedAvailableTags',
+      );
+    }
 
     return SelectableTagChipStrip(
       tags: tags,
       selectedTagIds: selectedTagIds,
       onSelectionChanged: (newSelection) {
-        debugPrint(
+        _logDirectoryDebug(
           'DirectoryGridScreen: Tag selection changed: $newSelection',
         );
         viewModel.filterByTags(newSelection);
@@ -540,6 +544,23 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       },
     );
     return _buildDirectoryMarqueeWrapper(viewModel: viewModel, child: gridView);
+  }
+
+  void _logDirectoryTagSelection(List<String> normalizedSelectedTagIds) {
+    if (listEquals(_lastLoggedSelectedTagIds, normalizedSelectedTagIds)) {
+      return;
+    }
+    _lastLoggedSelectedTagIds = List<String>.from(normalizedSelectedTagIds);
+    _logDirectoryDebug(
+      'DirectoryGridScreen: Building tag filter with selectedTagIds: $_lastLoggedSelectedTagIds',
+    );
+  }
+
+  void _logDirectoryDebug(String message) {
+    if (!kDebugMode) {
+      return;
+    }
+    developer.log(message, name: 'DirectoryGridScreen');
   }
 
   Widget _buildPermissionRevokedGrid(

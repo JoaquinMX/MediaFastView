@@ -184,6 +184,126 @@ void main() {
 
       expect(viewModel.lastSearchQuery, isEmpty);
     });
+
+    testWidgets('updates text when provider search query changes while unfocused',
+        (tester) async {
+      final directories = [
+        DirectoryEntity(
+          id: generateDirectoryId('/movies'),
+          path: '/movies',
+          name: 'Movies',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 1),
+        ),
+      ];
+      late _StubDirectoryViewModel viewModel;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            gridColumnsProvider
+                .overrideWith((ref) => _StubGridColumnsNotifier()),
+            favoritesViewModelProvider.overrideWith(
+              (ref) => _StubFavoritesViewModel(),
+            ),
+            directoryViewModelProvider.overrideWith((ref) {
+              viewModel = _StubDirectoryViewModel(directories, ref);
+              return viewModel;
+            }),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: DirectorySearchBar()),
+          ),
+        ),
+      );
+
+      final textFieldFinder = find.byType(TextField);
+      expect(
+        tester.widget<TextField>(textFieldFinder).controller?.text,
+        isEmpty,
+      );
+
+      viewModel.state = DirectoryLoaded(
+        directories: directories,
+        searchQuery: 'remote',
+        selectedTagIds: const [],
+        columns: 2,
+        sortOption: DirectorySortOption.nameAscending,
+        selectedDirectoryIds: const {},
+        isSelectionMode: false,
+        showFavoritesOnly: false,
+      );
+
+      await tester.pump();
+
+      expect(
+        tester.widget<TextField>(textFieldFinder).controller?.text,
+        'remote',
+      );
+    });
+
+    testWidgets('does not override focused search text when state updates',
+        (tester) async {
+      final directories = [
+        DirectoryEntity(
+          id: generateDirectoryId('/movies'),
+          path: '/movies',
+          name: 'Movies',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 1),
+        ),
+      ];
+      late _StubDirectoryViewModel viewModel;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            gridColumnsProvider
+                .overrideWith((ref) => _StubGridColumnsNotifier()),
+            favoritesViewModelProvider.overrideWith(
+              (ref) => _StubFavoritesViewModel(),
+            ),
+            directoryViewModelProvider.overrideWith((ref) {
+              viewModel = _StubDirectoryViewModel(directories, ref);
+              return viewModel;
+            }),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: DirectorySearchBar()),
+          ),
+        ),
+      );
+
+      final textFieldFinder = find.byType(TextField);
+      await tester.tap(textFieldFinder);
+      await tester.pump();
+
+      await tester.enterText(textFieldFinder, 'local');
+      expect(
+        tester.widget<TextField>(textFieldFinder).controller?.text,
+        'local',
+      );
+
+      viewModel.state = DirectoryLoaded(
+        directories: directories,
+        searchQuery: 'remote',
+        selectedTagIds: const [],
+        columns: 2,
+        sortOption: DirectorySortOption.nameAscending,
+        selectedDirectoryIds: const {},
+        isSelectionMode: false,
+        showFavoritesOnly: false,
+      );
+
+      await tester.pump();
+
+      expect(
+        tester.widget<TextField>(textFieldFinder).controller?.text,
+        'local',
+      );
+    });
   });
 
   group('DirectoryGrid interactions', () {
