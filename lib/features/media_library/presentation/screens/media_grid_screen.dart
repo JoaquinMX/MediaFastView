@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'dart:developer' as developer;
 import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
@@ -62,6 +63,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   Map<String, Rect> _mediaCachedItemRects = <String, Rect>{};
   List<DirectoryNavigationTarget> _siblingNavigationTargets = const [];
   int _currentDirectoryNavigationIndex = 0;
+  Size? _lastLoggedScreenSize;
+  Size? _lastLoggedGridSize;
+  String? _lastLoggedDirectoryName;
+  int? _lastLoggedGridItemCount;
+  int? _lastLoggedGridColumns;
 
   bool get _isMacOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 
@@ -115,9 +121,12 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(
-      'MediaGridScreen: Building for ${widget.directoryName}, screen size: ${MediaQuery.of(context).size}',
-    );
+    final screenSize = MediaQuery.of(context).size;
+    if (_shouldLogBuild(screenSize)) {
+      _logMediaDebug(
+        'MediaGridScreen: Building for ${widget.directoryName}, screen size: $screenSize',
+      );
+    }
     _params = MediaViewModelParams(
       directoryPath: widget.directoryPath,
       directoryName: widget.directoryName,
@@ -642,9 +651,12 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     Set<String> selectedMediaIds,
     bool isSelectionMode,
   ) {
-    debugPrint(
-      'MediaGridScreen: Building grid with ${media.length} items, $columns columns, screen size: ${MediaQuery.of(context).size}',
-    );
+    final screenSize = MediaQuery.of(context).size;
+    if (_shouldLogGrid(media.length, columns, screenSize)) {
+      _logMediaDebug(
+        'MediaGridScreen: Building grid with ${media.length} items, $columns columns, screen size: $screenSize',
+      );
+    }
     _pruneMediaItemKeys(media);
     final gridView = GridView.builder(
       padding: UiSpacing.gridPadding,
@@ -714,6 +726,39 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         ],
       ),
     );
+  }
+
+  bool _shouldLogBuild(Size screenSize) {
+    final hasDirectoryChanged = _lastLoggedDirectoryName != widget.directoryName;
+    final hasScreenChanged = _lastLoggedScreenSize != screenSize;
+    if (hasDirectoryChanged || hasScreenChanged) {
+      _lastLoggedDirectoryName = widget.directoryName;
+      _lastLoggedScreenSize = screenSize;
+      return true;
+    }
+    return false;
+  }
+
+  bool _shouldLogGrid(int itemCount, int columns, Size screenSize) {
+    final hasItemCountChanged = _lastLoggedGridItemCount != itemCount;
+    final hasColumnChanged = _lastLoggedGridColumns != columns;
+    final hasScreenSizeChanged = _lastLoggedGridSize != screenSize;
+
+    if (hasItemCountChanged || hasColumnChanged || hasScreenSizeChanged) {
+      _lastLoggedGridItemCount = itemCount;
+      _lastLoggedGridColumns = columns;
+      _lastLoggedGridSize = screenSize;
+      return true;
+    }
+
+    return false;
+  }
+
+  void _logMediaDebug(String message) {
+    if (!kDebugMode) {
+      return;
+    }
+    developer.log(message, name: 'MediaGridScreen');
   }
 
   void _handleMediaPointerDown(
