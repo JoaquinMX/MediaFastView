@@ -1,1 +1,76 @@
+import 'package:flutter/material.dart';
 
+/// Accessible high-contrast color schemes for the application.
+class AppColorScheme {
+  const AppColorScheme._();
+
+  /// Light color scheme tuned for WCAG contrast.
+  static const ColorScheme light = ColorScheme(
+    brightness: Brightness.light,
+    primary: Color(0xFF0F3D91),
+    onPrimary: Colors.white,
+    primaryContainer: Color(0xFFD7E2FF),
+    onPrimaryContainer: Color(0xFF0A285F),
+    secondary: Color(0xFF34515E),
+    onSecondary: Colors.white,
+    secondaryContainer: Color(0xFFD7E8F0),
+    onSecondaryContainer: Color(0xFF101F26),
+    tertiary: Color(0xFF0E6B50),
+    onTertiary: Colors.white,
+    tertiaryContainer: Color(0xFFB9F1D9),
+    onTertiaryContainer: Color(0xFF063524),
+    error: Color(0xFFB3261E),
+    onError: Colors.white,
+    errorContainer: Color(0xFFFCDADA),
+    onErrorContainer: Color(0xFF410001),
+    background: Colors.white,
+    onBackground: Color(0xFF111418),
+    surface: Colors.white,
+    onSurface: Color(0xFF111418),
+    surfaceVariant: Color(0xFFE3E6EC),
+    onSurfaceVariant: Color(0xFF404653),
+    outline: Color(0xFF5D6675),
+    outlineVariant: Color(0xFFC5CAD4),
+    shadow: Colors.black,
+    scrim: Colors.black,
+    inverseSurface: Color(0xFF1F242B),
+    onInverseSurface: Colors.white,
+    inversePrimary: Color(0xFFAFC6FF),
+    surfaceTint: Color(0xFF0F3D91),
+  );
+
+  /// Dark color scheme with strong contrast for readability.
+  static const ColorScheme dark = ColorScheme(
+    brightness: Brightness.dark,
+    primary: Color(0xFFAFC6FF),
+    onPrimary: Color(0xFF0C295E),
+    primaryContainer: Color(0xFF0A285F),
+    onPrimaryContainer: Color(0xFFD7E2FF),
+    secondary: Color(0xFF9AB8C7),
+    onSecondary: Color(0xFF0F252F),
+    secondaryContainer: Color(0xFF1F3B47),
+    onSecondaryContainer: Color(0xFFD7E8F0),
+    tertiary: Color(0xFF92D4B5),
+    onTertiary: Color(0xFF043425),
+    tertiaryContainer: Color(0xFF0A4E3A),
+    onTertiaryContainer: Color(0xFFB9F1D9),
+    error: Color(0xFFF2B8B5),
+    onError: Color(0xFF601410),
+    errorContainer: Color(0xFF8C1D18),
+    onErrorContainer: Color(0xFFFCDADA),
+    background: Color(0xFF0E1116),
+    onBackground: Colors.white,
+    surface: Color(0xFF111418),
+    onSurface: Colors.white,
+    surfaceVariant: Color(0xFF404653),
+    onSurfaceVariant: Color(0xFFC5CAD4),
+    outline: Color(0xFF8A93A1),
+    outlineVariant: Color(0xFF404653),
+    shadow: Colors.black,
+    scrim: Colors.black,
+    inverseSurface: Color(0xFFE3E6EC),
+    onInverseSurface: Color(0xFF111418),
+    inversePrimary: Color(0xFF0F3D91),
+    surfaceTint: Color(0xFFAFC6FF),
+  );
+}

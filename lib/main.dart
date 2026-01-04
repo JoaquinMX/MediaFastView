@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/themes/app_theme.dart';
 import 'shared/providers/settings_providers.dart';
 import 'shared/widgets/main_navigation.dart';
 
@@ -17,17 +18,8 @@ class MyApp extends ConsumerWidget {
 
     return MaterialApp(
       title: 'Media Fast View',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
       home: const MainNavigation(),
     );
