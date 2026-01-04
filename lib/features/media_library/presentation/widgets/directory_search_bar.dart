@@ -14,7 +14,7 @@ class DirectorySearchBar extends ConsumerStatefulWidget {
 class _DirectorySearchBarState extends ConsumerState<DirectorySearchBar> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
-  late final ProviderSubscription<DirectoryState> _directorySubscription;
+  late final ProviderSubscription<String> _directorySubscription;
 
   @override
   void initState() {
@@ -26,22 +26,19 @@ class _DirectorySearchBarState extends ConsumerState<DirectorySearchBar> {
         TextSelection.collapsed(offset: _controller.text.length);
     _focusNode = FocusNode();
 
-    _directorySubscription =
-        ref.listenManual<DirectoryState>(directoryViewModelProvider, (previous, next) {
-      final nextQuery = _extractSearchQuery(next);
-      if (nextQuery == _controller.text) {
-        return;
-      }
+    _directorySubscription = ref.listenManual<String>(
+      directoryViewModelProvider.select(_extractSearchQuery),
+      (previous, next) {
+        if (next == _controller.text || _focusNode.hasPrimaryFocus) {
+          return;
+        }
 
-      if (_focusNode.hasPrimaryFocus) {
-        return;
-      }
-
-      _controller.value = TextEditingValue(
-        text: nextQuery,
-        selection: TextSelection.collapsed(offset: nextQuery.length),
-      );
-    });
+        _controller.value = _controller.value.copyWith(
+          text: next,
+          selection: TextSelection.collapsed(offset: next.length),
+        );
+      },
+    );
   }
 
   @override
@@ -68,7 +65,6 @@ class _DirectorySearchBarState extends ConsumerState<DirectorySearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
 
     return Padding(
