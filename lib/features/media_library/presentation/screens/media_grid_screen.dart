@@ -14,6 +14,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
+import '../../../../shared/widgets/shortcut_help_overlay.dart';
 
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
@@ -63,6 +64,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   Map<String, Rect> _mediaCachedItemRects = <String, Rect>{};
   List<DirectoryNavigationTarget> _siblingNavigationTargets = const [];
   int _currentDirectoryNavigationIndex = 0;
+  late final FocusNode _focusNode;
   Size? _lastLoggedScreenSize;
   Size? _lastLoggedGridSize;
   String? _lastLoggedDirectoryName;
@@ -74,10 +76,17 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode();
     _applyNavigationContext(
       widget.siblingDirectories,
       widget.currentDirectoryIndex,
     );
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
   }
 
   @override
@@ -259,7 +268,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
               ),
         },
         child: Focus(
+          focusNode: _focusNode,
           autofocus: true,
+          onKeyEvent: _handleKeyEvent,
           child: Scaffold(
             appBar: isSelectionMode
                 ? _buildSelectionAppBar(
@@ -387,6 +398,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           icon: const Icon(Icons.view_module),
           onPressed: () => _showColumnSelector(context),
         ),
+        IconButton(
+          icon: const Icon(Icons.help_outline),
+          tooltip: 'Keyboard shortcuts (?)',
+          onPressed: _showShortcutHelp,
+        ),
       ],
     );
   }
@@ -443,6 +459,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             textStyle: const TextStyle(fontSize: 12),
           ),
+        ),
+        IconButton(
+          onPressed: _showShortcutHelp,
+          icon: const Icon(Icons.help_outline),
+          tooltip: 'Keyboard shortcuts (?)',
         ),
         const SizedBox(width: 8),
       ],
@@ -1190,6 +1211,40 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         // Delete option is handled by FileOperationButton
       ],
     );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    if (_isQuestionMark(event)) {
+      unawaited(_showShortcutHelp());
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  bool _isQuestionMark(KeyEvent event) {
+    if (event.character == '?') {
+      return true;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.slash) {
+      final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+      return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+          pressed.contains(LogicalKeyboardKey.shiftRight);
+    }
+
+    return false;
+  }
+
+  Future<void> _showShortcutHelp() async {
+    await ShortcutHelpOverlay.show(context);
+    if (mounted) {
+      _focusNode.requestFocus();
+    }
   }
 
   String _formatFileSize(int bytes) {
