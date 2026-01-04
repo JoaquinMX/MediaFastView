@@ -9,10 +9,13 @@ import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/directory_entity.dart';
-
+/// Provides updates while scanning directories for media files.
+typedef DirectoryScanProgressCallback =
+    void Function(DirectoryScanProgress progress);
+    
 /// Data source for local directory operations on the file system.
 class LocalDirectoryDataSource {
-  const LocalDirectoryDataSource({
+   LocalDirectoryDataSource({
     required this.bookmarkService,
   });
 
@@ -23,10 +26,7 @@ class LocalDirectoryDataSource {
   static const _scanCancelledType = 'cancelled';
   static const _scanCancelMessage = 'cancel';
 
-  /// Provides updates while scanning directories for media files.
-  typedef DirectoryScanProgressCallback = void Function(
-    DirectoryScanProgress progress,
-  );
+  
 
   /// Supported media file extensions for directory scanning
   static const Set<String> _mediaExtensions = {

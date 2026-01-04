@@ -1064,7 +1064,7 @@ class MediaViewModelParams {
     String? bookmarkData,
     List<DirectoryNavigationTarget>? siblingDirectories,
     int? currentIndex,
-    {bool replaceCurrentRoute},
+    {bool replaceCurrentRoute}
   )?
   navigateToDirectory;
   final Future<String?> Function()? onPermissionRecoveryNeeded;
