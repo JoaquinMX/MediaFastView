@@ -8,7 +8,7 @@ import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/widgets/file_operation_button.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
 import '../models/duplicate_group.dart';
-import '../view_models/duplicate_media_provider.dart';
+import '../view_models/duplicate_media_scan_provider.dart';
 
 /// Panel that surfaces suspected duplicate media items grouped by signature.
 class DuplicateMediaPanel extends ConsumerWidget {
@@ -16,66 +16,56 @@ class DuplicateMediaPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final duplicateGroups = ref.watch(duplicateMediaGroupsProvider);
+    final scanState = ref.watch(duplicateMediaScanProvider);
+    final groups = scanState.groups;
 
-    return duplicateGroups.when(
-      data: (groups) {
-        if (groups.isEmpty) {
-          return const SizedBox.shrink();
-        }
+    if (groups.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-        return Padding(
-          padding: UiSpacing.gridPadding,
-          child: Card(
-            elevation: UiSizing.elevationLow,
-            child: Padding(
-              padding: UiSpacing.dialogPadding,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: UiSpacing.gridPadding,
+      child: Card(
+        elevation: UiSizing.elevationLow,
+        child: Padding(
+          padding: UiSpacing.dialogPadding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.copy),
-                      const SizedBox(width: UiSpacing.smallGap),
-                      Text(
-                        'Suspected duplicates',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: 'Refresh duplicates',
-                        onPressed: () => ref.refresh(duplicateMediaGroupsProvider),
-                        icon: const Icon(Icons.refresh),
-                      ),
-                    ],
+                  const Icon(Icons.copy),
+                  const SizedBox(width: UiSpacing.smallGap),
+                  Text(
+                    'Suspected duplicates',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: UiSpacing.verticalGap),
-                  SizedBox(
-                    height: 240,
-                    child: ListView.separated(
-                      itemBuilder: (context, index) {
-                        final group = groups[index];
-                        return _DuplicateGroupTile(group: group);
-                      },
-                      separatorBuilder: (_, __) => const SizedBox(
-                        height: UiSpacing.smallGap,
-                      ),
-                      itemCount: groups.length,
-                    ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Refresh duplicates',
+                    onPressed: () =>
+                        ref.read(duplicateMediaScanProvider.notifier).refresh(),
+                    icon: const Icon(Icons.refresh),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: UiSpacing.verticalGap),
+              SizedBox(
+                height: 240,
+                child: ListView.separated(
+                  itemBuilder: (context, index) {
+                    final group = groups[index];
+                    return _DuplicateGroupTile(group: group);
+                  },
+                  separatorBuilder: (_, __) => const SizedBox(
+                    height: UiSpacing.smallGap,
+                  ),
+                  itemCount: groups.length,
+                ),
+              ),
+            ],
           ),
-        );
-      },
-      loading: () => const Padding(
-        padding: UiSpacing.gridPadding,
-        child: LinearProgressIndicator(),
-      ),
-      error: (error, _) => Padding(
-        padding: UiSpacing.gridPadding,
-        child: Text('Failed to load duplicates: $error'),
+        ),
       ),
     );
   }

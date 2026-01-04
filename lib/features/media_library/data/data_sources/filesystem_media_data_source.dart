@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:path/path.dart' as path;
 import 'package:crypto/crypto.dart';
@@ -449,11 +449,14 @@ class FilesystemMediaDataSource {
   }
 
   /// Generates a lightweight signature for duplicate detection using the
-  /// first 256KB of the file combined with its size.
+  /// first chunk of the file combined with its size.
   Future<String?> _generateSignature(File file, int size) async {
     try {
       final raf = await file.open();
-      final bytesToRead = size < 262144 ? size : 262144; // 256KB cap
+      // Read only a small portion of the file to keep scans lightweight.
+      // 64KB is enough entropy for a stable signature while avoiding heavy I/O.
+      const maxBytes = 65536;
+      final bytesToRead = size < maxBytes ? size : maxBytes;
       final buffer = await raf.read(bytesToRead);
       await raf.close();
 
