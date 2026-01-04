@@ -20,6 +20,7 @@ import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
 import '../../../../shared/providers/settings_providers.dart';
+import '../../../../shared/widgets/shortcut_help_overlay.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../../shared/widgets/tag_selection_dialog.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';
@@ -58,10 +59,12 @@ class _FullScreenViewerScreenState
   Timer? _hideControlsTimer;
   final GlobalKey<FullScreenVideoPlayerState> _videoPlayerKey =
       GlobalKey<FullScreenVideoPlayerState>();
+  late final FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode();
     _viewModel = ref.read(fullScreenViewModelProvider.notifier);
     _initializeViewer();
   }
@@ -81,6 +84,7 @@ class _FullScreenViewerScreenState
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -94,6 +98,7 @@ class _FullScreenViewerScreenState
     return Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
+        focusNode: _focusNode,
         autofocus: true,
         onKeyEvent: _handleKeyEvent,
         child: Stack(
@@ -146,6 +151,14 @@ class _FullScreenViewerScreenState
                             : Icon(Icons.close, color: colorScheme.onSurface),
                       ),
                       const Spacer(),
+                      IconButton(
+                        onPressed: _showShortcutHelp,
+                        icon: Icon(
+                          Icons.help_outline,
+                          color: colorScheme.onSurface,
+                        ),
+                        tooltip: 'Keyboard shortcuts (?)',
+                      ),
                       FavoriteToggleButton(
                         isFavorite: state.isFavorite,
                         onToggle: () => _toggleFavoriteAndRefreshTags(),
@@ -540,6 +553,27 @@ class _FullScreenViewerScreenState
     }
   }
 
+  bool _isQuestionMark(KeyEvent event) {
+    if (event.character == '?') {
+      return true;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.slash) {
+      final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+      return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+          pressed.contains(LogicalKeyboardKey.shiftRight);
+    }
+
+    return false;
+  }
+
+  Future<void> _showShortcutHelp() async {
+    await ShortcutHelpOverlay.show(context);
+    if (mounted) {
+      _focusNode.requestFocus();
+    }
+  }
+
   Widget _buildVideoContent(MediaEntity media) {
     final currentState = ref.watch(fullScreenViewModelProvider);
     final colorScheme = Theme.of(context).colorScheme;
@@ -732,6 +766,11 @@ class _FullScreenViewerScreenState
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (_isQuestionMark(event)) {
+      unawaited(_showShortcutHelp());
+      return KeyEventResult.handled;
+    }
 
     final state = ref.read(fullScreenViewModelProvider);
     if (state is! FullScreenLoaded) return KeyEventResult.ignored;

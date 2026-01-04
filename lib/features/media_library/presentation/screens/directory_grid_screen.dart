@@ -15,6 +15,7 @@ import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
+import '../../../../shared/widgets/shortcut_help_overlay.dart';
 import '../../domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/states/tag_state.dart';
 import '../../../tagging/presentation/view_models/tag_management_view_model.dart';
@@ -50,6 +51,19 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   Set<String> _directoryMarqueeBaseSelection = <String>{};
   Set<String> _directoryLastMarqueeSelection = <String>{};
   Map<String, Rect> _directoryCachedItemRects = <String, Rect>{};
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +99,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
               ),
         },
         child: Focus(
+          focusNode: _focusNode,
           autofocus: true,
+          onKeyEvent: _handleKeyEvent,
           child: Scaffold(
             appBar: isSelectionMode
                 ? _buildDirectorySelectionAppBar(
@@ -224,6 +240,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
           icon: const Icon(Icons.view_module),
           onPressed: () => _showColumnSelector(context, ref),
         ),
+        IconButton(
+          icon: const Icon(Icons.help_outline),
+          tooltip: 'Keyboard shortcuts (?)',
+          onPressed: _showShortcutHelp,
+        ),
       ],
     );
   }
@@ -275,6 +296,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             textStyle: const TextStyle(fontSize: 12),
           ),
+        ),
+        IconButton(
+          onPressed: _showShortcutHelp,
+          icon: const Icon(Icons.help_outline),
+          tooltip: 'Keyboard shortcuts (?)',
         ),
         const SizedBox(width: 8),
       ],
@@ -1141,6 +1167,40 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         ],
       ),
     );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    if (_isQuestionMark(event)) {
+      unawaited(_showShortcutHelp());
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  bool _isQuestionMark(KeyEvent event) {
+    if (event.character == '?') {
+      return true;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.slash) {
+      final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+      return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+          pressed.contains(LogicalKeyboardKey.shiftRight);
+    }
+
+    return false;
+  }
+
+  Future<void> _showShortcutHelp() async {
+    await ShortcutHelpOverlay.show(context);
+    if (mounted) {
+      _focusNode.requestFocus();
+    }
   }
 
   Future<void> _assignTagsToDirectory(
