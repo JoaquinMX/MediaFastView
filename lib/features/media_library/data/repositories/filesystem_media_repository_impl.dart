@@ -39,6 +39,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       tagIds: entity.tagIds,
       directoryId: entity.directoryId,
       bookmarkData: entity.bookmarkData,
+      signature: entity.signature,
     );
   }
 
@@ -326,13 +327,14 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
         path: entity.path,
         name: entity.name,
         type: entity.type,
-        size: entity.size,
-        lastModified: entity.lastModified,
-        tagIds: mergedTagIds.toList(growable: false),
-        directoryId: entity.directoryId,
-        bookmarkData: entity.bookmarkData,
-      );
-    }).toList();
+      size: entity.size,
+      lastModified: entity.lastModified,
+      tagIds: mergedTagIds.toList(growable: false),
+      directoryId: entity.directoryId,
+      bookmarkData: entity.bookmarkData,
+      signature: entity.signature,
+    );
+  }).toList();
     await _mediaDataSource.addMedia(mergedModels);
     return mergedModels;
   }
@@ -349,6 +351,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       tagIds: model.tagIds,
       directoryId: model.directoryId,
       bookmarkData: model.bookmarkData,
+      signature: model.signature,
     );
   }
 

@@ -22,6 +22,7 @@ class MediaEntity {
     required this.tagIds,
     required this.directoryId,
     this.bookmarkData,
+    this.signature,
   });
 
   final String id;
@@ -33,6 +34,7 @@ class MediaEntity {
   final List<String> tagIds;
   final String directoryId;
   final String? bookmarkData;
+  final String? signature;
 
   /// Creates a copy with updated fields.
   MediaEntity copyWith({
@@ -45,6 +47,7 @@ class MediaEntity {
     List<String>? tagIds,
     String? directoryId,
     String? bookmarkData,
+    String? signature,
   }) {
     return MediaEntity(
       id: id ?? this.id,
@@ -56,6 +59,7 @@ class MediaEntity {
       tagIds: tagIds ?? this.tagIds,
       directoryId: directoryId ?? this.directoryId,
       bookmarkData: bookmarkData ?? this.bookmarkData,
+      signature: signature ?? this.signature,
     );
   }
 
@@ -71,5 +75,5 @@ class MediaEntity {
 
   @override
   String toString() =>
-      'MediaEntity(id: $id, path: $path, name: $name, type: $type, size: $size, lastModified: $lastModified, tagIds: $tagIds, directoryId: $directoryId, bookmarkData: $bookmarkData)';
+      'MediaEntity(id: $id, path: $path, name: $name, type: $type, size: $size, lastModified: $lastModified, tagIds: $tagIds, directoryId: $directoryId, bookmarkData: $bookmarkData, signature: $signature)';
 }

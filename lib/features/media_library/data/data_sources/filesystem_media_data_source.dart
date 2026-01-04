@@ -415,10 +415,12 @@ class FilesystemMediaDataSource {
      try {
        // Get file stats - this is the potential bottleneck
        final statStart = DateTime.now();
-       final stat = await file.stat();
-       final statDuration = DateTime.now().difference(statStart);
-       final size = stat.size;
-       final lastModified = stat.modified;
+      final stat = await file.stat();
+      final statDuration = DateTime.now().difference(statStart);
+      final size = stat.size;
+      final lastModified = stat.modified;
+
+      final signature = await _generateSignature(file, size);
 
        // Log slow file.stat() calls (over 10ms)
        if (statDuration.inMilliseconds > 10) {
@@ -433,17 +435,37 @@ class FilesystemMediaDataSource {
          path: file.path,
          name: fileName,
          type: mediaType,
-         size: size,
-         lastModified: lastModified,
-         directoryId: directoryId,
-         tagIds: const [],
-       );
-     } catch (e) {
-       // Skip files we can't process
-       LoggingService.instance.debug('Failed to process file ${file.path}: $e');
-       return null;
-     }
-   }
+        size: size,
+        lastModified: lastModified,
+        directoryId: directoryId,
+        tagIds: const [],
+        signature: signature,
+      );
+    } catch (e) {
+      // Skip files we can't process
+      LoggingService.instance.debug('Failed to process file ${file.path}: $e');
+      return null;
+    }
+  }
+
+  /// Generates a lightweight signature for duplicate detection using the
+  /// first 256KB of the file combined with its size.
+  Future<String?> _generateSignature(File file, int size) async {
+    try {
+      final raf = await file.open();
+      final bytesToRead = size < 262144 ? size : 262144; // 256KB cap
+      final buffer = await raf.read(bytesToRead);
+      await raf.close();
+
+      final signatureInput = <int>[...buffer, ...utf8.encode('$size')];
+      return sha1.convert(signatureInput).toString();
+    } catch (e) {
+      LoggingService.instance.debug(
+        'Failed to generate signature for ${file.path}: $e',
+      );
+      return null;
+    }
+  }
 
   /// Determines the media type from file extension.
   MediaType? _getMediaType(String extension) {

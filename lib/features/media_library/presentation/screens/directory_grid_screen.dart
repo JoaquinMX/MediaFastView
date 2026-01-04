@@ -28,6 +28,7 @@ import '../view_models/directory_grid_view_model.dart';
 import '../widgets/directory_grid_item.dart';
 import '../widgets/directory_search_bar.dart';
 import '../widgets/column_selector_popup.dart';
+import '../widgets/duplicate_media_panel.dart';
 import 'media_grid_screen.dart';
 
 /// Screen for displaying directories in a customizable grid layout.
@@ -105,6 +106,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                     children: [
                       const DirectorySearchBar(),
                       _buildTagFilter(viewModel),
+                      const DuplicateMediaPanel(),
                       Expanded(
                         child: switch (state) {
                           DirectoryLoading() => const Center(
