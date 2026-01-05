@@ -11,6 +11,7 @@ typedef TagDeletionCallback = Future<void> Function(BuildContext context, TagEnt
 typedef TagCreationCallback = Future<void> Function(BuildContext context);
 typedef TagSelectionConfirmCallback<T> = Future<T?> Function(List<String> tagIds);
 typedef TagSelectionLoader = Future<List<String>> Function();
+typedef TagLongPressCallback = Future<void> Function(TagEntity tag);
 
 /// A flexible dialog for selecting and managing tags across multiple flows.
 ///
@@ -33,6 +34,7 @@ class TagSelectionDialog<T> extends ConsumerStatefulWidget {
     this.cancelResult,
     this.onSelectionChanged,
     this.onTagToggle,
+    this.onTagLongPress,
     this.onDeleteTag,
     this.onCreateTag,
     this.showCreateButton = false,
@@ -68,6 +70,9 @@ class TagSelectionDialog<T> extends ConsumerStatefulWidget {
 
   /// Invoked when a tag is toggled. Used for immediate persistence flows.
   final TagToggleCallback? onTagToggle;
+
+  /// Callback invoked when a tag chip is long-pressed.
+  final TagLongPressCallback? onTagLongPress;
 
   /// Callback that is invoked when the delete icon on a tag is pressed.
   final TagDeletionCallback? onDeleteTag;
@@ -306,6 +311,9 @@ class _TagSelectionDialogState<T>
                       tag: tag,
                       selected: _selectedTagIds.contains(tag.id),
                       onTap: () => _handleTagTapped(context, tag),
+                      onLongPress: widget.onTagLongPress == null
+                          ? null
+                          : () => widget.onTagLongPress!(tag),
                       showDeleteIcon: widget.showDeleteButtons,
                       onDeleted: widget.showDeleteButtons
                           ? () => widget.onDeleteTag?.call(context, tag)

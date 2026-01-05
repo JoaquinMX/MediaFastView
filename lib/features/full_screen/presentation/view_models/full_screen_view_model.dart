@@ -13,10 +13,12 @@ import '../../../settings/domain/entities/playback_settings.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/settings_providers.dart';
+import '../../../../shared/providers/tag_shortcut_preferences_provider.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../../../shared/utils/tag_cache_refresher.dart';
 import '../../../../shared/utils/tag_lookup.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';
+import '../../../../shared/utils/tag_shortcut_preferences.dart';
 import '../../../../shared/utils/tag_usage_ranker.dart';
 import '../../domain/use_cases/load_media_for_viewing_use_case.dart';
 import '../../domain/entities/viewer_state_entity.dart';
@@ -31,6 +33,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     this._assignTagUseCase,
     this._tagLookup,
     this._tagCacheRefresher,
+    this._tagShortcutPreferences,
     PlaybackSettings playbackSettings, {
     TagMutationService? tagMutationService,
     TagUsageRanker? tagUsageRanker,
@@ -50,6 +53,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   final AssignTagUseCase _assignTagUseCase;
   final TagLookup _tagLookup;
   final TagCacheRefresher _tagCacheRefresher;
+  final TagShortcutPreferences _tagShortcutPreferences;
   final TagMutationService _tagMutationService;
   final TagUsageRanker _tagUsageRanker;
 
@@ -537,12 +541,19 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   Future<List<TagEntity>> _buildShortcutTags(
     List<MediaEntity> mediaList,
   ) async {
+    final configuredShortcuts = await _tagShortcutPreferences.loadShortcutTagIds();
     final rankedTagIds = _tagUsageRanker.rank(mediaList);
-    if (rankedTagIds.isEmpty) {
+
+    final mergedTagIds = <String>[
+      ...configuredShortcuts,
+      ...rankedTagIds.where((id) => !configuredShortcuts.contains(id)),
+    ].take(TagUsageRanker.defaultLimit).toList();
+
+    if (mergedTagIds.isEmpty) {
       return const <TagEntity>[];
     }
 
-    final resolvedTags = await _tagLookup.getTagsByIds(rankedTagIds);
+    final resolvedTags = await _tagLookup.getTagsByIds(mergedTagIds);
     if (resolvedTags.isEmpty) {
       return const <TagEntity>[];
     }
@@ -552,7 +563,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     };
 
     return [
-      for (final tagId in rankedTagIds)
+      for (final tagId in mergedTagIds)
         if (tagsById.containsKey(tagId)) tagsById[tagId]!,
     ];
   }
@@ -647,6 +658,7 @@ final fullScreenViewModelProvider =
       ref.watch(assignTagUseCaseProvider),
       ref.watch(tagLookupProvider),
       ref.watch(tagCacheRefresherProvider),
+      ref.watch(tagShortcutPreferencesProvider),
       ref.read(videoPlaybackSettingsProvider),
       tagMutationService: ref.watch(tagMutationServiceProvider),
     );

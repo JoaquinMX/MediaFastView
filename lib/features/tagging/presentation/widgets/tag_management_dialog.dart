@@ -9,6 +9,7 @@ import '../../domain/use_cases/assign_tag_use_case.dart';
 import '../view_models/tag_management_view_model.dart';
 import '../view_models/tags_view_model.dart';
 import 'tag_creation_dialog.dart';
+import 'tag_edit_dialog.dart';
 
 /// A dialog for managing tags - viewing, adding, removing, and assigning.
 class TagManagementDialog extends ConsumerWidget {
@@ -52,7 +53,10 @@ class TagManagementDialog extends ConsumerWidget {
               // nested directories, causing the new tag to be lost on reload.
               await assignTagUseCase.toggleTagOnMedia(media!.id, tag);
               await tagsNotifier.refreshTags();
-            },
+          },
+      onTagLongPress: media == null
+          ? (tag) => TagEditDialog.show(context, tag)
+          : null,
       showCancelButton: true,
       cancelLabel: 'Close',
       showConfirmButton: false,
