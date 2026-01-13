@@ -84,6 +84,7 @@ class _FullScreenViewerScreenState
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
+    _videoPlayerKey.currentState?.stopPlayback();
     _focusNode.dispose();
     super.dispose();
   }
@@ -679,6 +680,7 @@ class _FullScreenViewerScreenState
   }
 
   void _popWithResult() {
+    _videoPlayerKey.currentState?.stopPlayback();
     final currentDirectory = _viewModel.currentDirectory;
     if (currentDirectory == null) {
       Navigator.of(context).pop();
