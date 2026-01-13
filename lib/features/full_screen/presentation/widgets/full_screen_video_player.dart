@@ -170,6 +170,20 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     super.dispose();
   }
 
+  Future<void> stopPlayback() async {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+
+    try {
+      await controller.pause();
+      await controller.setVolume(0.0);
+    } catch (error) {
+      LoggingService.instance.error('Video stop error: $error');
+    }
+  }
+
   Future<void> seekTo(Duration position) async {
     if (_controller == null || !_controller!.value.isInitialized) {
       return;
@@ -212,6 +226,8 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     }
 
     try {
+      await controller.pause();
+      await controller.setVolume(0.0);
       await controller.dispose();
     } catch (error, stackTrace) {
       LoggingService.instance.error(
