@@ -126,60 +126,104 @@ class _FullScreenViewerScreenState
 
             // Overlay controls
             if (state is FullScreenLoaded && _showControls) ...[
-              // Top bar with close button and favorite toggle
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.7),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: _popWithResult,
-                        icon: Platform.isMacOS
-                            ? Icon(Icons.arrow_back, color: colorScheme.onSurface)
-                            : Icon(Icons.close, color: colorScheme.onSurface),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: _showShortcutHelp,
-                        icon: Icon(
-                          Icons.help_outline,
-                          color: colorScheme.onSurface,
-                        ),
-                        tooltip: 'Keyboard shortcuts (?)',
-                      ),
-                      FavoriteToggleButton(
-                        isFavorite: state.isFavorite,
-                        onToggle: () => _toggleFavoriteAndRefreshTags(),
-                        iconSize: 28,
-                        favoriteColor: colorScheme.error,
-                        idleColor: colorScheme.onSurface,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              Positioned(
-                top: 72,
-                left: 16,
-                right: 16,
+              Positioned.fill(
                 child: SafeArea(
                   top: true,
                   bottom: false,
-                  child: _buildTagHeader(state),
+                  child: Stack(
+                    children: [
+                      // Top bar with close button and favorite toggle
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.7),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                onPressed: _popWithResult,
+                                icon: Platform.isMacOS
+                                    ? Icon(
+                                        Icons.arrow_back,
+                                        color: colorScheme.onSurface,
+                                      )
+                                    : Icon(
+                                        Icons.close,
+                                        color: colorScheme.onSurface,
+                                      ),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                onPressed: _showShortcutHelp,
+                                icon: Icon(
+                                  Icons.help_outline,
+                                  color: colorScheme.onSurface,
+                                ),
+                                tooltip: 'Keyboard shortcuts (?)',
+                              ),
+                              FavoriteToggleButton(
+                                isFavorite: state.isFavorite,
+                                onToggle: () => _toggleFavoriteAndRefreshTags(),
+                                iconSize: 28,
+                                favoriteColor: colorScheme.error,
+                                idleColor: colorScheme.onSurface,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      Positioned(
+                        top: 72,
+                        left: 16,
+                        right: 16,
+                        child: _buildTagHeader(state),
+                      ),
+
+                      // Navigation arrows
+                      Positioned(
+                        left: 16,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: IconButton(
+                            onPressed: _handlePreviousNavigation,
+                            icon: Icon(
+                              Icons.chevron_left,
+                              color: colorScheme.onSurface,
+                              size: 48,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 16,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: IconButton(
+                            onPressed: _handleNextNavigation,
+                            icon: Icon(
+                              Icons.chevron_right,
+                              color: colorScheme.onSurface,
+                              size: 48,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -207,38 +251,6 @@ class _FullScreenViewerScreenState
                     ),
                   ),
                 ),
-
-              // Navigation arrows
-              Positioned(
-                left: 16,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: IconButton(
-                    onPressed: _handlePreviousNavigation,
-                    icon: Icon(
-                      Icons.chevron_left,
-                      color: colorScheme.onSurface,
-                      size: 48,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 16,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: IconButton(
-                    onPressed: _handleNextNavigation,
-                    icon: Icon(
-                      Icons.chevron_right,
-                      color: colorScheme.onSurface,
-                      size: 48,
-                    ),
-                  ),
-                ),
-              ),
             ],
           ],
         ),
