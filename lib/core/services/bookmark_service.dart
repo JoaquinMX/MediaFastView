@@ -21,13 +21,15 @@ class BookmarkService {
 
   BookmarkService._();
 
+  bool get _supportsBookmarks => Platform.isMacOS || Platform.isIOS;
+
   /// Creates a security-scoped bookmark from a directory URL
   /// Returns base64 encoded bookmark data on success
   Future<String> createBookmark(String directoryPath) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsBookmarks) {
         throw UnsupportedError(
-          'Bookmark operations are only supported on macOS',
+          'Bookmark operations are only supported on Apple platforms',
         );
       }
 
@@ -100,9 +102,9 @@ class BookmarkService {
   /// Note: The caller is responsible for calling stopAccessingBookmark when done
   Future<String> resolveBookmark(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsBookmarks) {
         throw UnsupportedError(
-          'Bookmark operations are only supported on macOS',
+          'Bookmark operations are only supported on Apple platforms',
         );
       }
 
@@ -128,8 +130,8 @@ class BookmarkService {
   /// Takes base64 encoded bookmark data
   Future<void> stopAccessingBookmark(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
-        return; // No-op on non-macOS platforms
+      if (!_supportsBookmarks) {
+        return; // No-op on unsupported platforms
       }
 
       await _channel.invokeMethod<void>(_stopAccessingBookmark, {
@@ -148,9 +150,9 @@ class BookmarkService {
   /// Takes base64 encoded bookmark data and returns true if valid
   Future<bool> isBookmarkValid(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsBookmarks) {
         throw UnsupportedError(
-          'Bookmark operations are only supported on macOS',
+          'Bookmark operations are only supported on Apple platforms',
         );
       }
 
@@ -173,9 +175,9 @@ class BookmarkService {
   /// Returns the resolved path
   Future<String> startAccessingBookmark(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsBookmarks) {
         throw UnsupportedError(
-          'Bookmark operations are only supported on macOS',
+          'Bookmark operations are only supported on Apple platforms',
         );
       }
 
