@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
   // Keep a pending FlutterResult while the picker is presented.
   private var pendingResult: FlutterResult?
+  private var activeSecurityScopedUrls = Set<URL>()
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
@@ -77,8 +78,15 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
     guard let result = pendingResult else { return }
     pendingResult = nil
 
+    // Start accessing security-scoped resources so external drive URLs remain usable.
+    for url in urls where url.isFileURL {
+      if url.startAccessingSecurityScopedResource() {
+        activeSecurityScopedUrls.insert(url)
+      }
+    }
+
     // Return file:// URL strings for practicality and clarity.
-    let urlStrings = urls.map { $0.absoluteString }
+    let urlStrings = urls.map { $0.filePathURL.absoluteString }
     result(urlStrings)
   }
 
@@ -112,6 +120,13 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
       return topMostViewController(from: presented)
     }
     return base
+  }
+
+  deinit {
+    for url in activeSecurityScopedUrls {
+      url.stopAccessingSecurityScopedResource()
+    }
+    activeSecurityScopedUrls.removeAll()
   }
 
   // MARK: - Bookmark APIs (macOS security-scope, iOS regular bookmarks)
