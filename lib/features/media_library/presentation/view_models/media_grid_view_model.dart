@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -731,18 +732,20 @@ class MediaViewModel extends StateNotifier<MediaState> {
             );
         _bookmarkData = null; // Clear bookmark data since we're re-selecting
 
-        // Try to create a new bookmark for the selected directory
-        try {
-          final bookmarkService = BookmarkService.instance;
-          _bookmarkData = await bookmarkService.createBookmark(_directoryPath);
-          LoggingService.instance.info(
-            'Created new bookmark for recovered directory',
-          );
-        } catch (e) {
-          LoggingService.instance.warning(
-            'Failed to create bookmark for recovered directory: $e',
-          );
-          // Continue without bookmark - it's not critical for basic functionality
+        if (Platform.isMacOS) {
+          // Try to create a new bookmark for the selected directory.
+          try {
+            final bookmarkService = BookmarkService.instance;
+            _bookmarkData = await bookmarkService.createBookmark(_directoryPath);
+            LoggingService.instance.info(
+              'Created new bookmark for recovered directory',
+            );
+          } catch (e) {
+            LoggingService.instance.warning(
+              'Failed to create bookmark for recovered directory: $e',
+            );
+            // Continue without bookmark - it's not critical for basic functionality.
+          }
         }
 
         await _updateDirectoryAccessUseCase(

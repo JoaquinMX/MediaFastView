@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:ui';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../core/services/directory_picker_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
@@ -194,7 +194,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       },
       onPermissionRecoveryNeeded: () async {
         try {
-          return await FilePicker.platform.getDirectoryPath();
+          final directoryPickerService = DirectoryPickerService();
+          return await directoryPickerService.pickSingleDirectory();
         } catch (e) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
