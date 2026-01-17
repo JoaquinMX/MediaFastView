@@ -193,7 +193,18 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         }
       },
       onPermissionRecoveryNeeded: () async {
-        return await FilePicker.platform.getDirectoryPath();
+        try {
+          return await FilePicker.platform.getDirectoryPath();
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to select directory: $e'),
+              ),
+            );
+          }
+          return null;
+        }
       },
     );
     final state = ref.watch(mediaViewModelProvider(_params!));

@@ -1030,11 +1030,28 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final path = await FilePicker.platform.getDirectoryPath();
-              if (path != null) {
+              try {
+                final path = await FilePicker.platform.getDirectoryPath();
+                if (!context.mounted) {
+                  return;
+                }
+                if (path == null) {
+                  return;
+                }
                 final viewModel = ref.read(directoryViewModelProvider.notifier);
                 await viewModel.addDirectory(path);
-                if (context.mounted) Navigator.of(context).pop();
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                }
+              } catch (e) {
+                if (!context.mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to select directory: $e'),
+                  ),
+                );
               }
             },
             child: const Text('Browse'),
