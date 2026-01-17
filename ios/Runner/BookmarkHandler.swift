@@ -86,7 +86,7 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
     }
 
     // Return file:// URL strings for practicality and clarity.
-    let urlStrings = urls.map { $0.filePathURL.absoluteString }
+      let urlStrings = urls.map { $0.absoluteString }
     result(urlStrings)
   }
 
