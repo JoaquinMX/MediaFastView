@@ -1,10 +1,9 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
-
 import '../config/app_config.dart';
 import '../error/app_error.dart';
 import 'bookmark_service.dart';
+import 'directory_picker_service.dart';
 import 'logging_service.dart';
 
 /// Enum representing the status of directory access permissions
@@ -149,10 +148,10 @@ class PermissionService {
       logPermissionEvent('directory_access_recovery_start', path: directoryPath);
 
       if (!Platform.isMacOS) {
-        // Fallback to file picker for non-macOS platforms
-        final selectedDirectory = await FilePicker.platform.getDirectoryPath(
+        final directoryPickerService = DirectoryPickerService();
+        final selectedDirectory = await directoryPickerService.pickSingleDirectory(
+          initialDirectoryPath: directoryPath,
           dialogTitle: 'Re-select Directory for Access Recovery',
-          initialDirectory: directoryPath,
         );
 
         if (selectedDirectory == null) {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart' as p;
 
 import '../../../../core/error/app_error.dart';
@@ -78,56 +80,58 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
     final directories = await getDirectories();
     final existing = directories.where((d) => d.path == directory.path).firstOrNull;
 
-    // Create security-scoped bookmark for macOS
+    // Create security-scoped bookmark for macOS.
     String? bookmarkData;
-    try {
-      final createdBookmark = await _bookmarkService.createBookmark(directory.path);
-      bookmarkData = createdBookmark;
-      LoggingService.instance.info('Bookmark created successfully for: ${directory.path}');
+    if (Platform.isMacOS) {
+      try {
+        final createdBookmark = await _bookmarkService.createBookmark(directory.path);
+        bookmarkData = createdBookmark;
+        LoggingService.instance.info('Bookmark created successfully for: ${directory.path}');
 
-      // Validate the created bookmark on macOS
-      if (createdBookmark.isNotEmpty) {
-        final validationResult = await _permissionService.validateBookmark(createdBookmark);
-        if (!validationResult.isValid) {
-          LoggingService.instance.error('CRITICAL: Created bookmark is invalid for directory ${directory.path}');
-          if (!silent) {
-            // Try to recover access (shows dialog)
-            final recoveryResult = await _permissionService.recoverDirectoryAccess(directory.path);
-            if (recoveryResult != null) {
-              LoggingService.instance.info('Recovered access for directory: ${recoveryResult.directoryPath}');
-              // Use bookmark data from recovery if available, otherwise create new one
-              final renewedBookmark = recoveryResult.bookmarkData ??
-                  await _bookmarkService.createBookmark(recoveryResult.directoryPath);
-              bookmarkData = renewedBookmark;
-              final validationResult2 = await _permissionService.validateBookmark(renewedBookmark);
-              if (!validationResult2.isValid) {
-                LoggingService.instance.error('CRITICAL: Recovered bookmark is still invalid');
+        // Validate the created bookmark on macOS.
+        if (createdBookmark.isNotEmpty) {
+          final validationResult = await _permissionService.validateBookmark(createdBookmark);
+          if (!validationResult.isValid) {
+            LoggingService.instance.error('CRITICAL: Created bookmark is invalid for directory ${directory.path}');
+            if (!silent) {
+              // Try to recover access (shows dialog).
+              final recoveryResult = await _permissionService.recoverDirectoryAccess(directory.path);
+              if (recoveryResult != null) {
+                LoggingService.instance.info('Recovered access for directory: ${recoveryResult.directoryPath}');
+                // Use bookmark data from recovery if available, otherwise create new one.
+                final renewedBookmark = recoveryResult.bookmarkData ??
+                    await _bookmarkService.createBookmark(recoveryResult.directoryPath);
+                bookmarkData = renewedBookmark;
+                final validationResult2 = await _permissionService.validateBookmark(renewedBookmark);
+                if (!validationResult2.isValid) {
+                  LoggingService.instance.error('CRITICAL: Recovered bookmark is still invalid');
+                  bookmarkData = null;
+                }
+                // Update directory path if different.
+                if (recoveryResult.directoryPath != directory.path) {
+                  directory = directory.copyWith(
+                    path: recoveryResult.directoryPath,
+                    id: generateDirectoryId(recoveryResult.directoryPath),
+                  );
+                }
+              } else {
+                LoggingService.instance.error('Recovery failed for directory ${directory.path}');
                 bookmarkData = null;
               }
-              // Update directory path if different
-              if (recoveryResult.directoryPath != directory.path) {
-                directory = directory.copyWith(
-                  path: recoveryResult.directoryPath,
-                  id: generateDirectoryId(recoveryResult.directoryPath),
-                );
-              }
             } else {
-              LoggingService.instance.error('Recovery failed for directory ${directory.path}');
+              // Silent mode: don't attempt recovery, just set bookmark to null.
+              LoggingService.instance.warning('Skipping recovery for directory ${directory.path} in silent mode');
               bookmarkData = null;
             }
-          } else {
-            // Silent mode: don't attempt recovery, just set bookmark to null
-            LoggingService.instance.warning('Skipping recovery for directory ${directory.path} in silent mode');
-            bookmarkData = null;
           }
         }
+      } catch (e) {
+        if (e is BookmarkInvalidError) {
+          rethrow;
+        }
+        LoggingService.instance.warning('Failed to create bookmark for: ${directory.path}, proceeding without bookmark: $e');
+        // Continue without bookmark - this allows the app to work on non-macOS platforms.
       }
-    } catch (e) {
-      if (e is BookmarkInvalidError) {
-        rethrow;
-      }
-      LoggingService.instance.warning('Failed to create bookmark for: ${directory.path}, proceeding without bookmark: $e');
-      // Continue without bookmark - this allows the app to work on non-macOS platforms
     }
 
     final preservedTagIds = directory.tagIds.isNotEmpty
