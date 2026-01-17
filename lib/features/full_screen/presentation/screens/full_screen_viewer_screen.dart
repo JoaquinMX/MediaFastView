@@ -60,6 +60,10 @@ class _FullScreenViewerScreenState
   final GlobalKey<FullScreenVideoPlayerState> _videoPlayerKey =
       GlobalKey<FullScreenVideoPlayerState>();
   late final FocusNode _focusNode;
+  Offset? _swipeStartPosition;
+  Offset? _swipeLatestPosition;
+  int? _swipePointerId;
+  Stopwatch? _swipeStopwatch;
 
   @override
   void initState() {
@@ -249,40 +253,49 @@ class _FullScreenViewerScreenState
   Widget _buildMediaContent(FullScreenLoaded state) {
     final media = state.currentMedia;
     final colorScheme = Theme.of(context).colorScheme;
+    final isMobilePlatform = _isMobilePlatform();
 
-    return GestureDetector(
-      onTap: () => setState(() => _showControls = !_showControls),
-      onDoubleTap: () =>
-          _popWithResult(), // Double-tap to exit full-screen
-      onLongPress: () => _showMediaInfo(media), // Long-press to show media info
-      onSecondaryTap: () => _showContextMenu(media), // Right-click context menu
-      child: MouseRegion(
-        onHover: (_) {
-          _hideControlsTimer?.cancel();
-          setState(() => _showControls = true);
-        },
-        onExit: (_) {
-          _hideControlsTimer?.cancel();
-          _hideControlsTimer = Timer(const Duration(seconds: 3), () {
-            if (mounted) setState(() => _showControls = false);
-          });
-        },
-        child: switch (media.type) {
-          MediaType.image => FullScreenImageViewer(media: media),
-          MediaType.video => _buildVideoContent(media),
-          MediaType.text => Center(
-            child: Text(
-              'Text file viewing not implemented',
-              style: TextStyle(color: colorScheme.onSurface),
+    return Listener(
+      onPointerDown: isMobilePlatform ? _handleSwipeStart : null,
+      onPointerMove: isMobilePlatform ? _handleSwipeUpdate : null,
+      onPointerUp: isMobilePlatform ? _handleSwipeEnd : null,
+      onPointerCancel: isMobilePlatform ? _handleSwipeCancel : null,
+      child: GestureDetector(
+        onTap: () => setState(() => _showControls = !_showControls),
+        onDoubleTap: () =>
+            _popWithResult(), // Double-tap to exit full-screen
+        onLongPress: () =>
+            _showMediaInfo(media), // Long-press to show media info
+        onSecondaryTap: () =>
+            _showContextMenu(media), // Right-click context menu
+        child: MouseRegion(
+          onHover: (_) {
+            _hideControlsTimer?.cancel();
+            setState(() => _showControls = true);
+          },
+          onExit: (_) {
+            _hideControlsTimer?.cancel();
+            _hideControlsTimer = Timer(const Duration(seconds: 3), () {
+              if (mounted) setState(() => _showControls = false);
+            });
+          },
+          child: switch (media.type) {
+            MediaType.image => FullScreenImageViewer(media: media),
+            MediaType.video => _buildVideoContent(media),
+            MediaType.text => Center(
+              child: Text(
+                'Text file viewing not implemented',
+                style: TextStyle(color: colorScheme.onSurface),
+              ),
             ),
-          ),
-          MediaType.directory => Center(
-            child: Text(
-              'Directory viewing not supported',
-              style: TextStyle(color: colorScheme.onSurface),
+            MediaType.directory => Center(
+              child: Text(
+                'Directory viewing not supported',
+                style: TextStyle(color: colorScheme.onSurface),
+              ),
             ),
-          ),
-        },
+          },
+        ),
       ),
     );
   }
@@ -600,6 +613,84 @@ class _FullScreenViewerScreenState
   void _handleSeek(Duration position) {
     _videoPlayerKey.currentState?.seekTo(position);
     _viewModel.seekTo(position);
+  }
+
+  bool _isMobilePlatform() {
+    return Platform.isAndroid || Platform.isIOS;
+  }
+
+  void _handleSwipeStart(PointerDownEvent event) {
+    if (event.kind != PointerDeviceKind.touch || _swipePointerId != null) {
+      return;
+    }
+
+    _swipePointerId = event.pointer;
+    _swipeStartPosition = event.position;
+    _swipeLatestPosition = event.position;
+    _swipeStopwatch = Stopwatch()..start();
+  }
+
+  void _handleSwipeUpdate(PointerMoveEvent event) {
+    if (event.pointer != _swipePointerId) {
+      return;
+    }
+
+    _swipeLatestPosition = event.position;
+  }
+
+  void _handleSwipeEnd(PointerUpEvent event) {
+    if (event.pointer != _swipePointerId) {
+      return;
+    }
+
+    final start = _swipeStartPosition;
+    final end = _swipeLatestPosition ?? event.position;
+    final elapsedMs = _swipeStopwatch?.elapsedMilliseconds ?? 0;
+    _resetSwipeTracking();
+
+    if (start == null || elapsedMs == 0) {
+      return;
+    }
+
+    final delta = end - start;
+    final absDx = delta.dx.abs();
+    final absDy = delta.dy.abs();
+    final velocity = delta.distance / elapsedMs;
+    const minSwipeDistance = 90.0;
+    const minSwipeVelocity = 0.25;
+
+    if (absDx > absDy &&
+        absDx > minSwipeDistance &&
+        velocity > minSwipeVelocity) {
+      if (delta.dx < 0) {
+        unawaited(_handleNextNavigation());
+      } else {
+        unawaited(_handlePreviousNavigation());
+      }
+      return;
+    }
+
+    if (delta.dy > minSwipeDistance &&
+        absDy > absDx &&
+        velocity > minSwipeVelocity) {
+      _popWithResult();
+    }
+  }
+
+  void _handleSwipeCancel(PointerCancelEvent event) {
+    if (event.pointer != _swipePointerId) {
+      return;
+    }
+
+    _resetSwipeTracking();
+  }
+
+  void _resetSwipeTracking() {
+    _swipePointerId = null;
+    _swipeStartPosition = null;
+    _swipeLatestPosition = null;
+    _swipeStopwatch?.stop();
+    _swipeStopwatch = null;
   }
 
   Future<void> _promptDirectoryNavigation(
