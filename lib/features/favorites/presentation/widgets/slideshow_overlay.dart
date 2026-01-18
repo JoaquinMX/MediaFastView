@@ -265,6 +265,7 @@ class _PlaybackSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final useCompactLayout = MediaQuery.sizeOf(context).width <= 600;
     return MediaPlaybackControls(
       isPlaying: viewModel.isPlaying,
       isLooping: viewModel.isLooping,
@@ -306,6 +307,7 @@ class _PlaybackSection extends StatelessWidget {
       style: MediaPlaybackControlStyle(
         progressBackgroundColor: Colors.white.withValues(alpha: 0.3),
       ),
+      useCompactLayout: useCompactLayout,
     );
   }
 }
@@ -326,4 +328,3 @@ class _ControlsHint extends StatelessWidget {
     );
   }
 }
-

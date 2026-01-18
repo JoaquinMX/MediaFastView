@@ -204,6 +204,7 @@ class MediaPlaybackControls extends StatelessWidget {
     this.icons = const MediaPlaybackControlIcons(),
     this.style = const MediaPlaybackControlStyle(),
     this.progressBuilder,
+    this.useCompactLayout = false,
   });
 
   final bool isPlaying;
@@ -231,9 +232,62 @@ class MediaPlaybackControls extends StatelessWidget {
   final MediaPlaybackControlIcons icons;
   final MediaPlaybackControlStyle style;
   final MediaPlaybackProgressBuilder? progressBuilder;
+  final bool useCompactLayout;
 
   @override
   Widget build(BuildContext context) {
+    if (useCompactLayout) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final primaryControls = _buildPrimaryControls();
+          final secondaryControls = _buildSecondaryControls(
+            context,
+            sliderWidth: constraints.maxWidth * 0.6,
+            progressBarWidth: constraints.maxWidth * 0.35,
+          );
+
+          return IconTheme(
+            data: style.iconTheme,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: primaryControls,
+                ),
+                SizedBox(height: style.sectionSpacing / 2),
+                if (secondaryControls.isNotEmpty)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(minWidth: constraints.maxWidth),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: secondaryControls,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    final children = _buildFullWidthControls(context);
+
+    return IconTheme(
+      data: style.iconTheme,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.max,
+        children: children,
+      ),
+    );
+  }
+
+  List<Widget> _buildFullWidthControls(BuildContext context) {
     final children = <Widget>[];
 
     void addControlSpacing() {
@@ -342,14 +396,138 @@ class MediaPlaybackControls extends StatelessWidget {
       ));
     }
 
-    return IconTheme(
-      data: style.iconTheme,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.max,
-        children: children,
-      ),
-    );
+    return children;
+  }
+
+  List<Widget> _buildPrimaryControls() {
+    final children = <Widget>[];
+
+    void addControlSpacing() {
+      if (children.isNotEmpty) {
+        children.add(SizedBox(width: style.controlSpacing));
+      }
+    }
+
+    void addSectionSpacing() {
+      if (children.isNotEmpty) {
+        children.add(SizedBox(width: style.sectionSpacing));
+      }
+    }
+
+    if (visibility.showPrevious) {
+      addControlSpacing();
+      children.add(_buildIconButton(
+        icon: icons.previous,
+        tooltip: 'Previous',
+        onPressed: availability.enablePrevious ? onPrevious : null,
+        isActive: false,
+      ));
+    }
+
+    if (visibility.showPlayPause) {
+      addControlSpacing();
+      children.add(_buildPlayPauseButton());
+    }
+
+    if (visibility.showNext) {
+      addControlSpacing();
+      children.add(_buildIconButton(
+        icon: icons.next,
+        tooltip: 'Next',
+        onPressed: availability.enableNext ? onNext : null,
+        isActive: false,
+      ));
+    }
+
+    if (visibility.showLoop) {
+      addSectionSpacing();
+      children.add(_buildIconButton(
+        icon: isLooping ? icons.loopEnabled : icons.loopDisabled,
+        tooltip: isLooping ? 'Disable loop' : 'Enable loop',
+        onPressed: availability.enableLoop ? onToggleLoop : null,
+        isActive: isLooping,
+      ));
+    }
+
+    if (visibility.showMute) {
+      addControlSpacing();
+      children.add(_buildIconButton(
+        icon: isMuted ? icons.muteEnabled : icons.muteDisabled,
+        tooltip: isMuted ? 'Unmute' : 'Mute',
+        onPressed: availability.enableMute ? onToggleMute : null,
+        isActive: false,
+      ));
+    }
+
+    return children;
+  }
+
+  List<Widget> _buildSecondaryControls(
+    BuildContext context, {
+    required double sliderWidth,
+    required double progressBarWidth,
+  }) {
+    final children = <Widget>[];
+
+    void addControlSpacing() {
+      if (children.isNotEmpty) {
+        children.add(SizedBox(width: style.controlSpacing));
+      }
+    }
+
+    void addSectionSpacing() {
+      if (children.isNotEmpty) {
+        children.add(SizedBox(width: style.sectionSpacing));
+      }
+    }
+
+    if (visibility.showShuffle) {
+      addControlSpacing();
+      children.add(_buildIconButton(
+        icon: icons.shuffle,
+        tooltip: isShuffleEnabled ? 'Disable shuffle' : 'Enable shuffle',
+        onPressed: availability.enableShuffle ? onToggleShuffle : null,
+        isActive: isShuffleEnabled,
+      ));
+    }
+
+    if (visibility.showPlaybackSpeed) {
+      addControlSpacing();
+      children.add(_buildPlaybackSpeedButton());
+    }
+
+    if (visibility.showDurationSlider) {
+      addSectionSpacing();
+      children.add(_buildDurationSlider(context, sliderWidth: sliderWidth));
+    }
+
+    if (visibility.showProgressBar) {
+      addSectionSpacing();
+      children.add(
+        _buildProgressBar(context, progressBarWidth: progressBarWidth),
+      );
+
+      if (visibility.showVideoLoop) {
+        addControlSpacing();
+        children.add(_buildIconButton(
+          icon: icons.videoLoop,
+          tooltip:
+              isVideoLooping ? 'Disable video loop' : 'Loop current video',
+          onPressed: availability.enableVideoLoop ? onToggleVideoLoop : null,
+          isActive: isVideoLooping,
+        ));
+      }
+    } else if (visibility.showVideoLoop) {
+      addSectionSpacing();
+      children.add(_buildIconButton(
+        icon: icons.videoLoop,
+        tooltip: isVideoLooping ? 'Disable video loop' : 'Loop current video',
+        onPressed: availability.enableVideoLoop ? onToggleVideoLoop : null,
+        isActive: isVideoLooping,
+      ));
+    }
+
+    return children;
   }
 
   Widget _buildPlayPauseButton() {
@@ -446,7 +624,7 @@ class MediaPlaybackControls extends StatelessWidget {
         : speed.toStringAsFixed(1);
   }
 
-  Widget _buildDurationSlider(BuildContext context) {
+  Widget _buildDurationSlider(BuildContext context, {double? sliderWidth}) {
     final minSeconds = minDuration.inSeconds;
     final maxSeconds = maxDuration.inSeconds;
 
@@ -457,7 +635,7 @@ class MediaPlaybackControls extends StatelessWidget {
     final clampedSeconds = currentSeconds.clamp(safeMin, safeMax).toInt();
 
     final slider = SizedBox(
-      width: style.durationSliderWidth,
+      width: sliderWidth ?? style.durationSliderWidth,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -508,14 +686,21 @@ class MediaPlaybackControls extends StatelessWidget {
     return IgnorePointer(ignoring: true, child: slider);
   }
 
-  Widget _buildProgressBar(BuildContext context) {
+  Widget _buildProgressBar(
+    BuildContext context, {
+    double? progressBarWidth,
+  }) {
     final progressValue = (progress ?? 0.0).clamp(0.0, 1.0);
     final widget = progressBuilder?.call(context, progressValue, style) ??
         _DefaultProgressBar(
           progress: progressValue,
           style: style,
         );
-    return SizedBox(height: style.progressBarHeight, child: widget);
+    return SizedBox(
+      width: progressBarWidth,
+      height: style.progressBarHeight,
+      child: widget,
+    );
   }
 }
 
