@@ -731,6 +731,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   }) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
+      onTapDown: (details) => _handleMediaBackgroundTap(details, viewModel),
       onLongPressStart: (details) =>
           _handleMediaLongPressStart(details, viewModel),
       onLongPressMoveUpdate: (details) =>
@@ -844,6 +845,26 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       appendMode: false,
       ensureSelectionMode: true,
     );
+  }
+
+  void _handleMediaBackgroundTap(
+    TapDownDetails details,
+    MediaViewModel viewModel,
+  ) {
+    if (!viewModel.isSelectionMode) {
+      return;
+    }
+    final localPosition = _localMediaPosition(details.globalPosition);
+    if (localPosition == null) {
+      return;
+    }
+
+    _mediaCachedItemRects = _computeMediaItemRects();
+    if (_isPointInsideAnyRect(localPosition, _mediaCachedItemRects.values)) {
+      return;
+    }
+
+    viewModel.clearMediaSelection();
   }
 
   void _handleMediaLongPressMove(
