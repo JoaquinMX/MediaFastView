@@ -729,34 +729,42 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     required Widget child,
     required MediaViewModel viewModel,
   }) {
-    return Listener(
+    return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (event) => _handleMediaPointerDown(event, viewModel),
-      onPointerMove: (event) => _handleMediaPointerMove(event, viewModel),
-      onPointerUp: (_) => _endMediaMarquee(),
-      onPointerCancel: (_) => _endMediaMarquee(),
-      child: Stack(
-        key: _mediaGridOverlayKey,
-        children: [
-          Positioned.fill(child: child),
-          if (_mediaSelectionRect != null)
-            Positioned.fromRect(
-              rect: _mediaSelectionRect!,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withOpacity(0.12),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: UiSizing.borderWidth,
+      onLongPressStart: (details) =>
+          _handleMediaLongPressStart(details, viewModel),
+      onLongPressMoveUpdate: (details) =>
+          _handleMediaLongPressMove(details, viewModel),
+      onLongPressEnd: (_) => _endMediaMarquee(),
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (event) => _handleMediaPointerDown(event, viewModel),
+        onPointerMove: (event) => _handleMediaPointerMove(event, viewModel),
+        onPointerUp: (_) => _endMediaMarquee(),
+        onPointerCancel: (_) => _endMediaMarquee(),
+        child: Stack(
+          key: _mediaGridOverlayKey,
+          children: [
+            Positioned.fill(child: child),
+            if (_mediaSelectionRect != null)
+              Positioned.fromRect(
+                rect: _mediaSelectionRect!,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacity(0.12),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: UiSizing.borderWidth,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -812,23 +820,46 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       return;
     }
 
-    _mediaCachedItemRects = _computeMediaItemRects();
     final localPosition = overlayBox.globalToLocal(event.position);
-    if (_isPointInsideAnyRect(localPosition, _mediaCachedItemRects.values)) {
+    _startMediaMarqueeSelection(
+      localPosition,
+      viewModel,
+      appendMode: _isMultiSelectModifierPressed(),
+      ensureSelectionMode: false,
+    );
+  }
+
+  void _handleMediaLongPressStart(
+    LongPressStartDetails details,
+    MediaViewModel viewModel,
+  ) {
+    final localPosition = _localMediaPosition(details.globalPosition);
+    if (localPosition == null) {
       return;
     }
 
-    final baseSelection = viewModel.selectedMediaIds;
-    _mediaMarqueeBaseSelection = Set<String>.from(baseSelection);
-    _mediaLastMarqueeSelection = Set<String>.from(baseSelection);
-    _mediaAppendMode = _isMultiSelectModifierPressed();
-    _isMediaMarqueeActive = true;
-    _mediaDragStart = localPosition;
+    _startMediaMarqueeSelection(
+      localPosition,
+      viewModel,
+      appendMode: false,
+      ensureSelectionMode: true,
+    );
+  }
 
-    setState(() {
-      _mediaSelectionRect = Rect.fromPoints(localPosition, localPosition);
-    });
+  void _handleMediaLongPressMove(
+    LongPressMoveUpdateDetails details,
+    MediaViewModel viewModel,
+  ) {
+    if (!_isMediaMarqueeActive) {
+      return;
+    }
+    final localPosition = _localMediaPosition(details.globalPosition);
+    if (localPosition == null) {
+      return;
+    }
 
+    _updateMediaSelectionRect(localPosition);
+    _mediaCachedItemRects = _computeMediaItemRects();
     _updateMediaMarqueeSelection(viewModel);
   }
 
@@ -856,12 +887,59 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     }
 
     final localPosition = overlayBox.globalToLocal(event.position);
+    _updateMediaSelectionRect(localPosition);
+    _mediaCachedItemRects = _computeMediaItemRects();
+    _updateMediaMarqueeSelection(viewModel);
+  }
+
+  void _startMediaMarqueeSelection(
+    Offset localPosition,
+    MediaViewModel viewModel, {
+    required bool appendMode,
+    required bool ensureSelectionMode,
+  }) {
+    _mediaCachedItemRects = _computeMediaItemRects();
+    if (_isPointInsideAnyRect(localPosition, _mediaCachedItemRects.values)) {
+      return;
+    }
+
+    if (ensureSelectionMode) {
+      viewModel.enableSelectionMode();
+    }
+
+    final baseSelection = viewModel.selectedMediaIds;
+    _mediaMarqueeBaseSelection = Set<String>.from(baseSelection);
+    _mediaLastMarqueeSelection = Set<String>.from(baseSelection);
+    _mediaAppendMode = appendMode;
+    _isMediaMarqueeActive = true;
+    _mediaDragStart = localPosition;
+
+    setState(() {
+      _mediaSelectionRect = Rect.fromPoints(localPosition, localPosition);
+    });
+
+    _updateMediaMarqueeSelection(viewModel);
+  }
+
+  void _updateMediaSelectionRect(Offset localPosition) {
+    if (_mediaDragStart == null) {
+      return;
+    }
     setState(() {
       _mediaSelectionRect = Rect.fromPoints(_mediaDragStart!, localPosition);
     });
+  }
 
-    _mediaCachedItemRects = _computeMediaItemRects();
-    _updateMediaMarqueeSelection(viewModel);
+  Offset? _localMediaPosition(Offset globalPosition) {
+    final overlayContext = _mediaGridOverlayKey.currentContext;
+    if (overlayContext == null) {
+      return null;
+    }
+    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
+    if (overlayBox == null || !overlayBox.attached) {
+      return null;
+    }
+    return overlayBox.globalToLocal(globalPosition);
   }
 
   void _endMediaMarquee() {
