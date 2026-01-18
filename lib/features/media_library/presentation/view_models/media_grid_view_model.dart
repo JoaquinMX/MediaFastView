@@ -275,6 +275,15 @@ class MediaViewModel extends StateNotifier<MediaState> {
     _applySelectionUpdate(updated);
   }
 
+  /// Enables selection mode without altering the current selection.
+  void enableSelectionMode() {
+    if (_isSelectionMode) {
+      return;
+    }
+    _isSelectionMode = true;
+    _emitLoadedStateFromCache();
+  }
+
   /// Clears the current media selection and exits selection mode.
   void clearMediaSelection() {
     if (_selectedMediaIds.isEmpty && !_isSelectionMode) {
@@ -366,7 +375,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
   void _applySelectionUpdate(Set<String> selection) {
     final sanitized = selection..removeWhere((id) => id.isEmpty);
     _selectedMediaIds = sanitized;
-    _isSelectionMode = _selectedMediaIds.isNotEmpty;
+    if (_selectedMediaIds.isNotEmpty) {
+      _isSelectionMode = true;
+    }
     _emitLoadedStateFromCache();
   }
 
@@ -377,7 +388,6 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   void _synchronizeSelectionWithCache() {
     if (_selectedMediaIds.isEmpty) {
-      _isSelectionMode = false;
       return;
     }
 
@@ -526,8 +536,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final results = _applySearchFilters(_cachedMedia, query);
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
-      final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
-      _isSelectionMode = selectionMode;
+      final selectionMode = _isSelectionMode;
       state = MediaLoaded(
         media: results,
         searchQuery: query,
@@ -875,8 +884,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     )) {
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
-      final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
-      _isSelectionMode = selectionMode;
+      final selectionMode = _isSelectionMode;
       final results = _applySearchFilters(_cachedMedia, searchQuery);
       state = MediaLoaded(
         media: results,
@@ -916,8 +924,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     )) {
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
-      final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
-      _isSelectionMode = selectionMode;
+      final selectionMode = _isSelectionMode;
       state = MediaLoaded(
         media: media,
         searchQuery: searchQuery,
@@ -954,8 +961,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final results = _applySearchFilters(_cachedMedia, searchQuery);
       _synchronizeSelectionWithCache();
       final selectionSnapshot = Set<String>.unmodifiable(_selectedMediaIds);
-      final selectionMode = selectionSnapshot.isNotEmpty && _isSelectionMode;
-      _isSelectionMode = selectionMode;
+      final selectionMode = _isSelectionMode;
       state = MediaLoaded(
         media: results,
         searchQuery: searchQuery,
