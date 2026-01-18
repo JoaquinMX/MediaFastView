@@ -265,6 +265,125 @@ class _PlaybackSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isCompactLayout = MediaQuery.sizeOf(context).width < 600;
+    final visibility = MediaPlaybackControlVisibility(
+      showProgressBar: viewModel.currentMedia?.type == MediaType.video,
+      showVideoLoop: viewModel.currentMedia?.type == MediaType.video,
+      showPlaybackSpeed: viewModel.currentMedia?.type == MediaType.video,
+    );
+    final baseStyle = MediaPlaybackControlStyle(
+      progressBackgroundColor: Colors.white.withValues(alpha: 0.3),
+    );
+    final compactStyle = MediaPlaybackControlStyle(
+      iconTheme: const IconThemeData(color: Colors.white, size: 28),
+      playPauseIconSize: 40,
+      controlSpacing: 12,
+      sectionSpacing: 20,
+      durationSliderWidth: 180,
+      progressBackgroundColor: Colors.white.withValues(alpha: 0.3),
+    );
+    final style = isCompactLayout ? compactStyle : baseStyle;
+
+    if (isCompactLayout) {
+      final primaryVisibility = visibility.copyWith(
+        showShuffle: false,
+        showDurationSlider: false,
+        showProgressBar: false,
+        showVideoLoop: false,
+        showPlaybackSpeed: false,
+      );
+      final secondaryVisibility = visibility.copyWith(
+        showPrevious: false,
+        showPlayPause: false,
+        showNext: false,
+        showLoop: false,
+        showMute: false,
+      );
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          MediaPlaybackControls(
+            isPlaying: viewModel.isPlaying,
+            isLooping: viewModel.isLooping,
+            isShuffleEnabled: switch (state) {
+              SlideshowPlaying(:final isShuffleEnabled) => isShuffleEnabled,
+              SlideshowPaused(:final isShuffleEnabled) => isShuffleEnabled,
+              _ => false,
+            },
+            isMuted: viewModel.isMuted,
+            isVideoLooping: viewModel.isVideoLooping,
+            playbackSpeed: viewModel.playbackSpeed,
+            playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+            progress: switch (state) {
+              SlideshowPlaying(:final progress) => progress,
+              SlideshowPaused(:final progress) => progress,
+              _ => 0.0,
+            },
+            minDuration: AppConfig.slideshowMinDuration,
+            maxDuration: AppConfig.slideshowMaxDuration,
+            currentItemDuration: switch (state) {
+              SlideshowPlaying(:final imageDisplayDuration) =>
+                imageDisplayDuration,
+              SlideshowPaused(:final imageDisplayDuration) =>
+                imageDisplayDuration,
+              _ => const Duration(seconds: 5),
+            },
+            onPlayPause: onPlayPause,
+            onNext: viewModel.nextItem,
+            onPrevious: viewModel.previousItem,
+            onToggleLoop: viewModel.toggleLoop,
+            onToggleShuffle: viewModel.toggleShuffle,
+            onToggleMute: viewModel.toggleMute,
+            onToggleVideoLoop: viewModel.toggleVideoLoop,
+            onDurationSelected: viewModel.setImageDisplayDuration,
+            onPlaybackSpeedSelected: viewModel.setPlaybackSpeed,
+            visibility: primaryVisibility,
+            style: style,
+          ),
+          const SizedBox(height: 12),
+          MediaPlaybackControls(
+            isPlaying: viewModel.isPlaying,
+            isLooping: viewModel.isLooping,
+            isShuffleEnabled: switch (state) {
+              SlideshowPlaying(:final isShuffleEnabled) => isShuffleEnabled,
+              SlideshowPaused(:final isShuffleEnabled) => isShuffleEnabled,
+              _ => false,
+            },
+            isMuted: viewModel.isMuted,
+            isVideoLooping: viewModel.isVideoLooping,
+            playbackSpeed: viewModel.playbackSpeed,
+            playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+            progress: switch (state) {
+              SlideshowPlaying(:final progress) => progress,
+              SlideshowPaused(:final progress) => progress,
+              _ => 0.0,
+            },
+            minDuration: AppConfig.slideshowMinDuration,
+            maxDuration: AppConfig.slideshowMaxDuration,
+            currentItemDuration: switch (state) {
+              SlideshowPlaying(:final imageDisplayDuration) =>
+                imageDisplayDuration,
+              SlideshowPaused(:final imageDisplayDuration) =>
+                imageDisplayDuration,
+              _ => const Duration(seconds: 5),
+            },
+            onPlayPause: onPlayPause,
+            onNext: viewModel.nextItem,
+            onPrevious: viewModel.previousItem,
+            onToggleLoop: viewModel.toggleLoop,
+            onToggleShuffle: viewModel.toggleShuffle,
+            onToggleMute: viewModel.toggleMute,
+            onToggleVideoLoop: viewModel.toggleVideoLoop,
+            onDurationSelected: viewModel.setImageDisplayDuration,
+            onPlaybackSpeedSelected: viewModel.setPlaybackSpeed,
+            visibility: secondaryVisibility,
+            style: style,
+          ),
+        ],
+      );
+    }
+
     return MediaPlaybackControls(
       isPlaying: viewModel.isPlaying,
       isLooping: viewModel.isLooping,
@@ -303,9 +422,7 @@ class _PlaybackSection extends StatelessWidget {
         showVideoLoop: viewModel.currentMedia?.type == MediaType.video,
         showPlaybackSpeed: viewModel.currentMedia?.type == MediaType.video,
       ),
-      style: MediaPlaybackControlStyle(
-        progressBackgroundColor: Colors.white.withValues(alpha: 0.3),
-      ),
+      style: baseStyle,
     );
   }
 }
@@ -326,4 +443,3 @@ class _ControlsHint extends StatelessWidget {
     );
   }
 }
-
