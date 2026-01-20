@@ -763,6 +763,13 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     state = playingState.copyWith(totalDuration: duration);
   }
 
+  void seekVideo(Duration position) {
+    // This will be called by the view model, and the onSeekRequested callback will handle it
+    onSeekRequested?.call(position);
+  }
+
+  Function(Duration)? onSeekRequested;
+
   void _rebuildPlayOrder() {
     _playOrder = List.generate(_mediaList.length, (index) => index);
     if (_isShuffleEnabled) {

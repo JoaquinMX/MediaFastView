@@ -28,6 +28,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
   bool _areControlsVisible = true;
   Timer? _controlsHideTimer;
   Duration _controlsHideDelay = AppConfig.defaultSlideshowControlsHideDelay;
+  final ValueNotifier<Duration?> _seekNotifier = ValueNotifier(null);
 
   @override
   void initState() {
@@ -37,6 +38,13 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _controlsHideDelay = ref.read(slideshowControlsHideDelayProvider);
     _restartControlsHideTimer();
+
+    // Set up seeking callback
+    ref
+        .read(slideshowViewModelProvider(widget.mediaList).notifier)
+        .onSeekRequested = (position) {
+      _seekNotifier.value = position;
+    };
   }
 
   @override
@@ -126,6 +134,9 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
         playbackSpeed: viewModel.playbackSpeed,
         onProgress: viewModel.updateProgress,
         onCompleted: viewModel.nextItem,
+        seekNotifier: _seekNotifier,
+        onPositionUpdate: viewModel.updateVideoPosition,
+        onDurationUpdate: viewModel.updateVideoDuration,
       );
     }
 

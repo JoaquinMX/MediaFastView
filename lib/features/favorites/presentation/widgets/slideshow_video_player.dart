@@ -20,6 +20,9 @@ class SlideshowVideoPlayer extends StatefulWidget {
     required this.playbackSpeed,
     required this.onProgress,
     required this.onCompleted,
+    required this.seekNotifier,
+    this.onPositionUpdate,
+    this.onDurationUpdate,
   });
 
   final MediaEntity media;
@@ -29,6 +32,9 @@ class SlideshowVideoPlayer extends StatefulWidget {
   final double playbackSpeed;
   final ValueChanged<double> onProgress;
   final VoidCallback onCompleted;
+  final ValueNotifier<Duration?> seekNotifier;
+  final ValueChanged<Duration>? onPositionUpdate;
+  final ValueChanged<Duration>? onDurationUpdate;
 
   @override
   State<SlideshowVideoPlayer> createState() => _SlideshowVideoPlayerState();
@@ -43,6 +49,7 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
   @override
   void initState() {
     super.initState();
+    widget.seekNotifier.addListener(_onSeekRequested);
     _initializeController();
   }
 
@@ -118,14 +125,20 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
     final duration = value.duration;
     final position = value.position;
 
+    widget.onPositionUpdate?.call(position);
+    widget.onDurationUpdate?.call(duration);
+
     if (duration > Duration.zero) {
-      final progress =
-          (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+      final progress = (position.inMilliseconds / duration.inMilliseconds)
+          .clamp(0.0, 1.0);
       widget.onProgress(progress.toDouble());
     }
 
     final hasFinished = duration > Duration.zero && position >= duration;
-    if (!widget.isVideoLooping && widget.isPlaying && hasFinished && !_hasCompleted) {
+    if (!widget.isVideoLooping &&
+        widget.isPlaying &&
+        hasFinished &&
+        !_hasCompleted) {
       _hasCompleted = true;
       widget.onProgress(1.0);
       widget.onCompleted();
@@ -134,10 +147,18 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
     }
   }
 
+  void _onSeekRequested() {
+    final position = widget.seekNotifier.value;
+    if (position != null && _controller != null) {
+      _controller!.seekTo(position);
+      widget.seekNotifier.value = null; // Reset
+    }
+  }
+
   @override
   void dispose() {
-    _activeController?.removeListener(_onVideoUpdate);
-    _activeController?.dispose();
+    widget.seekNotifier.removeListener(_onSeekRequested);
+    _controller?.dispose();
     super.dispose();
   }
 
