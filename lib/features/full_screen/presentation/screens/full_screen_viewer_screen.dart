@@ -24,6 +24,7 @@ import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../../shared/widgets/tag_selection_dialog.dart';
+import '../../../../shared/widgets/media_viewer_overlay.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
 
@@ -99,7 +100,9 @@ class _FullScreenViewerScreenState
     final state = ref.watch(fullScreenViewModelProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
-    debugPrint('FullScreenViewerScreen: Building with theme-aware UI elements, current theme brightness: ${Theme.of(context).brightness}');
+    debugPrint(
+      'FullScreenViewerScreen: Building with theme-aware UI elements, current theme brightness: ${Theme.of(context).brightness}',
+    );
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -113,10 +116,14 @@ class _FullScreenViewerScreenState
             Positioned.fill(
               child: switch (state) {
                 FullScreenInitial() => Center(
-                  child: CircularProgressIndicator(color: colorScheme.onSurface),
+                  child: CircularProgressIndicator(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 FullScreenLoading() => Center(
-                  child: CircularProgressIndicator(color: colorScheme.onSurface),
+                  child: CircularProgressIndicator(
+                    color: colorScheme.onSurface,
+                  ),
                 ),
                 FullScreenLoaded() => _buildMediaContent(state),
                 FullScreenPermissionRevoked() => _buildPermissionRevoked(),
@@ -131,131 +138,115 @@ class _FullScreenViewerScreenState
 
             // Overlay controls
             if (state is FullScreenLoaded && _showControls) ...[
-              Positioned.fill(
-                child: SafeArea(
-                  top: true,
-                  bottom: false,
-                  child: Stack(
-                    children: [
-                      // Top bar with close button and favorite toggle
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.7),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                onPressed: _popWithResult,
-                                icon: Platform.isMacOS
-                                    ? Icon(
-                                        Icons.arrow_back,
-                                        color: colorScheme.onSurface,
-                                      )
-                                    : Icon(
-                                        Icons.close,
-                                        color: colorScheme.onSurface,
-                                      ),
-                              ),
-                              const Spacer(),
-                              IconButton(
-                                onPressed: _showShortcutHelp,
-                                icon: Icon(
-                                  Icons.help_outline,
-                                  color: colorScheme.onSurface,
-                                ),
-                                tooltip: 'Keyboard shortcuts (?)',
-                              ),
-                              FavoriteToggleButton(
-                                isFavorite: state.isFavorite,
-                                onToggle: () => _toggleFavoriteAndRefreshTags(),
-                                iconSize: 28,
-                                favoriteColor: colorScheme.error,
-                                idleColor: colorScheme.onSurface,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      Positioned(
-                        top: 72,
-                        left: 16,
-                        right: 16,
-                        child: _buildTagHeader(state),
-                      ),
-
-                      // Navigation arrows
-                      Positioned(
-                        left: 16,
-                        top: 0,
-                        bottom: 0,
-                        child: Center(
-                          child: IconButton(
-                            onPressed: _handlePreviousNavigation,
-                            icon: Icon(
-                              Icons.chevron_left,
-                              color: colorScheme.onSurface,
-                              size: 48,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 16,
-                        top: 0,
-                        bottom: 0,
-                        child: Center(
-                          child: IconButton(
-                            onPressed: _handleNextNavigation,
-                            icon: Icon(
-                              Icons.chevron_right,
-                              color: colorScheme.onSurface,
-                              size: 48,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+              // Top and bottom control overlays
+              MediaViewerOverlay(
+                media: state.currentMedia,
+                tags: state.allTags,
+                selectedTagIds: state.currentMedia.tagIds.toSet(),
+                leadingAction: IconButton(
+                  onPressed: _popWithResult,
+                  icon: Platform.isMacOS
+                      ? Icon(Icons.arrow_back, color: colorScheme.onSurface)
+                      : Icon(Icons.close, color: colorScheme.onSurface),
+                ),
+                trailingActions: [
+                  IconButton(
+                    onPressed: _showShortcutHelp,
+                    icon: Icon(
+                      Icons.help_outline,
+                      color: colorScheme.onSurface,
+                    ),
+                    tooltip: 'Keyboard shortcuts (?)',
                   ),
+                  FavoriteToggleButton(
+                    isFavorite: state.isFavorite,
+                    onToggle: () => _toggleFavoriteAndRefreshTags(),
+                    iconSize: 28,
+                    favoriteColor: colorScheme.error,
+                    idleColor: colorScheme.onSurface,
+                  ),
+                ],
+                tagHeaderTrailing: IconButton.filledTonal(
+                  onPressed: () => _openTagEditor(state),
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Add or edit tags',
+                  style: IconButton.styleFrom(
+                    foregroundColor: colorScheme.onSurface,
+                    backgroundColor: colorScheme.primary.withOpacity(0.2),
+                  ),
+                ),
+                onTagTapped: _handleTagChipTapped,
+                progress: MediaProgressData(
+                  currentIndex: state.currentIndex,
+                  totalItems: state.mediaList.length,
+                  showProgressBar: true,
+                ),
+                playback: MediaPlaybackData(
+                  isPlaying: state.isPlaying,
+                  isLooping: state.isLooping,
+                  isShuffleEnabled: false,
+                  isMuted: state.isMuted,
+                  playbackSpeed: state.playbackSpeed,
+                  playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+                  progress: state.totalDuration.inMilliseconds > 0
+                      ? state.currentPosition.inMilliseconds /
+                            state.totalDuration.inMilliseconds
+                      : 0.0,
+                  totalDuration: state.totalDuration,
+                ),
+                onPlayPause: _viewModel.togglePlayPause,
+                onNext: _handleNextNavigation,
+                onPrevious: _handlePreviousNavigation,
+                onToggleLoop: _viewModel.toggleLoop,
+                onToggleMute: _viewModel.toggleMute,
+                onPlaybackSpeedSelected: _viewModel.setPlaybackSpeed,
+                onSeek: _handleSeek,
+                playbackVisibility: MediaPlaybackControlVisibility(
+                  showShuffle: false,
+                  showDurationSlider: false,
+                  showVideoLoop: false,
+                  showPlaybackSpeed: state.currentMedia.type == MediaType.video,
+                  showProgressBar: state.currentMedia.type == MediaType.video,
+                  showPlayPause: state.currentMedia.type == MediaType.video,
+                ),
+                showPlaybackForImages: true,
+                playbackAvailability: MediaPlaybackControlAvailability(
+                  enablePrevious:
+                      state.currentIndex > 0 ||
+                      _viewModel.currentDirectoryIndex > 0,
+                  enablePlayPause: true,
+                  enableNext:
+                      state.currentIndex < state.mediaList.length - 1 ||
+                      _viewModel.currentDirectoryIndex <
+                          (_viewModel.siblingDirectories.length - 1),
+                  enableLoop: true,
+                  enableShuffle: false,
+                  enableMute: true,
+                  enableDurationSlider: false,
+                  enableVideoLoop: false,
+                  enablePlaybackSpeed: true,
+                ),
+                playbackStyle: MediaPlaybackControlStyle(
+                  iconTheme: const IconThemeData(color: Colors.white, size: 28),
+                  playPauseIconSize: 48,
+                  activeColor: colorScheme.primary,
+                  inactiveColor: Colors.white,
+                  durationLabelTextStyle: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  sliderActiveTrackColor: colorScheme.primary,
+                  sliderInactiveTrackColor: Colors.white30,
+                  sliderThumbColor: Colors.white,
+                  sliderOverlayColor: Colors.white24,
+                  progressColor: colorScheme.primary,
+                  progressBackgroundColor: Colors.white24,
+                  controlSpacing: 16,
+                  sectionSpacing: 24,
+                  progressBarHeight: 56,
                 ),
               ),
-
-              // Bottom controls for video
-              if (state.currentMedia.type == MediaType.video)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.7),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                    padding: const EdgeInsets.all(16),
-                    child: SafeArea(
-                      top: false,
-                      child: _buildVideoControls(state),
-                    ),
-                  ),
-                ),
             ],
           ],
         ),
@@ -275,8 +266,7 @@ class _FullScreenViewerScreenState
       onPointerCancel: isMobilePlatform ? _handleSwipeCancel : null,
       child: GestureDetector(
         onTap: () => setState(() => _showControls = !_showControls),
-        onDoubleTap: () =>
-            _popWithResult(), // Double-tap to exit full-screen
+        onDoubleTap: () => _popWithResult(), // Double-tap to exit full-screen
         onLongPress: () =>
             _showMediaInfo(media), // Long-press to show media info
         onSecondaryTap: () =>
@@ -313,116 +303,6 @@ class _FullScreenViewerScreenState
     );
   }
 
-  Widget _buildTagHeader(FullScreenLoaded state) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return TagOverlay(
-      tags: state.allTags,
-      selectedTagIds: state.currentMedia.tagIds.toSet(),
-      onTagTapped: _handleTagChipTapped,
-      trailing: IconButton.filledTonal(
-        onPressed: () => _openTagEditor(state),
-        icon: const Icon(Icons.add),
-        tooltip: 'Add or edit tags',
-        style: IconButton.styleFrom(
-          foregroundColor: colorScheme.onSurface,
-          backgroundColor: colorScheme.primary.withOpacity(0.2),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVideoControls(FullScreenLoaded state) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final totalItems = state.mediaList.length;
-    final videoProgress = state.totalDuration.inMilliseconds > 0
-        ? state.currentPosition.inMilliseconds /
-            state.totalDuration.inMilliseconds
-        : 0.0;
-    final clampedProgress = videoProgress.clamp(0.0, 1.0).toDouble();
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (totalItems > 0)
-          MediaProgressIndicator(
-            currentIndex: state.currentIndex,
-            totalItems: totalItems,
-            showProgressBar: false,
-            counterTextStyle: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        if (totalItems > 0) const SizedBox(height: 12),
-        MediaPlaybackControls(
-          isPlaying: state.isPlaying,
-          isLooping: state.isLooping,
-          isMuted: state.isMuted,
-          playbackSpeed: state.playbackSpeed,
-          playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
-          onPlaybackSpeedSelected: _viewModel.setPlaybackSpeed,
-          progress: clampedProgress,
-          onPlayPause: _viewModel.togglePlayPause,
-          onNext: _handleNextNavigation,
-          onPrevious: _handlePreviousNavigation,
-          onToggleLoop: _viewModel.toggleLoop,
-          onToggleMute: _viewModel.toggleMute,
-          visibility: const MediaPlaybackControlVisibility(
-            showShuffle: false,
-            showDurationSlider: false,
-            showVideoLoop: false,
-            showPlaybackSpeed: true,
-          ),
-          availability: MediaPlaybackControlAvailability(
-            enablePrevious: state.currentIndex > 0 ||
-                _viewModel.currentDirectoryIndex > 0,
-            enablePlayPause: true,
-            enableNext: state.currentIndex < totalItems - 1 ||
-                _viewModel.currentDirectoryIndex <
-                    (_viewModel.siblingDirectories.length - 1),
-            enableLoop: true,
-            enableShuffle: false,
-            enableMute: true,
-            enableDurationSlider: false,
-            enableVideoLoop: false,
-            enablePlaybackSpeed: true,
-          ),
-          style: MediaPlaybackControlStyle(
-            iconTheme: const IconThemeData(color: Colors.white, size: 28),
-            playPauseIconSize: 48,
-            activeColor: colorScheme.primary,
-            inactiveColor: Colors.white,
-            durationLabelTextStyle: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-            sliderActiveTrackColor: colorScheme.primary,
-            sliderInactiveTrackColor: Colors.white30,
-            sliderThumbColor: Colors.white,
-            sliderOverlayColor: Colors.white24,
-            progressColor: colorScheme.primary,
-            progressBackgroundColor: Colors.white24,
-            controlSpacing: 16,
-            sectionSpacing: 24,
-            progressBarHeight: 56,
-          ),
-          progressBuilder: (context, progress, style) {
-            return FullScreenVideoProgressSlider(
-              progress: progress,
-              currentPosition: state.currentPosition,
-              totalDuration: state.totalDuration,
-              onSeek: _handleSeek,
-              style: style,
-            );
-          },
-        ),
-      ],
-    );
-  }
-
   void _showMediaInfo(MediaEntity media) {
     showDialog(
       context: context,
@@ -440,10 +320,7 @@ class _FullScreenViewerScreenState
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: _popWithResult,
-            child: const Text('Close'),
-          ),
+          TextButton(onPressed: _popWithResult, child: const Text('Close')),
         ],
       ),
     );
@@ -711,7 +588,8 @@ class _FullScreenViewerScreenState
     required bool forward,
   }) async {
     final directionLabel = forward ? 'next' : 'previous';
-    final shouldNavigate = await showDialog<bool>(
+    final shouldNavigate =
+        await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Continue to sibling directory?'),
@@ -733,10 +611,7 @@ class _FullScreenViewerScreenState
         false;
 
     if (shouldNavigate) {
-      await _viewModel.navigateToDirectoryTarget(
-        target,
-        startAtEnd: !forward,
-      );
+      await _viewModel.navigateToDirectoryTarget(target, startAtEnd: !forward);
     }
   }
 
@@ -770,17 +645,11 @@ class _FullScreenViewerScreenState
   }) async {
     final autoNavigate = ref.read(autoNavigateSiblingDirectoriesProvider);
     if (autoNavigate) {
-      await _viewModel.navigateToDirectoryTarget(
-        target,
-        startAtEnd: !forward,
-      );
+      await _viewModel.navigateToDirectoryTarget(target, startAtEnd: !forward);
       return;
     }
 
-    await _promptDirectoryNavigation(
-      target,
-      forward: forward,
-    );
+    await _promptDirectoryNavigation(target, forward: forward);
   }
 
   void _popWithResult() {
@@ -859,8 +728,9 @@ class _FullScreenViewerScreenState
                       ? 'Access recovered successfully!'
                       : 'Recovery failed. Please go back and re-select the directory.',
                 ),
-                backgroundColor:
-                    success ? colorScheme.primary : colorScheme.error,
+                backgroundColor: success
+                    ? colorScheme.primary
+                    : colorScheme.error,
               ),
             );
           }

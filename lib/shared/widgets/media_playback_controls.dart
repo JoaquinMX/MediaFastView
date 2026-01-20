@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 /// Builder callback for customizing the progress presentation of the controls.
-typedef MediaPlaybackProgressBuilder = Widget Function(
-  BuildContext context,
-  double progress,
-  MediaPlaybackControlStyle style,
-);
+typedef MediaPlaybackProgressBuilder =
+    Widget Function(
+      BuildContext context,
+      double progress,
+      MediaPlaybackControlStyle style,
+    );
 
 /// Icon configuration used by [MediaPlaybackControls].
 class MediaPlaybackControlIcons {
@@ -190,6 +191,7 @@ class MediaPlaybackControls extends StatelessWidget {
     this.minDuration = const Duration(seconds: 1),
     this.maxDuration = const Duration(seconds: 10),
     this.currentItemDuration = const Duration(seconds: 5),
+    this.totalDuration,
     this.onPlayPause,
     this.onNext,
     this.onPrevious,
@@ -199,6 +201,7 @@ class MediaPlaybackControls extends StatelessWidget {
     this.onToggleVideoLoop,
     this.onDurationSelected,
     this.onPlaybackSpeedSelected,
+    this.onSeek,
     this.visibility = const MediaPlaybackControlVisibility(),
     this.availability = const MediaPlaybackControlAvailability(),
     this.icons = const MediaPlaybackControlIcons(),
@@ -217,6 +220,7 @@ class MediaPlaybackControls extends StatelessWidget {
   final Duration minDuration;
   final Duration maxDuration;
   final Duration currentItemDuration;
+  final Duration? totalDuration;
   final VoidCallback? onPlayPause;
   final VoidCallback? onNext;
   final VoidCallback? onPrevious;
@@ -226,6 +230,7 @@ class MediaPlaybackControls extends StatelessWidget {
   final VoidCallback? onToggleVideoLoop;
   final ValueChanged<Duration>? onDurationSelected;
   final ValueChanged<double>? onPlaybackSpeedSelected;
+  final ValueChanged<Duration>? onSeek;
   final MediaPlaybackControlVisibility visibility;
   final MediaPlaybackControlAvailability availability;
   final MediaPlaybackControlIcons icons;
@@ -250,12 +255,14 @@ class MediaPlaybackControls extends StatelessWidget {
 
     if (visibility.showPrevious) {
       addControlSpacing();
-      children.add(_buildIconButton(
-        icon: icons.previous,
-        tooltip: 'Previous',
-        onPressed: availability.enablePrevious ? onPrevious : null,
-        isActive: false,
-      ));
+      children.add(
+        _buildIconButton(
+          icon: icons.previous,
+          tooltip: 'Previous',
+          onPressed: availability.enablePrevious ? onPrevious : null,
+          isActive: false,
+        ),
+      );
     }
 
     if (visibility.showPlayPause) {
@@ -265,42 +272,50 @@ class MediaPlaybackControls extends StatelessWidget {
 
     if (visibility.showNext) {
       addControlSpacing();
-      children.add(_buildIconButton(
-        icon: icons.next,
-        tooltip: 'Next',
-        onPressed: availability.enableNext ? onNext : null,
-        isActive: false,
-      ));
+      children.add(
+        _buildIconButton(
+          icon: icons.next,
+          tooltip: 'Next',
+          onPressed: availability.enableNext ? onNext : null,
+          isActive: false,
+        ),
+      );
     }
 
     if (visibility.showLoop) {
       addSectionSpacing();
-      children.add(_buildIconButton(
-        icon: isLooping ? icons.loopEnabled : icons.loopDisabled,
-        tooltip: isLooping ? 'Disable loop' : 'Enable loop',
-        onPressed: availability.enableLoop ? onToggleLoop : null,
-        isActive: isLooping,
-      ));
+      children.add(
+        _buildIconButton(
+          icon: isLooping ? icons.loopEnabled : icons.loopDisabled,
+          tooltip: isLooping ? 'Disable loop' : 'Enable loop',
+          onPressed: availability.enableLoop ? onToggleLoop : null,
+          isActive: isLooping,
+        ),
+      );
     }
 
     if (visibility.showShuffle) {
       addControlSpacing();
-      children.add(_buildIconButton(
-        icon: icons.shuffle,
-        tooltip: isShuffleEnabled ? 'Disable shuffle' : 'Enable shuffle',
-        onPressed: availability.enableShuffle ? onToggleShuffle : null,
-        isActive: isShuffleEnabled,
-      ));
+      children.add(
+        _buildIconButton(
+          icon: icons.shuffle,
+          tooltip: isShuffleEnabled ? 'Disable shuffle' : 'Enable shuffle',
+          onPressed: availability.enableShuffle ? onToggleShuffle : null,
+          isActive: isShuffleEnabled,
+        ),
+      );
     }
 
     if (visibility.showMute) {
       addControlSpacing();
-      children.add(_buildIconButton(
-        icon: isMuted ? icons.muteEnabled : icons.muteDisabled,
-        tooltip: isMuted ? 'Unmute' : 'Mute',
-        onPressed: availability.enableMute ? onToggleMute : null,
-        isActive: false,
-      ));
+      children.add(
+        _buildIconButton(
+          icon: isMuted ? icons.muteEnabled : icons.muteDisabled,
+          tooltip: isMuted ? 'Unmute' : 'Mute',
+          onPressed: availability.enableMute ? onToggleMute : null,
+          isActive: false,
+        ),
+      );
     }
 
     if (visibility.showPlaybackSpeed) {
@@ -324,22 +339,27 @@ class MediaPlaybackControls extends StatelessWidget {
 
       if (visibility.showVideoLoop) {
         addControlSpacing();
-        children.add(_buildIconButton(
-          icon: icons.videoLoop,
-          tooltip:
-              isVideoLooping ? 'Disable video loop' : 'Loop current video',
-          onPressed: availability.enableVideoLoop ? onToggleVideoLoop : null,
-          isActive: isVideoLooping,
-        ));
+        children.add(
+          _buildIconButton(
+            icon: icons.videoLoop,
+            tooltip: isVideoLooping
+                ? 'Disable video loop'
+                : 'Loop current video',
+            onPressed: availability.enableVideoLoop ? onToggleVideoLoop : null,
+            isActive: isVideoLooping,
+          ),
+        );
       }
     } else if (visibility.showVideoLoop) {
       addSectionSpacing();
-      children.add(_buildIconButton(
-        icon: icons.videoLoop,
-        tooltip: isVideoLooping ? 'Disable video loop' : 'Loop current video',
-        onPressed: availability.enableVideoLoop ? onToggleVideoLoop : null,
-        isActive: isVideoLooping,
-      ));
+      children.add(
+        _buildIconButton(
+          icon: icons.videoLoop,
+          tooltip: isVideoLooping ? 'Disable video loop' : 'Loop current video',
+          onPressed: availability.enableVideoLoop ? onToggleVideoLoop : null,
+          isActive: isVideoLooping,
+        ),
+      );
     }
 
     return IconTheme(
@@ -381,12 +401,11 @@ class MediaPlaybackControls extends StatelessWidget {
   }
 
   Widget _buildPlaybackSpeedButton() {
-    final speeds = (playbackSpeedOptions.isEmpty
-            ? const [1.0]
-            : playbackSpeedOptions)
-        .toSet()
-        .toList()
-      ..sort();
+    final speeds =
+        (playbackSpeedOptions.isEmpty ? const [1.0] : playbackSpeedOptions)
+            .toSet()
+            .toList()
+          ..sort();
     final currentSpeed = playbackSpeed ?? speeds.first;
     final enabled =
         availability.enablePlaybackSpeed && onPlaybackSpeedSelected != null;
@@ -483,12 +502,14 @@ class MediaPlaybackControls extends StatelessWidget {
                     divisions: safeMax - safeMin,
                     value: clampedSeconds.toDouble(),
                     label: '${clampedSeconds}s',
-                    onChanged: availability.enableDurationSlider &&
+                    onChanged:
+                        availability.enableDurationSlider &&
                             onDurationSelected != null
                         ? (value) {
                             final rounded = value.round();
-                            final seconds =
-                                rounded.clamp(safeMin, safeMax).toInt();
+                            final seconds = rounded
+                                .clamp(safeMin, safeMax)
+                                .toInt();
                             onDurationSelected!(Duration(seconds: seconds));
                           }
                         : null,
@@ -510,20 +531,22 @@ class MediaPlaybackControls extends StatelessWidget {
 
   Widget _buildProgressBar(BuildContext context) {
     final progressValue = (progress ?? 0.0).clamp(0.0, 1.0);
-    final widget = progressBuilder?.call(context, progressValue, style) ??
-        _DefaultProgressBar(
-          progress: progressValue,
-          style: style,
-        );
+    final widget =
+        progressBuilder?.call(context, progressValue, style) ??
+        (onSeek != null
+            ? _SeekableProgressBar(
+                progress: progressValue,
+                onSeek: onSeek!,
+                totalDuration: totalDuration,
+                style: style,
+              )
+            : _DefaultProgressBar(progress: progressValue, style: style));
     return SizedBox(height: style.progressBarHeight, child: widget);
   }
 }
 
 class _DefaultProgressBar extends StatelessWidget {
-  const _DefaultProgressBar({
-    required this.progress,
-    required this.style,
-  });
+  const _DefaultProgressBar({required this.progress, required this.style});
 
   final double progress;
   final MediaPlaybackControlStyle style;
@@ -534,6 +557,70 @@ class _DefaultProgressBar extends StatelessWidget {
       value: progress,
       backgroundColor: style.progressBackgroundColor,
       valueColor: AlwaysStoppedAnimation<Color>(style.progressColor),
+    );
+  }
+}
+
+class _SeekableProgressBar extends StatefulWidget {
+  const _SeekableProgressBar({
+    required this.progress,
+    required this.onSeek,
+    required this.totalDuration,
+    required this.style,
+  });
+
+  final double progress;
+  final ValueChanged<Duration> onSeek;
+  final Duration? totalDuration;
+  final MediaPlaybackControlStyle style;
+
+  @override
+  State<_SeekableProgressBar> createState() => _SeekableProgressBarState();
+}
+
+class _SeekableProgressBarState extends State<_SeekableProgressBar> {
+  bool _isDragging = false;
+  double _dragValue = 0.0;
+
+  @override
+  void didUpdateWidget(covariant _SeekableProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isDragging) {
+      _dragValue = widget.progress;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        activeTrackColor: widget.style.sliderActiveTrackColor,
+        inactiveTrackColor: widget.style.sliderInactiveTrackColor,
+        thumbColor: widget.style.sliderThumbColor,
+        overlayColor: widget.style.sliderOverlayColor,
+      ),
+      child: Slider(
+        value: _isDragging ? _dragValue : widget.progress,
+        onChangeStart: (value) {
+          setState(() {
+            _isDragging = true;
+            _dragValue = value;
+          });
+        },
+        onChanged: (value) {
+          setState(() {
+            _dragValue = value;
+          });
+        },
+        onChangeEnd: (value) {
+          setState(() {
+            _isDragging = false;
+          });
+          final posMs = value * (widget.totalDuration?.inMilliseconds ?? 0);
+          final seekPosition = Duration(milliseconds: posMs.round());
+          widget.onSeek(seekPosition);
+        },
+      ),
     );
   }
 }

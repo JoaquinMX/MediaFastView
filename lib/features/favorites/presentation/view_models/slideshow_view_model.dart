@@ -26,6 +26,8 @@ class SlideshowPlaying extends SlideshowState {
     required this.isVideoLooping,
     required this.isMuted,
     required this.progress,
+    this.currentPosition = Duration.zero,
+    this.totalDuration = Duration.zero,
     required this.isShuffleEnabled,
     required this.imageDisplayDuration,
     required this.playbackSpeed,
@@ -37,6 +39,8 @@ class SlideshowPlaying extends SlideshowState {
   final bool isVideoLooping;
   final bool isMuted;
   final double progress;
+  final Duration currentPosition;
+  final Duration totalDuration;
   final bool isShuffleEnabled;
   final Duration imageDisplayDuration;
   final double playbackSpeed;
@@ -48,6 +52,8 @@ class SlideshowPlaying extends SlideshowState {
     bool? isVideoLooping,
     bool? isMuted,
     double? progress,
+    Duration? currentPosition,
+    Duration? totalDuration,
     bool? isShuffleEnabled,
     Duration? imageDisplayDuration,
     double? playbackSpeed,
@@ -59,9 +65,10 @@ class SlideshowPlaying extends SlideshowState {
       isVideoLooping: isVideoLooping ?? this.isVideoLooping,
       isMuted: isMuted ?? this.isMuted,
       progress: progress ?? this.progress,
+      currentPosition: currentPosition ?? this.currentPosition,
+      totalDuration: totalDuration ?? this.totalDuration,
       isShuffleEnabled: isShuffleEnabled ?? this.isShuffleEnabled,
-      imageDisplayDuration:
-          imageDisplayDuration ?? this.imageDisplayDuration,
+      imageDisplayDuration: imageDisplayDuration ?? this.imageDisplayDuration,
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
     );
   }
@@ -100,8 +107,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
   SlideshowViewModel(
     this._mediaList, {
     required TagMutationService tagMutationService,
-  })  : _tagMutationService = tagMutationService,
-        super(const SlideshowIdle()) {
+  }) : _tagMutationService = tagMutationService,
+       super(const SlideshowIdle()) {
     if (_mediaList.isNotEmpty) {
       _initializeSlideshow();
     }
@@ -154,8 +161,9 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     }
 
     final result = await _tagMutationService.toggleTagForMedia(media, tag);
-    final mediaIndex =
-        _playOrder.isNotEmpty ? _playOrder[currentIndex] : currentIndex;
+    final mediaIndex = _playOrder.isNotEmpty
+        ? _playOrder[currentIndex]
+        : currentIndex;
 
     if (result.updatedMedia != null &&
         mediaIndex >= 0 &&
@@ -205,7 +213,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     return _mediaList[mediaIndex];
   }
 
-  int get totalItems => _playOrder.isNotEmpty ? _playOrder.length : _mediaList.length;
+  int get totalItems =>
+      _playOrder.isNotEmpty ? _playOrder.length : _mediaList.length;
 
   void _emitStateUpdate() {
     state = switch (state) {
@@ -310,7 +319,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isMuted: isMuted,
           progress: progress,
           isShuffleEnabled: _isShuffleEnabled,
-          imageDisplayDuration: _imageDisplayDuration, 
+          imageDisplayDuration: _imageDisplayDuration,
           playbackSpeed: _playbackSpeed,
         ),
       _ => state,
@@ -337,7 +346,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           isMuted: isMuted,
           progress: progress,
           isShuffleEnabled: _isShuffleEnabled,
-          imageDisplayDuration: _imageDisplayDuration, 
+          imageDisplayDuration: _imageDisplayDuration,
           playbackSpeed: _playbackSpeed,
         ),
       _ => state,
@@ -389,7 +398,11 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     _playbackSpeed = playbackSpeed;
 
     state = switch (state) {
-      SlideshowPlaying(:final isLooping, :final isVideoLooping, :final isMuted) =>
+      SlideshowPlaying(
+        :final isLooping,
+        :final isVideoLooping,
+        :final isMuted,
+      ) =>
         SlideshowPlaying(
           currentIndex: index,
           isPlaying: wasPlaying,
@@ -401,7 +414,11 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           imageDisplayDuration: _imageDisplayDuration,
           playbackSpeed: _playbackSpeed,
         ),
-      SlideshowPaused(:final isLooping, :final isVideoLooping, :final isMuted) =>
+      SlideshowPaused(
+        :final isLooping,
+        :final isVideoLooping,
+        :final isMuted,
+      ) =>
         SlideshowPaused(
           currentIndex: index,
           isLooping: isLooping,
@@ -412,28 +429,29 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           imageDisplayDuration: _imageDisplayDuration,
           playbackSpeed: _playbackSpeed,
         ),
-      _ => wasPlaying
-          ? SlideshowPlaying(
-              currentIndex: index,
-              isPlaying: wasPlaying,
-              isLooping: false,
-              isVideoLooping: isVideoLooping,
-              isMuted: false,
-              progress: 0.0,
-              isShuffleEnabled: _isShuffleEnabled,
-              imageDisplayDuration: _imageDisplayDuration,
-              playbackSpeed: _playbackSpeed,
-            )
-          : SlideshowPaused(
-              currentIndex: index,
-              isLooping: false,
-              isVideoLooping: isVideoLooping,
-              isMuted: false,
-              progress: 0.0,
-              isShuffleEnabled: _isShuffleEnabled,
-              imageDisplayDuration: _imageDisplayDuration,
-              playbackSpeed: _playbackSpeed,
-            ),
+      _ =>
+        wasPlaying
+            ? SlideshowPlaying(
+                currentIndex: index,
+                isPlaying: wasPlaying,
+                isLooping: false,
+                isVideoLooping: isVideoLooping,
+                isMuted: false,
+                progress: 0.0,
+                isShuffleEnabled: _isShuffleEnabled,
+                imageDisplayDuration: _imageDisplayDuration,
+                playbackSpeed: _playbackSpeed,
+              )
+            : SlideshowPaused(
+                currentIndex: index,
+                isLooping: false,
+                isVideoLooping: isVideoLooping,
+                isMuted: false,
+                progress: 0.0,
+                isShuffleEnabled: _isShuffleEnabled,
+                imageDisplayDuration: _imageDisplayDuration,
+                playbackSpeed: _playbackSpeed,
+              ),
     };
 
     if (wasPlaying) {
@@ -644,8 +662,8 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
 
     final previousMediaIndex =
         _playOrder.isNotEmpty && currentIndex < _playOrder.length
-            ? _playOrder[currentIndex]
-            : null;
+        ? _playOrder[currentIndex]
+        : null;
 
     _isShuffleEnabled = !_isShuffleEnabled;
     _rebuildPlayOrder();
@@ -728,50 +746,21 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
 
   /// Updates progress (for video playback).
   void updateProgress(double progress) {
-    final clampedProgress = progress.clamp(0.0, 1.0).toDouble();
-    state = switch (state) {
-      SlideshowPlaying(
-        :final currentIndex,
-        :final isPlaying,
-        :final isLooping,
-        :final isVideoLooping,
-        :final isMuted,
-        :final isShuffleEnabled,
-        :final imageDisplayDuration,
-        :final playbackSpeed,
-      ) =>
-        SlideshowPlaying(
-          currentIndex: currentIndex,
-          isPlaying: isPlaying,
-          isLooping: isLooping,
-          isVideoLooping: isVideoLooping,
-          isMuted: isMuted,
-          progress: clampedProgress,
-          isShuffleEnabled: isShuffleEnabled,
-          imageDisplayDuration: imageDisplayDuration,
-          playbackSpeed: playbackSpeed,
-        ),
-      SlideshowPaused(
-        :final currentIndex,
-        :final isLooping,
-        :final isVideoLooping,
-        :final isMuted,
-        :final isShuffleEnabled,
-        :final imageDisplayDuration,
-        :final playbackSpeed,
-      ) =>
-        SlideshowPaused(
-          currentIndex: currentIndex,
-          isLooping: isLooping,
-          isVideoLooping: isVideoLooping,
-          isMuted: isMuted,
-          progress: clampedProgress,
-          isShuffleEnabled: isShuffleEnabled,
-          imageDisplayDuration: imageDisplayDuration,
-          playbackSpeed: playbackSpeed,
-        ),
-      _ => state,
-    };
+    if (state is! SlideshowPlaying) return;
+    final playingState = state as SlideshowPlaying;
+    state = playingState.copyWith(progress: progress);
+  }
+
+  void updateVideoPosition(Duration position) {
+    if (state is! SlideshowPlaying) return;
+    final playingState = state as SlideshowPlaying;
+    state = playingState.copyWith(currentPosition: position);
+  }
+
+  void updateVideoDuration(Duration duration) {
+    if (state is! SlideshowPlaying) return;
+    final playingState = state as SlideshowPlaying;
+    state = playingState.copyWith(totalDuration: duration);
   }
 
   void _rebuildPlayOrder() {
