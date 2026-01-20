@@ -15,7 +15,7 @@ import '../models/full_screen_exit_result.dart';
 import '../view_models/full_screen_view_model.dart';
 import '../widgets/full_screen_image_viewer.dart';
 import '../widgets/full_screen_video_player.dart';
-import '../widgets/full_screen_video_progress_slider.dart';
+
 import '../../../../shared/widgets/media_playback_controls.dart';
 import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
@@ -283,8 +283,6 @@ class _FullScreenViewerScreenState
       onPointerUp: isMobilePlatform ? _handleSwipeEnd : null,
       onPointerCancel: isMobilePlatform ? _handleSwipeCancel : null,
       child: GestureDetector(
-        onTap: () => setState(() => _showControls = !_showControls),
-        onDoubleTap: () => _popWithResult(), // Double-tap to exit full-screen
         onLongPress: () =>
             _showMediaInfo(media), // Long-press to show media info
         onSecondaryTap: () =>
@@ -301,7 +299,11 @@ class _FullScreenViewerScreenState
             });
           },
           child: switch (media.type) {
-            MediaType.image => FullScreenImageViewer(media: media),
+            MediaType.image => FullScreenImageViewer(
+              media: media,
+              onToggleControls: () =>
+                  setState(() => _showControls = !_showControls),
+            ),
             MediaType.video => _buildVideoContent(media),
             MediaType.text => Center(
               child: Text(
@@ -564,7 +566,7 @@ class _FullScreenViewerScreenState
     final absDx = delta.dx.abs();
     final absDy = delta.dy.abs();
     final velocity = delta.distance / elapsedMs;
-    const minSwipeDistance = 90.0;
+    const minSwipeDistance = 150.0;
     const minSwipeVelocity = 0.25;
 
     if (absDx > absDy &&

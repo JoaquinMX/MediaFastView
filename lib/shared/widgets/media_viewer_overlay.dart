@@ -111,6 +111,7 @@ class MediaViewerOverlay extends ConsumerWidget {
     this.footer,
     this.style,
     this.showPlaybackForImages = false,
+    this.enableZoomPan = false,
   });
 
   final MediaEntity? media;
@@ -138,6 +139,7 @@ class MediaViewerOverlay extends ConsumerWidget {
   final Widget? footer;
   final MediaOverlayStyle? style;
   final bool showPlaybackForImages;
+  final bool enableZoomPan;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

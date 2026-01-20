@@ -8,6 +8,7 @@ import 'package:media_fast_view/core/config/app_config.dart';
 import 'package:media_fast_view/shared/providers/settings_providers.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../../shared/widgets/zoom_pan_viewer.dart';
 
 import '../view_models/slideshow_view_model.dart';
 import '../widgets/slideshow_overlay.dart';
@@ -141,20 +142,24 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     }
 
     return SizedBox.expand(
-      child: Image.file(
-        File(media.path),
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[800],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Center(
-              child: Icon(Icons.image, size: 64, color: Colors.white),
-            ),
-          );
-        },
+      child: ZoomPanViewer(
+        minScale: 1.0,
+        maxScale: 4.0,
+        child: Image.file(
+          File(media.path),
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[800],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(
+                child: Icon(Icons.image, size: 64, color: Colors.white),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
