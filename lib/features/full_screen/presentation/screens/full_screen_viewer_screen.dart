@@ -24,7 +24,9 @@ import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../../shared/widgets/tag_selection_dialog.dart';
+import '../../../../shared/widgets/base_media_viewer_overlay.dart';
 import '../../../../shared/widgets/media_viewer_overlay.dart';
+import '../../../../shared/widgets/video_bottom_controls.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
 
@@ -139,34 +141,30 @@ class _FullScreenViewerScreenState
             // Overlay controls
             if (state is FullScreenLoaded && _showControls) ...[
               // Top and bottom control overlays
-              MediaViewerOverlay(
+              BaseMediaViewerOverlay.fullScreen(
                 media: state.currentMedia,
                 tags: state.allTags,
                 selectedTagIds: state.currentMedia.tagIds.toSet(),
-                leadingAction: IconButton(
+                onTagTapped: _handleTagChipTapped,
+                closeButton: IconButton(
                   onPressed: _popWithResult,
                   icon: Platform.isMacOS
                       ? Icon(Icons.arrow_back, color: colorScheme.onSurface)
                       : Icon(Icons.close, color: colorScheme.onSurface),
                 ),
-                trailingActions: [
-                  IconButton(
-                    onPressed: _showShortcutHelp,
-                    icon: Icon(
-                      Icons.help_outline,
-                      color: colorScheme.onSurface,
-                    ),
-                    tooltip: 'Keyboard shortcuts (?)',
-                  ),
-                  FavoriteToggleButton(
-                    isFavorite: state.isFavorite,
-                    onToggle: () => _toggleFavoriteAndRefreshTags(),
-                    iconSize: 28,
-                    favoriteColor: colorScheme.error,
-                    idleColor: colorScheme.onSurface,
-                  ),
-                ],
-                tagHeaderTrailing: IconButton.filledTonal(
+                helpButton: IconButton(
+                  onPressed: _showShortcutHelp,
+                  icon: Icon(Icons.help_outline, color: colorScheme.onSurface),
+                  tooltip: 'Keyboard shortcuts (?)',
+                ),
+                favoriteButton: FavoriteToggleButton(
+                  isFavorite: state.isFavorite,
+                  onToggle: () => _toggleFavoriteAndRefreshTags(),
+                  iconSize: 28,
+                  favoriteColor: colorScheme.error,
+                  idleColor: colorScheme.onSurface,
+                ),
+                tagEditorButton: IconButton.filledTonal(
                   onPressed: () => _openTagEditor(state),
                   icon: const Icon(Icons.add),
                   tooltip: 'Add or edit tags',
@@ -175,11 +173,10 @@ class _FullScreenViewerScreenState
                     backgroundColor: colorScheme.primary.withOpacity(0.2),
                   ),
                 ),
-                onTagTapped: _handleTagChipTapped,
                 progress: MediaProgressData(
                   currentIndex: state.currentIndex,
                   totalItems: state.mediaList.length,
-                  showProgressBar: true,
+                  showProgressBar: false, // Hide overlay progress for videos
                 ),
                 playback: MediaPlaybackData(
                   isPlaying: state.isPlaying,
@@ -198,54 +195,75 @@ class _FullScreenViewerScreenState
                 onNext: _handleNextNavigation,
                 onPrevious: _handlePreviousNavigation,
                 onToggleLoop: _viewModel.toggleLoop,
+                onToggleShuffle: () {}, // Not supported in full-screen
                 onToggleMute: _viewModel.toggleMute,
+                onToggleVideoLoop: () {}, // Not supported in full-screen
+                onDurationSelected: (duration) {}, // Not supported
                 onPlaybackSpeedSelected: _viewModel.setPlaybackSpeed,
                 onSeek: _handleSeek,
-                playbackVisibility: MediaPlaybackControlVisibility(
-                  showShuffle: false,
-                  showDurationSlider: false,
-                  showVideoLoop: false,
-                  showPlaybackSpeed: state.currentMedia.type == MediaType.video,
-                  showProgressBar: state.currentMedia.type == MediaType.video,
-                  showPlayPause: state.currentMedia.type == MediaType.video,
-                ),
+                playbackVisibility: state.currentMedia.type == MediaType.video
+                    ? const MediaPlaybackControlVisibility(
+                        showPrevious:
+                            false, // Hide overlay controls for videos - handled by VideoBottomControls
+                        showNext: false,
+                        showPlayPause: false,
+                        showLoop: false,
+                        showMute: false,
+                        showShuffle: false,
+                        showDurationSlider: false,
+                        showProgressBar: false,
+                        showVideoLoop: false,
+                        showPlaybackSpeed: false,
+                      )
+                    : const MediaPlaybackControlVisibility(
+                        showPrevious: true,
+                        showNext: true,
+                        showPlayPause: false,
+                        showLoop: false,
+                        showMute: false,
+                        showShuffle: false,
+                        showDurationSlider: false,
+                        showProgressBar: false,
+                        showVideoLoop: false,
+                        showPlaybackSpeed: false,
+                      ),
                 showPlaybackForImages: true,
-                playbackAvailability: MediaPlaybackControlAvailability(
-                  enablePrevious:
-                      state.currentIndex > 0 ||
-                      _viewModel.currentDirectoryIndex > 0,
-                  enablePlayPause: true,
-                  enableNext:
-                      state.currentIndex < state.mediaList.length - 1 ||
-                      _viewModel.currentDirectoryIndex <
-                          (_viewModel.siblingDirectories.length - 1),
-                  enableLoop: true,
-                  enableShuffle: false,
-                  enableMute: true,
-                  enableDurationSlider: false,
-                  enableVideoLoop: false,
-                  enablePlaybackSpeed: true,
-                ),
-                playbackStyle: MediaPlaybackControlStyle(
-                  iconTheme: const IconThemeData(color: Colors.white, size: 28),
-                  playPauseIconSize: 48,
-                  activeColor: colorScheme.primary,
-                  inactiveColor: Colors.white,
-                  durationLabelTextStyle: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  sliderActiveTrackColor: colorScheme.primary,
-                  sliderInactiveTrackColor: Colors.white30,
-                  sliderThumbColor: Colors.white,
-                  sliderOverlayColor: Colors.white24,
-                  progressColor: colorScheme.primary,
-                  progressBackgroundColor: Colors.white24,
-                  controlSpacing: 16,
-                  sectionSpacing: 24,
-                  progressBarHeight: 56,
-                ),
+                showBottomControlsForVideos:
+                    state.currentMedia.type == MediaType.video,
+                bottomControlsConfig: state.currentMedia.type == MediaType.video
+                    ? VideoBottomControlsConfig(
+                        showRow1: false, // No media counter for full screen
+                        showRow2: true, // Video progress
+                        showRow3: true, // Combined controls
+                        showRow4: true, // Show secondary row for speed
+                        showShuffleInRow4: false, // No shuffle for single media
+                        showVideoLoopInRow4: false, // Not used
+                        isFullScreen: true,
+                        currentIndex: 0, // Not used
+                        totalItems: 1, // Not used
+                        videoProgress: state.totalDuration.inMilliseconds > 0
+                            ? state.currentPosition.inMilliseconds /
+                                  state.totalDuration.inMilliseconds
+                            : 0.0,
+                        onSeek: _handleSeek,
+                        totalDuration: state.totalDuration,
+                        isPlaying: state.isPlaying,
+                        onPlayPause: _viewModel.togglePlayPause,
+                        onNext: _handleNextNavigation,
+                        onPrevious: _handlePreviousNavigation,
+                        isLooping: state.isLooping,
+                        onToggleLoop: _viewModel.toggleLoop,
+                        isMuted: state.isMuted,
+                        onToggleMute: _viewModel.toggleMute,
+                        isShuffleEnabled: false, // Not used
+                        onToggleShuffle: () {}, // Not supported
+                        isVideoLooping: false, // Not supported
+                        onToggleVideoLoop: () {}, // Not supported
+                        playbackSpeed: state.playbackSpeed,
+                        onPlaybackSpeedSelected: _viewModel.setPlaybackSpeed,
+                        playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+                      )
+                    : null,
               ),
             ],
           ],

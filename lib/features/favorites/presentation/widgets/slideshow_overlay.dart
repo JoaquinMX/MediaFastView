@@ -5,7 +5,9 @@ import 'package:media_fast_view/shared/widgets/media_progress_indicator.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/widgets/base_media_viewer_overlay.dart';
 import '../../../../shared/widgets/media_viewer_overlay.dart';
+import '../../../../shared/widgets/video_bottom_controls.dart';
 import '../../../../shared/widgets/media_playback_controls.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
@@ -88,7 +90,7 @@ class SlideshowOverlay extends ConsumerWidget {
     };
 
     final playbackVisibility = MediaPlaybackControlVisibility(
-      showProgressBar: isVideo,
+      showProgressBar: false, // VideoBottomControls handle progress for videos
       showVideoLoop: isVideo,
       showPlaybackSpeed: isVideo,
     );
@@ -335,8 +337,8 @@ class SlideshowOverlay extends ConsumerWidget {
                       ? 'Disable shuffle'
                       : 'Enable shuffle',
                 ),
+                const SizedBox(width: 16),
                 if (isVideo) ...[
-                  const SizedBox(width: 12),
                   _buildPlaybackSpeedButton(),
                   const SizedBox(width: 12),
                   IconButton(
@@ -349,7 +351,15 @@ class SlideshowOverlay extends ConsumerWidget {
                         ? 'Disable video loop'
                         : 'Loop current video',
                   ),
-                ],
+                ] else
+                  Expanded(
+                    child: _DurationSlider(
+                      currentDuration: imageDisplayDuration,
+                      onDurationChanged: viewModel.setImageDisplayDuration,
+                      minDuration: AppConfig.slideshowMinDuration,
+                      maxDuration: AppConfig.slideshowMaxDuration,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -364,20 +374,19 @@ class SlideshowOverlay extends ConsumerWidget {
       );
     }
 
-    return MediaViewerOverlay(
+    return BaseMediaViewerOverlay.slideshow(
       media: viewModel.currentMedia,
       tags: tags,
       selectedTagIds: viewModel.currentMedia?.tagIds.toSet() ?? const {},
       onTagTapped: (tag) => _handleTagTap(context, tag),
-      leadingAction: IconButton(
+      closeButton: IconButton(
         icon: const Icon(Icons.close, color: Colors.white),
         tooltip: 'Close slideshow',
         onPressed: onClose,
       ),
-      trailingActions: [
-        if (viewModel.currentMedia != null)
-          FavoriteToggleButton(media: viewModel.currentMedia!),
-      ],
+      favoriteButton: viewModel.currentMedia != null
+          ? FavoriteToggleButton(media: viewModel.currentMedia!)
+          : null,
       progress: MediaProgressData(
         currentIndex: viewModel.currentIndex,
         totalItems: viewModel.totalItems,
@@ -409,8 +418,44 @@ class SlideshowOverlay extends ConsumerWidget {
       onPlaybackSpeedSelected: viewModel.setPlaybackSpeed,
       onSeek: viewModel.seekVideo,
       playbackVisibility: playbackVisibility,
-      showPlaybackForImages: true,
+      showPlaybackForImages:
+          true, // Restore overlay controls for images in non-compact view
       footer: _ControlsHint(delay: delay),
+      showBottomControls:
+          isVideo, // Show 3-row layout for videos in non-compact view
+      bottomControlsConfig: isVideo
+          ? VideoBottomControlsConfig(
+              showRow1: false, // Hide counter (shown in overlay)
+              showRow2: true, // Show progress bar
+              showRow3: false, // Hide primary controls (shown in overlay)
+              showRow4: false, // Hide secondary row
+              showShuffleInRow4: true,
+              showVideoLoopInRow4: true,
+              isFullScreen: false,
+              currentIndex: viewModel.currentIndex,
+              totalItems: viewModel.totalItems,
+              videoProgress: progress,
+              onSeek: viewModel.seekVideo,
+              totalDuration: state is SlideshowPlaying
+                  ? (state as SlideshowPlaying).totalDuration
+                  : Duration.zero,
+              isPlaying: isPlaying,
+              onPlayPause: onPlayPause,
+              onNext: viewModel.nextItem,
+              onPrevious: viewModel.previousItem,
+              isLooping: isLooping,
+              onToggleLoop: viewModel.toggleLoop,
+              isMuted: isMuted,
+              onToggleMute: viewModel.toggleMute,
+              isShuffleEnabled: isShuffleEnabled,
+              onToggleShuffle: viewModel.toggleShuffle,
+              isVideoLooping: isVideoLooping,
+              onToggleVideoLoop: viewModel.toggleVideoLoop,
+              playbackSpeed: playbackSpeed,
+              onPlaybackSpeedSelected: viewModel.setPlaybackSpeed,
+              playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+            )
+          : null,
     );
   }
 
@@ -481,6 +526,68 @@ class _SeekableVideoProgressBar extends StatefulWidget {
   @override
   State<_SeekableVideoProgressBar> createState() =>
       _SeekableVideoProgressBarState();
+}
+
+class _DurationSlider extends StatefulWidget {
+  const _DurationSlider({
+    required this.currentDuration,
+    required this.onDurationChanged,
+    required this.minDuration,
+    required this.maxDuration,
+  });
+
+  final Duration currentDuration;
+  final ValueChanged<Duration> onDurationChanged;
+  final Duration minDuration;
+  final Duration maxDuration;
+
+  @override
+  State<_DurationSlider> createState() => _DurationSliderState();
+}
+
+class _DurationSliderState extends State<_DurationSlider> {
+  late double _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = widget.currentDuration.inSeconds.toDouble();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DurationSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentDuration != widget.currentDuration) {
+      _value = widget.currentDuration.inSeconds.toDouble();
+    }
+  }
+
+  void _onChanged(double value) {
+    setState(() {
+      _value = value;
+    });
+    widget.onDurationChanged(Duration(seconds: value.round()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        activeTrackColor: Colors.white,
+        inactiveTrackColor: Colors.white.withValues(alpha: 0.3),
+        thumbColor: Colors.white,
+        overlayColor: Colors.white24,
+        showValueIndicator: ShowValueIndicator.always,
+      ),
+      child: Slider(
+        value: _value,
+        min: widget.minDuration.inSeconds.toDouble(),
+        max: widget.maxDuration.inSeconds.toDouble(),
+        label: '${_value.round()}s',
+        onChanged: _onChanged,
+      ),
+    );
+  }
 }
 
 class _SeekableVideoProgressBarState extends State<_SeekableVideoProgressBar> {
