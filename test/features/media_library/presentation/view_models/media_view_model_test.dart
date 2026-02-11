@@ -178,6 +178,9 @@ void main() {
   setUp(() async {
     mediaCache = _MockIsarMediaDataSource();
     when(mediaCache.getMedia()).thenAnswer((_) async => <MediaModel>[]);
+    when(
+      mediaCache.getMediaForDirectory(any),
+    ).thenAnswer((_) async => <MediaModel>[]);
     when(mediaCache.removeMediaForDirectory(any)).thenAnswer((_) async {});
     when(mediaCache.upsertMedia(any)).thenAnswer((_) async {});
     favoritesRepository = InMemoryFavoritesRepository();
@@ -226,6 +229,48 @@ void main() {
       ),
     ]);
     getMediaUseCase = GetMediaUseCase(mediaRepository);
+  });
+
+
+  test('loadMedia fetches persisted rows for current directory only', () async {
+    final container = _createMediaTestContainer(
+      mediaDataSource: mediaCache,
+      mediaRepository: mediaRepository,
+      getMediaUseCase: getMediaUseCase,
+      favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(mediaViewModelProvider(params).notifier);
+    await viewModel.loadMedia();
+    clearInteractions(mediaCache);
+
+    await viewModel.loadMedia();
+
+    verify(mediaCache.getMediaForDirectory(viewModel.directoryId)).called(1);
+    verifyNever(mediaCache.getMedia());
+  });
+
+  test('filterByTags fetches persisted rows for current directory only', () async {
+    final container = _createMediaTestContainer(
+      mediaDataSource: mediaCache,
+      mediaRepository: mediaRepository,
+      getMediaUseCase: getMediaUseCase,
+      favoritesRepository: favoritesRepository,
+      updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(mediaViewModelProvider(params).notifier);
+    await viewModel.loadMedia();
+    clearInteractions(mediaCache);
+
+    viewModel.filterByTags(const ['shared']);
+    await untilCalled(mediaCache.getMediaForDirectory(any));
+
+    verify(mediaCache.getMediaForDirectory(viewModel.directoryId)).called(1);
+    verifyNever(mediaCache.getMedia());
   });
 
   test('toggleMediaSelection toggles selection state', () async {

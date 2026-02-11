@@ -125,7 +125,10 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       );
 
       // Merge tags from local storage
-      final mergedModels = await _mergeTagsWithLocalStorage(models);
+      final mergedModels = await _mergeTagsWithLocalStorage(
+        models,
+        directoryId: directoryId,
+      );
 
       _permissionService.logPermissionEvent(
         'repository_get_media_success',
@@ -271,7 +274,10 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       bookmarkData: bookmarkData,
       mediaPersistence: _mediaDataSource,
     );
-    final mergedModels = await _mergeTagsWithLocalStorage(models);
+    final mergedModels = await _mergeTagsWithLocalStorage(
+      models,
+      directoryId: directoryId,
+    );
     return mergedModels.map(_modelToEntity).toList();
   }
 
@@ -289,7 +295,10 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       bookmarkData: bookmarkData,
       mediaPersistence: _mediaDataSource,
     );
-    final mergedModels = await _mergeTagsWithLocalStorage(models);
+    final mergedModels = await _mergeTagsWithLocalStorage(
+      models,
+      directoryId: directoryId,
+    );
     return mergedModels.map(_modelToEntity).toList();
   }
 
@@ -307,9 +316,12 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
   /// Merges tags from local storage with filesystem-scanned media.
   Future<List<MediaModel>> _mergeTagsWithLocalStorage(
-    List<MediaModel> scannedMedia,
-  ) async {
-    final existingMedia = await _mediaDataSource.getMedia();
+    List<MediaModel> scannedMedia, {
+    required String directoryId,
+  }) async {
+    final existingMedia = await _mediaDataSource.getMediaForDirectory(
+      directoryId,
+    );
     final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
     // Convert entities back to models for persistence, merging tagIds from persisted data
