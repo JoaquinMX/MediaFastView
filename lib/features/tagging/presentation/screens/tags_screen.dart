@@ -102,6 +102,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       optionalSections,
       state.filterMode,
       state.excludedTagIds,
+      state.mediaById,
     );
     final mediaMatchingDirectories = _filterMediaByDirectory(
       aggregatedMedia,
@@ -130,10 +131,12 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             ),
             state.selectedDirectoryIds,
             state.libraryDirectories,
+            state.mediaById,
           );
     final selectedDirectories = _collectDirectoriesFromSections(
       sectionsForDirectories,
       state.excludedTagIds,
+      state.mediaById,
     );
 
     final headerWidgets = <Widget>[
@@ -587,6 +590,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     List<TagSection> sections,
     List<String> selectedDirectoryIds,
     List<DirectoryEntity> topDirectories,
+    Map<String, MediaEntity> mediaById,
   ) {
     if (selectedDirectoryIds.isEmpty) {
       return sections;
@@ -607,22 +611,30 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           .map(
             (content) => TagDirectoryContent(
               directory: content.directory,
-              media: content.media
-                  .where((media) {
+              mediaIds: content.mediaIds
+                  .where((mediaId) {
+                    final media = mediaById[mediaId];
+                    if (media == null) {
+                      return false;
+                    }
                     final directoryId = _findTopDirectoryIdForPath(
                       media.path,
                       topDirectories,
                     );
                     return directoryId != null && selectedIds.contains(directoryId);
                   })
-                  .toList(),
+                  .toList(growable: false),
             ),
           )
-          .where((content) => content.media.isNotEmpty)
+          .where((content) => content.mediaIds.isNotEmpty)
           .toList();
 
-      final filteredMedia = section.media
-          .where((media) {
+      final filteredMedia = section.mediaIds
+          .where((mediaId) {
+            final media = mediaById[mediaId];
+            if (media == null) {
+              return false;
+            }
             final directoryId = _findTopDirectoryIdForPath(
               media.path,
               topDirectories,
@@ -641,7 +653,12 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           name: section.name,
           isFavorites: section.isFavorites,
           directories: filteredDirectories,
-          media: filteredMedia,
+          mediaIds: filteredMedia,
+          itemCount: filteredMedia.length +
+              filteredDirectories.fold<int>(
+                0,
+                (sum, entry) => sum + entry.mediaIds.length,
+              ),
           color: section.color,
         ),
       );
@@ -696,6 +713,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     List<TagSection> optionalSections,
     TagFilterMode filterMode,
     List<String> excludedTagIds,
+    Map<String, MediaEntity> mediaById,
   ) {
     if (allSections.isEmpty) {
       return const <MediaEntity>[];
@@ -725,18 +743,22 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       return const <MediaEntity>[];
     }
 
-    final mediaById = <String, MediaEntity>{};
+    final matchedMediaById = <String, MediaEntity>{};
     final requiredCount = <String, int>{};
     final optionalCount = <String, int>{};
 
     for (final section in sectionsToScan) {
       final seenInSection = <String>{};
-      for (final media in section.allMedia) {
+      for (final mediaId in section.allMediaIds) {
+        final media = mediaById[mediaId];
+        if (media == null) {
+          continue;
+        }
         if (excludedSet.isNotEmpty &&
             media.tagIds.any(excludedSet.contains)) {
           continue;
         }
-        mediaById[media.id] = media;
+        matchedMediaById[media.id] = media;
         if (seenInSection.add(media.id)) {
           if (requiredIds.contains(section.id)) {
             requiredCount.update(
@@ -759,17 +781,17 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     if (!filterMode.isHybrid) {
       final requireAll = hasRequired && filterMode.matchesAll;
       if (!requireAll) {
-        return mediaById.values.toList();
+        return matchedMediaById.values.toList();
       }
 
       final requiredMatches = requiredSections.length;
       return requiredCount.entries
           .where((entry) => entry.value == requiredMatches)
-          .map((entry) => mediaById[entry.key]!)
+          .map((entry) => matchedMediaById[entry.key]!)
           .toList();
     }
 
-    return mediaById.values.where((media) {
+    return matchedMediaById.values.where((media) {
       final mediaId = media.id;
       if (hasRequired) {
         if ((requiredCount[mediaId] ?? 0) != requiredSections.length) {
@@ -788,6 +810,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   List<TagDirectoryContent> _collectDirectoriesFromSections(
     List<TagSection> sections,
     List<String> excludedTagIds,
+    Map<String, MediaEntity> mediaById,
   ) {
     if (sections.isEmpty) {
       return const <TagDirectoryContent>[];
@@ -801,29 +824,34 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             directoryContent.directory.tagIds.any(excludedSet.contains)) {
           continue;
         }
-        final filteredMedia = excludedSet.isEmpty
-            ? directoryContent.media
-            : directoryContent.media
-                .where((media) => !media.tagIds.any(excludedSet.contains))
-                .toList();
-        if (filteredMedia.isEmpty) {
+        final filteredMediaIds = directoryContent.mediaIds.where((mediaId) {
+          final media = mediaById[mediaId];
+          if (media == null) {
+            return false;
+          }
+          if (excludedSet.isEmpty) {
+            return true;
+          }
+          return !media.tagIds.any(excludedSet.contains);
+        }).toList(growable: false);
+        if (filteredMediaIds.isEmpty) {
           continue;
         }
         map.update(
           directoryContent.directory.id,
           (existing) {
-            final merged = <String, MediaEntity>{
-              for (final media in existing.media) media.id: media,
-              for (final media in filteredMedia) media.id: media,
+            final merged = <String>{
+              ...existing.mediaIds,
+              ...filteredMediaIds,
             };
             return TagDirectoryContent(
               directory: directoryContent.directory,
-              media: merged.values.toList(),
+              mediaIds: merged.toList(growable: false),
             );
           },
           ifAbsent: () => TagDirectoryContent(
             directory: directoryContent.directory,
-            media: List<MediaEntity>.from(filteredMedia),
+            mediaIds: filteredMediaIds,
           ),
         );
       }
@@ -963,7 +991,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                   .map(
                     (content) => TagDirectoryChip(
                       directory: content.directory,
-                      mediaCount: content.media.length,
+                      mediaCount: content.mediaIds.length,
                       onTap: () => _openDirectoryFullScreen(content),
                     ),
                   )
@@ -1097,8 +1125,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           directoryPath: directoryContent.directory.path,
           directoryName: directoryContent.directory.name,
           bookmarkData: directoryContent.directory.bookmarkData,
-          initialMediaId: directoryContent.media.isNotEmpty
-              ? directoryContent.media.first.id
+          initialMediaId: directoryContent.mediaIds.isNotEmpty
+              ? directoryContent.mediaIds.first
               : null,
         ),
       ),
