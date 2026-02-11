@@ -366,10 +366,32 @@ final loadMediaForViewingUseCaseProvider = Provider<LoadMediaForViewingUseCase>(
 );
 
 // Directory preview provider
-final directoryPreviewProvider = FutureProvider.family<String?, String>((
+const Duration _previewProviderKeepAliveDuration = Duration(milliseconds: 500);
+
+void _configurePreviewProviderKeepAlive<T>(AutoDisposeFutureProviderRef<T> ref) {
+  final keepAliveLink = ref.keepAlive();
+  Timer? disposeTimer;
+
+  ref.onCancel(() {
+    disposeTimer = Timer(_previewProviderKeepAliveDuration, keepAliveLink.close);
+  });
+
+  ref.onResume(() {
+    disposeTimer?.cancel();
+    disposeTimer = null;
+  });
+
+  ref.onDispose(() {
+    disposeTimer?.cancel();
+    disposeTimer = null;
+  });
+}
+
+final directoryPreviewProvider = FutureProvider.autoDispose.family<String?, String>((
   ref,
   directoryPath,
 ) async {
+  _configurePreviewProviderKeepAlive(ref);
   debugPrint('Getting directory preview for: $directoryPath');
   final fileService = ref.watch(fileServiceProvider);
   try {
@@ -389,7 +411,8 @@ final directoryPreviewProvider = FutureProvider.family<String?, String>((
 });
 
 final directoryPreviewStripProvider =
-    FutureProvider.family<List<String>, String>((ref, directoryPath) async {
+    FutureProvider.autoDispose.family<List<String>, String>((ref, directoryPath) async {
+  _configurePreviewProviderKeepAlive(ref);
   debugPrint('Getting directory preview strip for: $directoryPath');
   final fileService = ref.watch(fileServiceProvider);
   try {
