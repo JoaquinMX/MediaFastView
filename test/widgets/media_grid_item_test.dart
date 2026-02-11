@@ -1,10 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/services/file_service.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/presentation/widgets/media_grid_item.dart';
 import 'package:media_fast_view/shared/providers/repository_providers.dart';
-import 'package:media_fast_view/core/services/file_service.dart';
 import 'package:mockito/mockito.dart';
 
 class _MockFileService extends Mock implements FileService {}
@@ -49,12 +51,10 @@ void main() {
         ),
       );
 
-      // Wait for the FutureBuilder to complete
       await tester.pumpAndSettle();
 
       expect(find.byType(Card), findsOneWidget);
-      // The widget should render (either with thumbnail or fallback image)
-      expect(find.byType(Container), findsWidgets); // Loading or error containers
+      expect(find.byType(Container), findsWidgets);
     });
 
     testWidgets('renders directory media type', (WidgetTester tester) async {
@@ -105,5 +105,100 @@ void main() {
 
       expect(find.byIcon(Icons.video_file), findsOneWidget);
     });
+
+    testWidgets(
+      'reuses text preview future across rebuilds and refreshes on path change',
+      (WidgetTester tester) async {
+        final tempDirectory = await Directory.systemTemp.createTemp(
+          'media_grid_item_test_',
+        );
+        addTearDown(() async {
+          if (await tempDirectory.exists()) {
+            await tempDirectory.delete(recursive: true);
+          }
+        });
+
+        final firstFile = File('${tempDirectory.path}/first.txt');
+        final secondFile = File('${tempDirectory.path}/second.txt');
+        await firstFile.writeAsString('first file preview');
+        await secondFile.writeAsString('second file preview');
+
+        final firstMedia = MediaEntity(
+          id: 'text-1',
+          path: firstFile.path,
+          name: 'first.txt',
+          type: MediaType.text,
+          size: 16,
+          lastModified: DateTime(2023, 1, 1),
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: Scaffold(
+                body: MediaGridItem(
+                  media: firstMedia,
+                  onTap: () {},
+                  onSelectionToggle: () {},
+                  isSelected: false,
+                  isSelectionMode: false,
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+        expect(find.text('first file preview'), findsOneWidget);
+
+        await firstFile.writeAsString('updated first file preview');
+
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: Scaffold(
+                body: MediaGridItem(
+                  media: firstMedia,
+                  onTap: () {},
+                  onSelectionToggle: () {},
+                  isSelected: false,
+                  isSelectionMode: false,
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+        expect(find.text('first file preview'), findsOneWidget);
+        expect(find.text('updated first file preview'), findsNothing);
+
+        final secondMedia = firstMedia.copyWith(
+          id: 'text-2',
+          path: secondFile.path,
+          name: 'second.txt',
+          size: 17,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: Scaffold(
+                body: MediaGridItem(
+                  media: secondMedia,
+                  onTap: () {},
+                  onSelectionToggle: () {},
+                  isSelected: false,
+                  isSelectionMode: false,
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+        expect(find.text('second file preview'), findsOneWidget);
+      },
+    );
   });
 }

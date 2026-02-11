@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
@@ -47,6 +48,30 @@ class MediaGridItem extends StatefulWidget {
 class _MediaGridItemState extends State<MediaGridItem> {
   bool _isHovering = false;
   VideoPlayerController? _videoController;
+  Future<String>? _textPreviewFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeTextPreviewFuture();
+  }
+
+  @override
+  void didUpdateWidget(covariant MediaGridItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.media.path != widget.media.path ||
+        oldWidget.media.type != widget.media.type) {
+      _initializeTextPreviewFuture();
+    }
+  }
+
+  void _initializeTextPreviewFuture() {
+    if (widget.media.type == MediaType.text) {
+      _textPreviewFuture = _loadTextPreview();
+    } else {
+      _textPreviewFuture = null;
+    }
+  }
 
   void _ensureSelected() {
     if (!widget.isSelected) {
@@ -80,9 +105,6 @@ class _MediaGridItemState extends State<MediaGridItem> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(
-      'MediaGridItem: Building item for ${widget.media.name}, type: ${widget.media.type}, size: ${MediaQuery.of(context).size}',
-    );
     return Consumer(
       builder: (context, ref, child) {
         return VisibilityDetector(
@@ -301,7 +323,7 @@ class _MediaGridItemState extends State<MediaGridItem> {
       padding: UiSpacing.gridPadding,
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: FutureBuilder<String>(
-        future: _loadTextPreview(),
+        future: _textPreviewFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -341,9 +363,6 @@ class _MediaGridItemState extends State<MediaGridItem> {
     final isCachingEnabled = ref.watch(thumbnailCachingProvider);
     return previewAsync.when(
       data: (String? previewPath) {
-        debugPrint(
-          'Directory ${widget.media.name}: preview path: $previewPath',
-        );
         return Column(
           children: [
             Expanded(
@@ -408,11 +427,12 @@ class _MediaGridItemState extends State<MediaGridItem> {
         );
       },
       loading: () {
-        debugPrint('Loading preview for ${widget.media.name}');
         return _buildLoadingContent();
       },
       error: (error, stack) {
-        debugPrint('Error getting preview for ${widget.media.name}: $error');
+        if (kDebugMode) {
+          debugPrint('Error getting preview for ${widget.media.name}: $error');
+        }
         return _buildErrorContent();
       },
     );
@@ -443,6 +463,9 @@ class _MediaGridItemState extends State<MediaGridItem> {
           ? '${content.substring(0, UiContent.textPreviewMaxLength)}...'
           : content;
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Failed to load text preview for ${widget.media.path}: $e');
+      }
       throw Exception('Failed to load text file');
     }
   }
