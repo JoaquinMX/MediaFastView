@@ -110,6 +110,81 @@ void main() {
         ),
       ).called(1);
     });
+
+    test('merges tags by querying persisted rows scoped to directory', () async {
+      const directoryPath = '/test/scoped';
+      final directoryId = generateDirectoryId(directoryPath);
+      final scannedModel = MediaModel(
+        id: 'media-1',
+        path: '$directoryPath/file.jpg',
+        name: 'file.jpg',
+        type: MediaType.image,
+        size: 128,
+        lastModified: DateTime(2024),
+        tagIds: const ['from-scan'],
+        directoryId: directoryId,
+      );
+      final persistedModel = scannedModel.copyWith(tagIds: const ['from-cache']);
+
+      when(
+        filesystemDataSource.scanMediaForDirectory(
+          any,
+          any,
+          bookmarkData: anyNamed('bookmarkData'),
+        ),
+      ).thenAnswer((_) async => <MediaModel>[scannedModel]);
+      when(isarMediaDataSource.getMediaForDirectory(directoryId)).thenAnswer(
+        (_) async => <MediaModel>[persistedModel],
+      );
+
+      final media = await repository.getMediaForDirectoryPath(directoryPath);
+
+      expect(media, hasLength(1));
+      expect(media.first.tagIds, containsAll(const ['from-scan', 'from-cache']));
+      verify(isarMediaDataSource.getMediaForDirectory(directoryId)).called(1);
+      verifyNever(isarMediaDataSource.getMedia());
+    });
+  });
+
+  group('filterMediaByTagsForDirectory', () {
+    test('queries persisted rows scoped to the requested directory', () async {
+      const directoryPath = '/test/filter';
+      final directoryId = generateDirectoryId(directoryPath);
+      final scannedModel = MediaModel(
+        id: 'media-filter',
+        path: '$directoryPath/filter.jpg',
+        name: 'filter.jpg',
+        type: MediaType.image,
+        size: 512,
+        lastModified: DateTime(2024),
+        tagIds: const ['from-scan'],
+        directoryId: directoryId,
+      );
+      final persistedModel = scannedModel.copyWith(tagIds: const ['from-cache']);
+
+      when(
+        filesystemDataSource.filterMediaByTags(
+          any,
+          any,
+          any,
+          bookmarkData: anyNamed('bookmarkData'),
+          mediaPersistence: anyNamed('mediaPersistence'),
+        ),
+      ).thenAnswer((_) async => <MediaModel>[scannedModel]);
+      when(isarMediaDataSource.getMediaForDirectory(directoryId)).thenAnswer(
+        (_) async => <MediaModel>[persistedModel],
+      );
+
+      final media = await repository.filterMediaByTagsForDirectory(
+        const ['tag-1'],
+        directoryPath,
+      );
+
+      expect(media, hasLength(1));
+      expect(media.first.tagIds, containsAll(const ['from-scan', 'from-cache']));
+      verify(isarMediaDataSource.getMediaForDirectory(directoryId)).called(1);
+      verifyNever(isarMediaDataSource.getMedia());
+    });
   });
 
   group('getMediaById', () {

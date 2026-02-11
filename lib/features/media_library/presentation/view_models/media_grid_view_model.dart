@@ -438,7 +438,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
       // Get existing persisted media to merge tagIds
       final mergeStartTime = DateTime.now();
-      final existingMedia = await _mediaDataSource.getMedia();
+      final existingMedia = await _mediaDataSource.getMediaForDirectory(
+        directoryId,
+      );
       final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
       // Convert entities back to models for persistence, merging tagIds from persisted data
@@ -569,7 +571,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
       );
 
       // Get existing persisted media to merge tagIds
-      final existingMedia = await _mediaDataSource.getMedia();
+      final existingMedia = await _mediaDataSource.getMediaForDirectory(
+        directoryId,
+      );
       final existingMediaMap = {for (final m in existingMedia) m.id: m};
 
       // Convert entities back to models for persistence, merging tagIds from persisted data
