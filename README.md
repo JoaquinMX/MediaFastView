@@ -59,6 +59,36 @@ flutter test
 
 Widget and integration test scaffolds live under `test/`. Add coverage for new view models or use cases as features evolve.
 
+## iOS CocoaPods Linkage Policy
+
+- `ios/Podfile` now defaults to CocoaPods static library integration for `Runner` (no unconditional `use_frameworks!`).
+- Dynamic framework packaging can be re-enabled only when needed:
+  - `USE_FRAMEWORKS=static pod install` to keep framework-style integration but static linkage.
+  - `USE_FRAMEWORKS=dynamic pod install` only for plugins that fail without dynamic frameworks.
+- Current iOS plugin set in `ios/Podfile.lock` (`file_picker`, `isar_flutter_libs`, `path_provider_foundation`, `shared_preferences_foundation`, `video_player_avfoundation`) does not require globally enabling dynamic frameworks.
+- If a future plugin fails with static libraries, scope framework usage narrowly:
+  1. First try `USE_FRAMEWORKS=static`.
+  2. If dynamic frameworks are unavoidable, document the specific plugin and failure mode in this section and keep framework enablement limited to iOS `Runner` only.
+
+### Controlled Build + Install Timing (Real iPhone)
+
+To avoid regressions from future dependency changes, run this before/after benchmark on a connected physical iPhone from `ios/`:
+
+```bash
+# Baseline (current default/static)
+flutter clean
+/usr/bin/time -lp flutter build ios --debug
+/usr/bin/time -lp flutter install -d <device_id>
+
+# Comparison (only if investigating framework overhead)
+flutter clean
+USE_FRAMEWORKS=dynamic pod install
+/usr/bin/time -lp flutter build ios --debug
+/usr/bin/time -lp flutter install -d <device_id>
+```
+
+Record build + install timing deltas in your PR whenever iOS plugins are added/updated.
+
 ## Roadmap & Known Gaps
 
 - Inline tag editing within the full-screen viewer, including keyboard shortcuts for quick tagging.

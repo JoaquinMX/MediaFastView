@@ -28,7 +28,14 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
+  # Prefer static libraries for faster CocoaPods integration and app install.
+  # If a future plugin requires framework packaging, enable static frameworks
+  # with `USE_FRAMEWORKS=static` or dynamic frameworks with
+  # `USE_FRAMEWORKS=dynamic` for the failing integration.
+  linkage_mode = ENV['USE_FRAMEWORKS']
+  if linkage_mode != nil
+    use_frameworks! :linkage => linkage_mode.to_sym
+  end
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
