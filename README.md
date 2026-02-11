@@ -89,6 +89,24 @@ USE_FRAMEWORKS=dynamic pod install
 
 Record build + install timing deltas in your PR whenever iOS plugins are added/updated.
 
+### CocoaPods / Ruby ffi Troubleshooting
+
+If iOS debug build logs show:
+
+```text
+Ignoring ffi-1.15.5 because its extensions are not built. Try: gem pristine ffi --version 1.15.5
+```
+
+Repair the native gem extension and reinstall pods:
+
+```bash
+gem pristine ffi --version 1.15.5
+cd ios
+pod install
+```
+
+If the issue persists, reinstall CocoaPods gems for your Ruby version and rerun `pod install`.
+
 ## Roadmap & Known Gaps
 
 - Inline tag editing within the full-screen viewer, including keyboard shortcuts for quick tagging.

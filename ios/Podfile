@@ -32,8 +32,13 @@ target 'Runner' do
   # If a future plugin requires framework packaging, enable static frameworks
   # with `USE_FRAMEWORKS=static` or dynamic frameworks with
   # `USE_FRAMEWORKS=dynamic` for the failing integration.
-  linkage_mode = ENV['USE_FRAMEWORKS']
-  if linkage_mode != nil
+  linkage_mode = ENV['USE_FRAMEWORKS']&.strip&.downcase
+  if linkage_mode != nil && !linkage_mode.empty?
+    supported_linkage_modes = ['static', 'dynamic']
+    unless supported_linkage_modes.include?(linkage_mode)
+      raise "Invalid USE_FRAMEWORKS value '#{linkage_mode}'. Supported values: static, dynamic"
+    end
+
     use_frameworks! :linkage => linkage_mode.to_sym
   end
 
