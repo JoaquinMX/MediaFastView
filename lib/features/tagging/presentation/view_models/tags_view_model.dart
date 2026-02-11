@@ -97,9 +97,9 @@ class TagsLoaded extends TagsState {
   });
 
   final List<TagSection> sections;
-  final List<String> selectedTagIds;
-  final List<String> optionalTagIds;
-  final List<String> excludedTagIds;
+  final Set<String> selectedTagIds;
+  final Set<String> optionalTagIds;
+  final Set<String> excludedTagIds;
   final TagFilterMode filterMode;
   final TagMediaTypeFilter mediaTypeFilter;
   final TagSelectionMode selectionMode;
@@ -108,11 +108,36 @@ class TagsLoaded extends TagsState {
   final Map<String, int> directoryMediaCounts;
   final Map<String, MediaEntity> mediaById;
 
+  List<String> get orderedSelectedTagIds {
+    return _orderedTagIds(selectedTagIds);
+  }
+
+  List<String> get orderedOptionalTagIds {
+    return _orderedTagIds(optionalTagIds);
+  }
+
+  List<String> get orderedExcludedTagIds {
+    return _orderedTagIds(excludedTagIds);
+  }
+
+  List<String> _orderedTagIds(Set<String> ids) {
+    final orderedBySection = sections
+        .where((section) => ids.contains(section.id))
+        .map((section) => section.id)
+        .toList(growable: false);
+    if (orderedBySection.length == ids.length) {
+      return orderedBySection;
+    }
+
+    final missing = ids.difference(orderedBySection.toSet()).toList()..sort();
+    return <String>[...orderedBySection, ...missing];
+  }
+
   TagsLoaded copyWith({
     List<TagSection>? sections,
-    List<String>? selectedTagIds,
-    List<String>? optionalTagIds,
-    List<String>? excludedTagIds,
+    Set<String>? selectedTagIds,
+    Set<String>? optionalTagIds,
+    Set<String>? excludedTagIds,
     TagFilterMode? filterMode,
     TagMediaTypeFilter? mediaTypeFilter,
     TagSelectionMode? selectionMode,
@@ -159,9 +184,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
   final FilterByTagsUseCase _filterByTagsUseCase;
   final FavoritesRepository _favoritesRepository;
   final IsarMediaDataSource _mediaDataSource;
-  List<String> _selectedTagIds = const [];
-  List<String> _optionalTagIds = const [];
-  List<String> _excludedTagIds = const [];
+  Set<String> _selectedTagIds = <String>{};
+  Set<String> _optionalTagIds = <String>{};
+  Set<String> _excludedTagIds = <String>{};
   List<String> _selectedDirectoryIds = const [];
   TagFilterMode _filterMode = TagFilterMode.any;
   TagMediaTypeFilter _mediaTypeFilter = TagMediaTypeFilter.all;
@@ -207,9 +232,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
             mediaById: currentState.mediaById,
           );
         } else if (otherSections.isEmpty) {
-          _selectedTagIds = const [];
-          _optionalTagIds = const [];
-          _excludedTagIds = const [];
+          _selectedTagIds = <String>{};
+          _optionalTagIds = <String>{};
+          _excludedTagIds = <String>{};
           state = const TagsEmpty();
         } else {
           state = TagsLoaded(
@@ -308,9 +333,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
           .toList();
 
       if (sections.isEmpty) {
-        _selectedTagIds = const [];
-        _optionalTagIds = const [];
-        _excludedTagIds = const [];
+        _selectedTagIds = <String>{};
+        _optionalTagIds = <String>{};
+        _excludedTagIds = <String>{};
         state = const TagsEmpty();
       } else {
         state = TagsLoaded(
@@ -362,13 +387,11 @@ class TagsViewModel extends StateNotifier<TagsState> {
   }
 
   void _updateRequired(String tagId, bool isSelected) {
-    final updatedSelection = List<String>.from(_selectedTagIds);
+    final updatedSelection = <String>{..._selectedTagIds};
     if (isSelected) {
-      if (!updatedSelection.contains(tagId)) {
-        updatedSelection.add(tagId);
-      }
-      _optionalTagIds = _optionalTagIds.where((id) => id != tagId).toList();
-      _excludedTagIds = _excludedTagIds.where((id) => id != tagId).toList();
+      updatedSelection.add(tagId);
+      _optionalTagIds.remove(tagId);
+      _excludedTagIds.remove(tagId);
     } else {
       updatedSelection.remove(tagId);
     }
@@ -376,13 +399,11 @@ class TagsViewModel extends StateNotifier<TagsState> {
   }
 
   void _updateOptional(String tagId, bool isSelected) {
-    final updatedOptional = List<String>.from(_optionalTagIds);
+    final updatedOptional = <String>{..._optionalTagIds};
     if (isSelected) {
-      if (!updatedOptional.contains(tagId)) {
-        updatedOptional.add(tagId);
-      }
-      _selectedTagIds = _selectedTagIds.where((id) => id != tagId).toList();
-      _excludedTagIds = _excludedTagIds.where((id) => id != tagId).toList();
+      updatedOptional.add(tagId);
+      _selectedTagIds.remove(tagId);
+      _excludedTagIds.remove(tagId);
     } else {
       updatedOptional.remove(tagId);
     }
@@ -390,13 +411,11 @@ class TagsViewModel extends StateNotifier<TagsState> {
   }
 
   void setTagExcluded(String tagId, bool isExcluded) {
-    final updatedExclusions = List<String>.from(_excludedTagIds);
+    final updatedExclusions = <String>{..._excludedTagIds};
     if (isExcluded) {
-      if (!updatedExclusions.contains(tagId)) {
-        updatedExclusions.add(tagId);
-      }
-      _selectedTagIds = _selectedTagIds.where((id) => id != tagId).toList();
-      _optionalTagIds = _optionalTagIds.where((id) => id != tagId).toList();
+      updatedExclusions.add(tagId);
+      _selectedTagIds.remove(tagId);
+      _optionalTagIds.remove(tagId);
     } else {
       updatedExclusions.remove(tagId);
     }
@@ -404,70 +423,75 @@ class TagsViewModel extends StateNotifier<TagsState> {
   }
 
   void clearSelection() {
-    _updateSelection(const []);
-    _updateOptionalSelection(const []);
-    _updateExclusions(const []);
+    _updateSelection(<String>{});
+    _updateOptionalSelection(<String>{});
+    _updateExclusions(<String>{});
   }
 
-  List<String> _syncSelectionWithSections(List<TagSection> sections) {
+  Set<String> _syncSelectionWithSections(List<TagSection> sections) {
     final availableIds = sections.map((section) => section.id).toSet();
-    _selectedTagIds = _selectedTagIds
-        .where((tagId) => availableIds.contains(tagId))
-        .toList();
-    return List<String>.from(_selectedTagIds);
+    _selectedTagIds = _selectedTagIds.intersection(availableIds);
+    return Set<String>.unmodifiable(_selectedTagIds);
   }
 
-  List<String> _syncOptionalWithSections(List<TagSection> sections) {
+  Set<String> _syncOptionalWithSections(List<TagSection> sections) {
     final availableIds = sections.map((section) => section.id).toSet();
     _optionalTagIds = _optionalTagIds
-        .where((tagId) => availableIds.contains(tagId))
-        .where((tagId) => !_selectedTagIds.contains(tagId))
-        .toList();
-    return List<String>.from(_optionalTagIds);
+        .intersection(availableIds)
+        .difference(_selectedTagIds);
+    return Set<String>.unmodifiable(_optionalTagIds);
   }
 
-  List<String> _syncExclusionsWithSections(List<TagSection> sections) {
+  Set<String> _syncExclusionsWithSections(List<TagSection> sections) {
     final availableIds = sections.map((section) => section.id).toSet();
     _excludedTagIds = _excludedTagIds
-        .where((tagId) => availableIds.contains(tagId))
-        .where((tagId) => !_selectedTagIds.contains(tagId))
-        .where((tagId) => !_optionalTagIds.contains(tagId))
-        .toList();
-    return List<String>.from(_excludedTagIds);
+        .intersection(availableIds)
+        .difference(_selectedTagIds)
+        .difference(_optionalTagIds);
+    return Set<String>.unmodifiable(_excludedTagIds);
   }
 
-  void _updateSelection(List<String> newSelection) {
+  void _updateSelection(Set<String> newSelection) {
+    if (setEquals(_selectedTagIds, newSelection)) {
+      return;
+    }
     _selectedTagIds = newSelection;
     final currentState = state;
     if (currentState is TagsLoaded && mounted) {
       state = currentState.copyWith(
-        selectedTagIds: List<String>.from(_selectedTagIds),
-        excludedTagIds: List<String>.from(_excludedTagIds),
-        optionalTagIds: List<String>.from(_optionalTagIds),
+        selectedTagIds: Set<String>.unmodifiable(_selectedTagIds),
+        excludedTagIds: Set<String>.unmodifiable(_excludedTagIds),
+        optionalTagIds: Set<String>.unmodifiable(_optionalTagIds),
       );
     }
   }
 
-  void _updateOptionalSelection(List<String> newOptional) {
+  void _updateOptionalSelection(Set<String> newOptional) {
+    if (setEquals(_optionalTagIds, newOptional)) {
+      return;
+    }
     _optionalTagIds = newOptional;
     final currentState = state;
     if (currentState is TagsLoaded && mounted) {
       state = currentState.copyWith(
-        optionalTagIds: List<String>.from(_optionalTagIds),
-        selectedTagIds: List<String>.from(_selectedTagIds),
-        excludedTagIds: List<String>.from(_excludedTagIds),
+        optionalTagIds: Set<String>.unmodifiable(_optionalTagIds),
+        selectedTagIds: Set<String>.unmodifiable(_selectedTagIds),
+        excludedTagIds: Set<String>.unmodifiable(_excludedTagIds),
       );
     }
   }
 
-  void _updateExclusions(List<String> newExclusions) {
+  void _updateExclusions(Set<String> newExclusions) {
+    if (setEquals(_excludedTagIds, newExclusions)) {
+      return;
+    }
     _excludedTagIds = newExclusions;
     final currentState = state;
     if (currentState is TagsLoaded && mounted) {
       state = currentState.copyWith(
-        excludedTagIds: List<String>.from(_excludedTagIds),
-        selectedTagIds: List<String>.from(_selectedTagIds),
-        optionalTagIds: List<String>.from(_optionalTagIds),
+        excludedTagIds: Set<String>.unmodifiable(_excludedTagIds),
+        selectedTagIds: Set<String>.unmodifiable(_selectedTagIds),
+        optionalTagIds: Set<String>.unmodifiable(_optionalTagIds),
       );
     }
   }
@@ -479,8 +503,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
     _filterMode = mode;
     if (!_filterMode.isHybrid && _optionalTagIds.isNotEmpty) {
-      _selectedTagIds = {..._selectedTagIds, ..._optionalTagIds}.toList();
-      _optionalTagIds = const [];
+      _selectedTagIds = <String>{..._selectedTagIds, ..._optionalTagIds};
+      _optionalTagIds = <String>{};
     }
     if (!_filterMode.isHybrid) {
       _selectionMode = TagSelectionMode.required;
@@ -489,8 +513,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
     if (currentState is TagsLoaded && mounted) {
       state = currentState.copyWith(
         filterMode: _filterMode,
-        selectedTagIds: List<String>.from(_selectedTagIds),
-        optionalTagIds: List<String>.from(_optionalTagIds),
+        selectedTagIds: Set<String>.unmodifiable(_selectedTagIds),
+        optionalTagIds: Set<String>.unmodifiable(_optionalTagIds),
         selectionMode: _selectionMode,
       );
     }

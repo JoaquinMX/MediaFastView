@@ -87,11 +87,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     int gridColumns,
   ) {
     final sections = state.sections;
+    final selectedTagIds = state.selectedTagIds;
+    final optionalTagIds = state.optionalTagIds;
+    final excludedTagIds = state.excludedTagIds;
     final selectedSections = sections
-        .where((section) => state.selectedTagIds.contains(section.id))
+        .where((section) => selectedTagIds.contains(section.id))
         .toList();
     final optionalSections = sections
-        .where((section) => state.optionalTagIds.contains(section.id))
+        .where((section) => optionalTagIds.contains(section.id))
         .toList();
     final hasRequiredTags = selectedSections.isNotEmpty;
     final hasOptionalTags = optionalSections.isNotEmpty;
@@ -101,7 +104,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       selectedSections,
       optionalSections,
       state.filterMode,
-      state.excludedTagIds,
+      excludedTagIds,
       state.mediaById,
     );
     final mediaMatchingDirectories = _filterMediaByDirectory(
@@ -119,7 +122,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             selectedSections,
             optionalSections,
             hasSelectedTags,
-            state.excludedTagIds.isEmpty,
+            excludedTagIds.isEmpty,
           )
         : _filterSectionsByDirectory(
             _resolveFilterSections(
@@ -127,7 +130,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               selectedSections,
               optionalSections,
               hasSelectedTags,
-              state.excludedTagIds.isEmpty,
+              excludedTagIds.isEmpty,
             ),
             state.selectedDirectoryIds,
             state.libraryDirectories,
@@ -135,7 +138,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           );
     final selectedDirectories = _collectDirectoriesFromSections(
       sectionsForDirectories,
-      state.excludedTagIds,
+      excludedTagIds,
       state.mediaById,
     );
 
@@ -157,7 +160,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     ];
 
     if (selectedSections.isEmpty &&
-        state.excludedTagIds.isEmpty &&
+        excludedTagIds.isEmpty &&
         state.selectedDirectoryIds.isEmpty) {
       headerWidgets.add(_buildSelectionPlaceholder());
     } else {
@@ -166,9 +169,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           filteredMedia,
           viewModel,
           state.filterMode,
-          state.selectedTagIds.length,
-          state.optionalTagIds.length,
-          state.excludedTagIds.length,
+          selectedTagIds.length,
+          optionalTagIds.length,
+          excludedTagIds.length,
         ),
         const SizedBox(height: 12),
       ]);
@@ -200,7 +203,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
     if (filteredMedia.isNotEmpty &&
         (selectedSections.isNotEmpty ||
-            state.excludedTagIds.isNotEmpty ||
+            excludedTagIds.isNotEmpty ||
             hasDirectoryFilter)) {
       slivers.add(
         SliverPadding(
@@ -320,6 +323,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       );
     }
 
+    final selectedTagIds = state.selectedTagIds;
+    final optionalTagIds = state.optionalTagIds;
+    final excludedTagIds = state.excludedTagIds;
+
     return Card(
       elevation: 1,
       child: Padding(
@@ -328,9 +335,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           spacing: 12,
           runSpacing: 12,
           children: filteredSections.map((section) {
-            final isSelected = state.selectedTagIds.contains(section.id);
-            final isOptional = state.optionalTagIds.contains(section.id);
-            final isExcluded = state.excludedTagIds.contains(section.id);
+            final isSelected = selectedTagIds.contains(section.id);
+            final isOptional = optionalTagIds.contains(section.id);
+            final isExcluded = excludedTagIds.contains(section.id);
             final labelText = StringBuffer(section.name)
               ..write(' • ${section.itemCount} ')
               ..write('item${section.itemCount == 1 ? '' : 's'}');
@@ -712,14 +719,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     List<TagSection> requiredSections,
     List<TagSection> optionalSections,
     TagFilterMode filterMode,
-    List<String> excludedTagIds,
+    Set<String> excludedTagIds,
     Map<String, MediaEntity> mediaById,
   ) {
     if (allSections.isEmpty) {
       return const <MediaEntity>[];
     }
 
-    final excludedSet = excludedTagIds.toSet();
+    final excludedSet = excludedTagIds;
     final requiredIds = {
       for (final section in requiredSections) section.id,
     };
@@ -809,14 +816,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
   List<TagDirectoryContent> _collectDirectoriesFromSections(
     List<TagSection> sections,
-    List<String> excludedTagIds,
+    Set<String> excludedTagIds,
     Map<String, MediaEntity> mediaById,
   ) {
     if (sections.isEmpty) {
       return const <TagDirectoryContent>[];
     }
 
-    final excludedSet = excludedTagIds.toSet();
+    final excludedSet = excludedTagIds;
     final map = <String, TagDirectoryContent>{};
     for (final section in sections) {
       for (final directoryContent in section.directories) {
