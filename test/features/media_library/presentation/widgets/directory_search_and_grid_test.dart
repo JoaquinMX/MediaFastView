@@ -441,7 +441,7 @@ void main() {
       expect(viewModel.state, isA<DirectoryLoaded>());
     });
 
-    testWidgets('shows tagged percentage sort option in the sort menu', (
+    testWidgets('shows tagged percentage sort options in the sort menu', (
       tester,
     ) async {
       final directories = [
@@ -479,19 +479,20 @@ void main() {
       await tester.tap(find.byTooltip('Sort'));
       await tester.pumpAndSettle();
 
+      expect(find.text('Tagged % (Low-High)'), findsOneWidget);
       expect(find.text('Tagged % (High-Low)'), findsOneWidget);
 
-      await tester.tap(find.text('Tagged % (High-Low)'));
+      await tester.tap(find.text('Tagged % (Low-High)'));
       await tester.pumpAndSettle();
 
       expect(
         viewModel.lastSortOption,
-        DirectorySortOption.taggedPercentageDescending,
+        DirectorySortOption.taggedPercentageAscending,
       );
       expect(viewModel.state, isA<DirectoryLoaded>());
       expect(
         (viewModel.state as DirectoryLoaded).sortOption,
-        DirectorySortOption.taggedPercentageDescending,
+        DirectorySortOption.taggedPercentageAscending,
       );
     });
   });

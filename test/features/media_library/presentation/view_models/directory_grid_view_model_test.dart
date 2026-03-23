@@ -557,7 +557,7 @@ void main() {
   });
 
   test(
-    'changeSortOption sorts directories by tagged percentage with stable ties',
+    'changeSortOption sorts directories by tagged percentage in both directions',
     () async {
       directoryRepository = InMemoryDirectoryRepository([
         DirectoryEntity(
@@ -670,18 +670,34 @@ void main() {
 
       viewModel.changeSortOption(DirectorySortOption.taggedPercentageDescending);
 
-      final state =
+      final descendingState =
           container.read(directoryViewModelProvider) as DirectoryLoaded;
       expect(
-        state.directories.map((directory) => directory.name).toList(),
+        descendingState.directories.map((directory) => directory.name).toList(),
         ['Gamma', 'Beta', 'Aardvark', 'Alpha', 'Sparse', 'Empty'],
       );
-      expect(state.sortOption, DirectorySortOption.taggedPercentageDescending);
+      expect(
+        descendingState.sortOption,
+        DirectorySortOption.taggedPercentageDescending,
+      );
 
-      final emptyDirectory = state.directories.last;
+      final emptyDirectory = descendingState.directories.last;
       expect(emptyDirectory.name, 'Empty');
       expect(emptyDirectory.mediaCounts.totalMediaCount, 0);
       expect(emptyDirectory.mediaCounts.taggedMediaCount, 0);
+
+      viewModel.changeSortOption(DirectorySortOption.taggedPercentageAscending);
+
+      final ascendingState =
+          container.read(directoryViewModelProvider) as DirectoryLoaded;
+      expect(
+        ascendingState.directories.map((directory) => directory.name).toList(),
+        ['Empty', 'Sparse', 'Aardvark', 'Alpha', 'Beta', 'Gamma'],
+      );
+      expect(
+        ascendingState.sortOption,
+        DirectorySortOption.taggedPercentageAscending,
+      );
     },
   );
 }

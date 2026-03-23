@@ -25,6 +25,7 @@ enum DirectorySortOption {
   nameDescending,
   lastModifiedDescending,
   lastModifiedAscending,
+  taggedPercentageAscending,
   taggedPercentageDescending,
 }
 
@@ -34,6 +35,7 @@ extension DirectorySortOptionX on DirectorySortOption {
     DirectorySortOption.nameDescending => 'Name (Z-A)',
     DirectorySortOption.lastModifiedDescending => 'Last Modified (Newest)',
     DirectorySortOption.lastModifiedAscending => 'Last Modified (Oldest)',
+    DirectorySortOption.taggedPercentageAscending => 'Tagged % (Low-High)',
     DirectorySortOption.taggedPercentageDescending => 'Tagged % (High-Low)',
   };
 }
@@ -949,26 +951,48 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       case DirectorySortOption.lastModifiedAscending:
         sorted.sort((a, b) => a.lastModified.compareTo(b.lastModified));
         break;
+      case DirectorySortOption.taggedPercentageAscending:
+        sorted.sort(
+          (a, b) => _compareByTaggedPercentage(
+            a,
+            b,
+            descending: false,
+          ),
+        );
+        break;
       case DirectorySortOption.taggedPercentageDescending:
-        sorted.sort(_compareByTaggedPercentageDescending);
+        sorted.sort(
+          (a, b) => _compareByTaggedPercentage(
+            a,
+            b,
+            descending: true,
+          ),
+        );
         break;
     }
     return sorted;
   }
 
-  int _compareByTaggedPercentageDescending(
+  int _compareByTaggedPercentage(
     DirectoryEntity a,
     DirectoryEntity b,
+    {
+      required bool descending,
+    }
   ) {
-    final percentageComparison = _taggedPercentage(b).compareTo(
+    final percentageComparison = _orderedComparison(
       _taggedPercentage(a),
+      _taggedPercentage(b),
+      descending: descending,
     );
     if (percentageComparison != 0) {
       return percentageComparison;
     }
 
-    final taggedCountComparison = b.mediaCounts.taggedMediaCount.compareTo(
+    final taggedCountComparison = _orderedComparison(
       a.mediaCounts.taggedMediaCount,
+      b.mediaCounts.taggedMediaCount,
+      descending: descending,
     );
     if (taggedCountComparison != 0) {
       return taggedCountComparison;
@@ -979,8 +1003,8 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
   /// Returns a safe tagged ratio for sorting.
   ///
-  /// Directories with `0 / 0` media counts are treated as `0%` tagged so they
-  /// remain below any directory with a positive tagging ratio.
+  /// Directories with `0 / 0` media counts are treated as `0%` tagged so the
+  /// sort stays deterministic without producing NaN or infinity values.
   double _taggedPercentage(DirectoryEntity directory) {
     final totalMediaCount = directory.mediaCounts.totalMediaCount;
     if (totalMediaCount == 0) {
@@ -988,6 +1012,14 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     }
 
     return directory.mediaCounts.taggedMediaCount / totalMediaCount;
+  }
+
+  int _orderedComparison(
+    num left,
+    num right, {
+    required bool descending,
+  }) {
+    return descending ? right.compareTo(left) : left.compareTo(right);
   }
 
   DirectoryEntity _applyMediaCounts(

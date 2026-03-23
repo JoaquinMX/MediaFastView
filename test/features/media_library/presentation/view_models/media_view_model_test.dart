@@ -15,6 +15,7 @@ import '../../../../../lib/features/media_library/domain/use_cases/get_media_use
 import '../../../../../lib/features/media_library/domain/use_cases/update_directory_access_use_case.dart';
 import '../../../../../lib/features/media_library/presentation/view_models/media_grid_view_model.dart';
 import '../../../../../lib/shared/providers/repository_providers.dart';
+import '../../../../../lib/shared/utils/directory_id_utils.dart';
 
 class InMemoryMediaRepository implements MediaRepository {
   InMemoryMediaRepository(this._media);
@@ -210,6 +211,9 @@ ProviderContainer _createMediaTestContainer({
     overrides: [
       favoritesRepositoryProvider.overrideWith((ref) {
         return FavoritesRepositoryNotifier(favoritesRepository);
+      }),
+      mediaRepositoryProvider.overrideWith((ref) {
+        return MediaRepositoryNotifier(mediaRepository);
       }),
       mediaViewModelProvider.overrideWithProvider((params) {
         return StateNotifierProvider.autoDispose<MediaViewModel, MediaState>(
@@ -475,5 +479,128 @@ void main() {
     viewModel.selectMediaRange(const ['m3'], append: true);
     expect(state.selectedMediaIds, {'m1', 'm2', 'm3'});
   });
+
+  test(
+    'changeSortOption sorts subdirectories by tagged percentage in both directions',
+    () async {
+      const childAlphaPath = '/dir1/alpha';
+      const childBetaPath = '/dir1/beta';
+      const childEmptyPath = '/dir1/empty';
+
+      mediaRepository = InMemoryMediaRepository([
+        MediaEntity(
+          id: 'dir-alpha',
+          path: childAlphaPath,
+          name: 'Alpha',
+          type: MediaType.directory,
+          size: 0,
+          lastModified: DateTime(2024, 1, 1),
+          tagIds: const [],
+          directoryId: '/dir1',
+        ),
+        MediaEntity(
+          id: 'dir-beta',
+          path: childBetaPath,
+          name: 'Beta',
+          type: MediaType.directory,
+          size: 0,
+          lastModified: DateTime(2024, 1, 2),
+          tagIds: const [],
+          directoryId: '/dir1',
+        ),
+        MediaEntity(
+          id: 'dir-empty',
+          path: childEmptyPath,
+          name: 'Empty',
+          type: MediaType.directory,
+          size: 0,
+          lastModified: DateTime(2024, 1, 3),
+          tagIds: const [],
+          directoryId: '/dir1',
+        ),
+        MediaEntity(
+          id: 'file-1',
+          path: '/dir1/file-1.jpg',
+          name: 'file-1.jpg',
+          type: MediaType.image,
+          size: 100,
+          lastModified: DateTime(2024, 1, 4),
+          tagIds: const ['local'],
+          directoryId: '/dir1',
+        ),
+        MediaEntity(
+          id: 'alpha-1',
+          path: '$childAlphaPath/1.jpg',
+          name: '1.jpg',
+          type: MediaType.image,
+          size: 100,
+          lastModified: DateTime(2024, 1, 5),
+          tagIds: const ['tag-a'],
+          directoryId: generateDirectoryId(childAlphaPath),
+        ),
+        MediaEntity(
+          id: 'alpha-2',
+          path: '$childAlphaPath/2.jpg',
+          name: '2.jpg',
+          type: MediaType.image,
+          size: 100,
+          lastModified: DateTime(2024, 1, 5),
+          tagIds: const <String>[],
+          directoryId: generateDirectoryId(childAlphaPath),
+        ),
+        MediaEntity(
+          id: 'beta-1',
+          path: '$childBetaPath/1.jpg',
+          name: '1.jpg',
+          type: MediaType.image,
+          size: 100,
+          lastModified: DateTime(2024, 1, 5),
+          tagIds: const ['tag-b'],
+          directoryId: generateDirectoryId(childBetaPath),
+        ),
+      ]);
+      getMediaUseCase = GetMediaUseCase(mediaRepository);
+
+      final container = _createMediaTestContainer(
+        mediaDataSource: mediaCache,
+        mediaRepository: mediaRepository,
+        getMediaUseCase: getMediaUseCase,
+        favoritesRepository: favoritesRepository,
+        updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
+      );
+      addTearDown(container.dispose);
+
+      final viewModel = container.read(mediaViewModelProvider(params).notifier);
+      await viewModel.loadMedia();
+
+      viewModel.changeSortOption(MediaSortOption.taggedPercentageDescending);
+
+      final descendingState = container.read(
+        mediaViewModelProvider(params),
+      ) as MediaLoaded;
+      expect(
+        descendingState.media.map((media) => media.name).toList(),
+        ['Beta', 'Alpha', 'Empty', 'file-1.jpg'],
+      );
+      expect(
+        descendingState.sortOption,
+        MediaSortOption.taggedPercentageDescending,
+      );
+
+      viewModel.changeSortOption(MediaSortOption.taggedPercentageAscending);
+
+      final ascendingState = container.read(
+        mediaViewModelProvider(params),
+      ) as MediaLoaded;
+      expect(
+        ascendingState.media.map((media) => media.name).toList(),
+        ['Empty', 'Alpha', 'Beta', 'file-1.jpg'],
+      );
+      expect(
+        ascendingState.sortOption,
+        MediaSortOption.taggedPercentageAscending,
+      );
+    },
+  );
 
 }
