@@ -83,6 +83,10 @@ class SettingsScreen extends ConsumerWidget {
             settings.autoNavigateSiblingDirectories,
             viewModel,
           ),
+          _buildShowDirectoryTaggedMediaCountsSetting(
+            settings.showDirectoryTaggedMediaCounts,
+            viewModel,
+          ),
           const Divider(),
           _buildSectionHeader('Data Management'),
           _buildThumbnailCachingSetting(
@@ -260,6 +264,24 @@ class SettingsScreen extends ConsumerWidget {
         value: isEnabled,
         onChanged: (bool value) {
           viewModel.updateAutoNavigateSiblingDirectories(value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildShowDirectoryTaggedMediaCountsSetting(
+    bool isEnabled,
+    SettingsViewModel viewModel,
+  ) {
+    return ListTile(
+      title: const Text('Show Directory Tagged Media Counts'),
+      subtitle: const Text(
+        'Display tagged versus total media counts on directory cards.',
+      ),
+      trailing: Switch(
+        value: isEnabled,
+        onChanged: (bool value) {
+          viewModel.updateShowDirectoryTaggedMediaCounts(value);
         },
       ),
     );

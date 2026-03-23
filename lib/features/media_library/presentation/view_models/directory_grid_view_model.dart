@@ -11,6 +11,7 @@ import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../data/data_sources/local_directory_data_source.dart';
 import '../../domain/entities/directory_entity.dart';
+import '../../domain/entities/directory_media_counts.dart';
 import '../../domain/use_cases/add_directory_use_case.dart';
 import '../../domain/use_cases/clear_directories_use_case.dart';
 import '../../domain/use_cases/get_directories_use_case.dart';
@@ -454,8 +455,19 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     try {
       LoggingService.instance.debug('Fetching directories from use case');
       final directories = await _getDirectoriesUseCase();
+      final mediaCountsByDirectory = await _ref
+          .read(mediaRepositoryProvider)
+          .getDirectoryMediaCounts();
+      final directoriesWithMediaCounts = directories
+          .map(
+            (directory) => _applyMediaCounts(
+              directory,
+              mediaCountsByDirectory[directory.id],
+            ),
+          )
+          .toList(growable: false);
       LoggingService.instance.debug(
-        'Retrieved ${directories.length} directories from use case',
+        'Retrieved ${directoriesWithMediaCounts.length} directories from use case',
       );
 
       // Separate accessible and inaccessible directories
@@ -463,9 +475,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       final inaccessibleDirectories = <DirectoryEntity>[];
 
       LoggingService.instance.debug(
-        'Checking directory accessibility for ${directories.length} directories',
+        'Checking directory accessibility for ${directoriesWithMediaCounts.length} directories',
       );
-      for (final directory in directories) {
+      for (final directory in directoriesWithMediaCounts) {
         try {
           if (await _isDirectoryAccessible(directory)) {
             accessibleDirectories.add(directory);
@@ -937,6 +949,15 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         break;
     }
     return sorted;
+  }
+
+  DirectoryEntity _applyMediaCounts(
+    DirectoryEntity directory,
+    DirectoryMediaCounts? mediaCounts,
+  ) {
+    return directory.copyWith(
+      mediaCounts: mediaCounts ?? const DirectoryMediaCounts(),
+    );
   }
 }
 

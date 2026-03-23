@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/utils/batch_update_result.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/directory_media_counts.dart';
 import 'package:mockito/mockito.dart';
 
 import '../../../../../lib/features/favorites/domain/entities/favorite_entity.dart';
@@ -52,6 +54,28 @@ class InMemoryMediaRepository implements MediaRepository {
   }
 
   @override
+  Future<List<MediaEntity>> getAllMedia() async {
+    return List<MediaEntity>.from(_media);
+  }
+
+  @override
+  Future<Map<String, DirectoryMediaCounts>> getDirectoryMediaCounts() async {
+    final countsByDirectory = <String, DirectoryMediaCounts>{};
+
+    for (final item in _media) {
+      final previous = countsByDirectory[item.directoryId] ??
+          const DirectoryMediaCounts();
+      countsByDirectory[item.directoryId] = DirectoryMediaCounts(
+        totalMediaCount: previous.totalMediaCount + 1,
+        taggedMediaCount: previous.taggedMediaCount +
+            (item.tagIds.isNotEmpty ? 1 : 0),
+      );
+    }
+
+    return countsByDirectory;
+  }
+
+  @override
   Future<MediaEntity?> getMediaById(String id) async {
     try {
       return _media.firstWhere((item) => item.id == id);
@@ -71,6 +95,47 @@ class InMemoryMediaRepository implements MediaRepository {
     if (index != -1) {
       _media[index] = _media[index].copyWith(tagIds: tagIds);
     }
+  }
+
+  @override
+  Future<BatchUpdateResult> updateMediaTagsBatch(
+    Map<String, List<String>> mediaTags,
+  ) async {
+    final successfulIds = <String>[];
+    for (final entry in mediaTags.entries) {
+      final index = _media.indexWhere((item) => item.id == entry.key);
+      if (index == -1) {
+        continue;
+      }
+      _media[index] = _media[index].copyWith(tagIds: entry.value);
+      successfulIds.add(entry.key);
+    }
+    return BatchUpdateResult(
+      successfulIds: successfulIds,
+      failureReasons: const <String, String>{},
+    );
+  }
+
+  @override
+  Future<void> removeMediaNotInDirectories(List<String> directoryIds) async {
+    final allowedIds = directoryIds.toSet();
+    _media.removeWhere((item) => !allowedIds.contains(item.directoryId));
+  }
+
+  @override
+  Future<void> clearAllMedia() async {
+    _media.clear();
+  }
+
+  @override
+  Future<void> upsertMedia(List<MediaEntity> media) async {
+    final mediaById = {for (final item in _media) item.id: item};
+    for (final item in media) {
+      mediaById[item.id] = item;
+    }
+    _media
+      ..clear()
+      ..addAll(mediaById.values);
   }
 }
 

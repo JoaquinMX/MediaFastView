@@ -54,6 +54,7 @@ import '../../features/settings/domain/use_cases/get_app_settings_use_case.dart'
 import '../../features/settings/domain/use_cases/update_auto_navigate_sibling_directories_use_case.dart';
 import '../../features/settings/domain/use_cases/update_delete_from_source_use_case.dart';
 import '../../features/settings/domain/use_cases/update_playback_settings_use_case.dart';
+import '../../features/settings/domain/use_cases/update_show_directory_tagged_media_counts_use_case.dart';
 import '../../features/settings/domain/use_cases/update_slideshow_controls_hide_delay_use_case.dart';
 import '../../features/settings/domain/use_cases/update_theme_mode_use_case.dart';
 import '../../features/settings/domain/use_cases/update_thumbnail_caching_use_case.dart';
@@ -277,6 +278,13 @@ final updateAutoNavigateSiblingDirectoriesUseCaseProvider = Provider<
     ref.watch(settingsRepositoryProvider),
   );
 });
+
+final updateShowDirectoryTaggedMediaCountsUseCaseProvider =
+    Provider<UpdateShowDirectoryTaggedMediaCountsUseCase>((ref) {
+      return UpdateShowDirectoryTaggedMediaCountsUseCase(
+        ref.watch(settingsRepositoryProvider),
+      );
+    });
 
 final updateSlideshowControlsHideDelayUseCaseProvider =
     Provider<UpdateSlideshowControlsHideDelayUseCase>((ref) {

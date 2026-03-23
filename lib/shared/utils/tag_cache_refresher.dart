@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/logging_service.dart';
+import '../../features/media_library/presentation/view_models/directory_grid_view_model.dart';
 import '../../features/tagging/presentation/view_models/tag_management_view_model.dart';
 import '../../features/tagging/presentation/view_models/tags_view_model.dart';
 
@@ -32,6 +33,16 @@ class TagCacheRefresher {
           .error('Failed to refresh TagViewModel cache: $error');
       LoggingService.instance
           .debug('TagViewModel refresh stack trace: $stackTrace');
+    }
+
+    try {
+      final directoryViewModel = _ref.read(directoryViewModelProvider.notifier);
+      futures.add(directoryViewModel.loadDirectories());
+    } catch (error, stackTrace) {
+      LoggingService.instance
+          .error('Failed to refresh DirectoryViewModel cache: $error');
+      LoggingService.instance
+          .debug('DirectoryViewModel refresh stack trace: $stackTrace');
     }
 
     if (futures.isNotEmpty) {

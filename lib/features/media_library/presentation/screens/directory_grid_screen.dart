@@ -15,6 +15,7 @@ import '../../../../core/services/directory_picker_service.dart';
 
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
 import '../../domain/entities/tag_entity.dart';
@@ -74,6 +75,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     final viewModel = ref.read(directoryViewModelProvider.notifier);
     final selectedDirectoryIds = ref.watch(selectedDirectoryIdsProvider);
     final isSelectionMode = ref.watch(directorySelectionModeProvider);
+    final showTaggedMediaCounts = ref.watch(
+      showDirectoryTaggedMediaCountsProvider,
+    );
     final currentSortOption = switch (state) {
       DirectoryLoaded(:final sortOption) => sortOption,
       DirectoryPermissionRevoked(:final sortOption) => sortOption,
@@ -136,6 +140,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                               viewModel,
                               selectedDirectoryIds,
                               isSelectionMode,
+                              showTaggedMediaCounts,
                             ),
                           DirectoryPermissionRevoked(
                             :final inaccessibleDirectories,
@@ -149,6 +154,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                               viewModel,
                               selectedDirectoryIds,
                               isSelectionMode,
+                              showTaggedMediaCounts,
                             ),
                           DirectoryBookmarkInvalid(
                             :final invalidDirectories,
@@ -162,6 +168,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                               viewModel,
                               selectedDirectoryIds,
                               isSelectionMode,
+                              showTaggedMediaCounts,
                             ),
                           DirectoryError(:final message) => _buildError(
                             message,
@@ -506,6 +513,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     DirectoryViewModel viewModel,
     Set<String> selectedDirectoryIds,
     bool isSelectionMode,
+    bool showTaggedMediaCounts,
   ) {
     _pruneDirectoryItemKeys(directories);
     final gridView = GridView.builder(
@@ -540,6 +548,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
               viewModel.toggleDirectorySelection(directory.id),
           isSelected: isSelected,
           isSelectionMode: isSelectionMode,
+          showTaggedMediaCounts: showTaggedMediaCounts,
         );
       },
     );
@@ -570,6 +579,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     DirectoryViewModel viewModel,
     Set<String> selectedDirectoryIds,
     bool isSelectionMode,
+    bool showTaggedMediaCounts,
   ) {
     final allDirectories = [
       ...accessibleDirectories,
@@ -644,6 +654,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                         viewModel.toggleDirectorySelection(directory.id),
                     isSelected: isSelected,
                     isSelectionMode: isSelectionMode,
+                    showTaggedMediaCounts: showTaggedMediaCounts,
                   ),
                 );
               },
@@ -661,6 +672,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     DirectoryViewModel viewModel,
     Set<String> selectedDirectoryIds,
     bool isSelectionMode,
+    bool showTaggedMediaCounts,
   ) {
     final allDirectories = [...accessibleDirectories, ...invalidDirectories];
     _pruneDirectoryItemKeys(allDirectories);
@@ -735,6 +747,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                         viewModel.toggleDirectorySelection(directory.id),
                     isSelected: isSelected,
                     isSelectionMode: isSelectionMode,
+                    showTaggedMediaCounts: showTaggedMediaCounts,
                   ),
                 );
               },

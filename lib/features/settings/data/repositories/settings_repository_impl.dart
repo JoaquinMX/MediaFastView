@@ -15,6 +15,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const String _autoplayKey = 'video_autoplay_enabled';
   static const String _loopKey = 'video_loop_enabled';
   static const String _autoNavigateKey = 'auto_navigate_sibling_directories';
+  static const String _showDirectoryTaggedMediaCountsKey =
+      'show_directory_tagged_media_counts';
   static const String _slideshowControlsHideDelayKey =
       'slideshowControlsHideDelay';
 
@@ -28,6 +30,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final deleteFromSourceEnabled = prefs.getBool(_deleteFromSourceKey) ?? false;
     final autoNavigateSiblingDirectories =
         prefs.getBool(_autoNavigateKey) ?? false;
+    final showDirectoryTaggedMediaCounts =
+        prefs.getBool(_showDirectoryTaggedMediaCountsKey) ?? false;
     final storedHideDelay = prefs.getInt(_slideshowControlsHideDelayKey);
     final hideDelaySeconds = (storedHideDelay ??
             const AppSettings.initial().slideshowControlsHideDelay.inSeconds)
@@ -46,6 +50,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
         loopVideos: loop,
       ),
       autoNavigateSiblingDirectories: autoNavigateSiblingDirectories,
+      showDirectoryTaggedMediaCounts: showDirectoryTaggedMediaCounts,
       slideshowControlsHideDelay: Duration(
         seconds: hideDelaySeconds,
       ),
@@ -81,6 +86,12 @@ class SettingsRepositoryImpl implements SettingsRepository {
   Future<void> saveAutoNavigateSiblingDirectories(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoNavigateKey, enabled);
+  }
+
+  @override
+  Future<void> saveShowDirectoryTaggedMediaCounts(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showDirectoryTaggedMediaCountsKey, enabled);
   }
 
   @override

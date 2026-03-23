@@ -14,6 +14,7 @@ class AppSettings {
     required this.deleteFromSourceEnabled,
     required this.playbackSettings,
     required this.autoNavigateSiblingDirectories,
+    required this.showDirectoryTaggedMediaCounts,
     required this.slideshowControlsHideDelay,
   });
 
@@ -23,6 +24,7 @@ class AppSettings {
         deleteFromSourceEnabled = false,
         playbackSettings = const PlaybackSettings.initial(),
         autoNavigateSiblingDirectories = false,
+        showDirectoryTaggedMediaCounts = false,
         slideshowControlsHideDelay = AppConfig.defaultSlideshowControlsHideDelay;
 
   final ThemeMode themeMode;
@@ -30,6 +32,7 @@ class AppSettings {
   final bool deleteFromSourceEnabled;
   final PlaybackSettings playbackSettings;
   final bool autoNavigateSiblingDirectories;
+  final bool showDirectoryTaggedMediaCounts;
   final Duration slideshowControlsHideDelay;
 
   AppSettings copyWith({
@@ -38,6 +41,7 @@ class AppSettings {
     bool? deleteFromSourceEnabled,
     PlaybackSettings? playbackSettings,
     bool? autoNavigateSiblingDirectories,
+    bool? showDirectoryTaggedMediaCounts,
     Duration? slideshowControlsHideDelay,
   }) {
     return AppSettings(
@@ -49,6 +53,9 @@ class AppSettings {
       playbackSettings: playbackSettings ?? this.playbackSettings,
       autoNavigateSiblingDirectories:
           autoNavigateSiblingDirectories ?? this.autoNavigateSiblingDirectories,
+      showDirectoryTaggedMediaCounts:
+          showDirectoryTaggedMediaCounts ??
+          this.showDirectoryTaggedMediaCounts,
       slideshowControlsHideDelay:
           slideshowControlsHideDelay ?? this.slideshowControlsHideDelay,
     );
