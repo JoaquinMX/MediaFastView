@@ -83,6 +83,13 @@ class FilesystemMediaDataSource {
   /// Supported text file extensions
   static const Set<String> _textExtensions = {'txt', 'md', 'log'};
 
+  /// Supported media file extensions across images, videos, and text.
+  static const Set<String> supportedMediaExtensions = {
+    ..._imageExtensions,
+    ..._videoExtensions,
+    ..._textExtensions,
+  };
+
   /// System files to exclude (macOS specific)
   static const Set<String> _excludedFiles = {
     '._', // macOS resource fork files

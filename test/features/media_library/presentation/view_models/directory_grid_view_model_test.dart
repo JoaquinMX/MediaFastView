@@ -35,6 +35,9 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
   }
 
   @override
+  Future<void> refreshChangedLibraryRoots() async {}
+
+  @override
   Future<List<DirectoryEntity>> filterDirectoriesByTags(
     List<String> tagIds,
   ) async {

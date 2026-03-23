@@ -37,12 +37,17 @@ class DirectoryCollection {
     required this.tagIds,
     required this.lastModified,
     this.bookmarkData,
+    this.lastScanAt,
+    this.lastKnownTreeModified,
+    this.lastKnownChildDirectoryCount,
+    this.lastKnownMediaFileCount,
   });
 
   /// Unique hash-based identifier used by Isar for this record.
   Id get id {
     return computeDirectoryCollectionId(directoryId);
   }
+
   set id(Id value) {}
 
   /// Stable directory identifier used by higher layers in the app.
@@ -68,6 +73,18 @@ class DirectoryCollection {
 
   /// Optional bookmark information for restoring access on macOS.
   String? bookmarkData;
+
+  /// Timestamp of the last successful full-library refresh for this root.
+  DateTime? lastScanAt;
+
+  /// Latest modification timestamp observed anywhere in the subtree.
+  DateTime? lastKnownTreeModified;
+
+  /// Total descendant directory count observed during the last refresh.
+  int? lastKnownChildDirectoryCount;
+
+  /// Total supported media file count observed during the last refresh.
+  int? lastKnownMediaFileCount;
 }
 
 extension DirectoryCollectionMapper on DirectoryCollection {
@@ -81,6 +98,10 @@ extension DirectoryCollectionMapper on DirectoryCollection {
       tagIds: List.unmodifiable(tagIds),
       lastModified: lastModified,
       bookmarkData: bookmarkData,
+      lastScanAt: lastScanAt,
+      lastKnownTreeModified: lastKnownTreeModified,
+      lastKnownChildDirectoryCount: lastKnownChildDirectoryCount,
+      lastKnownMediaFileCount: lastKnownMediaFileCount,
     );
   }
 }
@@ -96,6 +117,10 @@ extension DirectoryModelIsarMapper on DirectoryModel {
       tagIds: tagIds,
       lastModified: lastModified,
       bookmarkData: bookmarkData,
+      lastScanAt: lastScanAt,
+      lastKnownTreeModified: lastKnownTreeModified,
+      lastKnownChildDirectoryCount: lastKnownChildDirectoryCount,
+      lastKnownMediaFileCount: lastKnownMediaFileCount,
     );
   }
 }

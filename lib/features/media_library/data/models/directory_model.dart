@@ -15,6 +15,10 @@ class DirectoryModel with _$DirectoryModel {
     @Default(<String>[]) List<String> tagIds,
     required DateTime lastModified,
     String? bookmarkData,
+    DateTime? lastScanAt,
+    DateTime? lastKnownTreeModified,
+    int? lastKnownChildDirectoryCount,
+    int? lastKnownMediaFileCount,
   }) = _DirectoryModel;
 
   factory DirectoryModel.fromJson(Map<String, dynamic> json) =>

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -9,13 +10,15 @@ import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/directory_entity.dart';
+import 'filesystem_media_data_source.dart';
+
 /// Provides updates while scanning directories for media files.
 typedef DirectoryScanProgressCallback =
     void Function(DirectoryScanProgress progress);
-    
+
 /// Data source for local directory operations on the file system.
 class LocalDirectoryDataSource {
-   LocalDirectoryDataSource({
+  LocalDirectoryDataSource({
     required this.bookmarkService,
   });
 
@@ -26,17 +29,10 @@ class LocalDirectoryDataSource {
   static const _scanCancelledType = 'cancelled';
   static const _scanCancelMessage = 'cancel';
 
-  
 
   /// Supported media file extensions for directory scanning
-  static const Set<String> _mediaExtensions = {
-    // Images
-    'jpg', 'jpeg', 'png', 'gif', 'jfif', 'bmp', 'webp',
-    // Videos
-    'mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm',
-    // Text
-    'txt', 'md', 'log',
-  };
+  static const Set<String> _mediaExtensions =
+      FilesystemMediaDataSource.supportedMediaExtensions;
 
   /// System files/directories to exclude
   static const Set<String> _excludedNames = {
@@ -164,6 +160,110 @@ class LocalDirectoryDataSource {
         } catch (e) {
           LoggingService.instance.warning('Failed to stop accessing bookmark for directory ${rootDirectory.path}: $e');
           // Don't throw - cleanup failure shouldn't break scanning
+        }
+      }
+    }
+  }
+
+  /// Collects a lightweight fingerprint for the entire subtree rooted at
+  /// [rootDirectory].
+  Future<DirectoryTreeFingerprint> fingerprintDirectoryTree(
+    DirectoryEntity rootDirectory,
+  ) async {
+    String actualPath = rootDirectory.path;
+    bool startedAccess = false;
+
+    try {
+      if (rootDirectory.bookmarkData != null &&
+          rootDirectory.bookmarkData!.isNotEmpty) {
+        try {
+          final isValid = await bookmarkService.isBookmarkValid(
+            rootDirectory.bookmarkData!,
+          );
+          if (isValid) {
+            actualPath = await bookmarkService.startAccessingBookmark(
+              rootDirectory.bookmarkData!,
+            );
+            startedAccess = true;
+          } else {
+            LoggingService.instance.warning(
+              'Bookmark is invalid, using stored path: ${rootDirectory.path}',
+            );
+          }
+        } catch (e) {
+          LoggingService.instance.error(
+            'Failed to start accessing bookmark, using stored path: '
+            '${rootDirectory.path}, error: $e',
+          );
+        }
+      }
+
+      final rootDir = Directory(actualPath);
+      if (!await rootDir.exists()) {
+        throw DirectoryNotFoundError(
+          'Root directory does not exist: $actualPath',
+        );
+      }
+
+      final directoriesToVisit = ListQueue<Directory>.of([rootDir]);
+      var lastKnownTreeModified = (await rootDir.stat()).modified;
+      var lastKnownChildDirectoryCount = 0;
+      var lastKnownMediaFileCount = 0;
+
+      while (directoriesToVisit.isNotEmpty) {
+        final directory = directoriesToVisit.removeFirst();
+
+        try {
+          await for (final entity in directory.list(
+            recursive: false,
+            followLinks: false,
+          )) {
+            final name = path.basename(entity.path);
+            if (_isExcludedName(name)) {
+              continue;
+            }
+
+            final stat = await entity.stat();
+            if (stat.modified.isAfter(lastKnownTreeModified)) {
+              lastKnownTreeModified = stat.modified;
+            }
+
+            if (entity is Directory) {
+              directoriesToVisit.add(entity);
+              lastKnownChildDirectoryCount += 1;
+              continue;
+            }
+
+            if (entity is File && _isSupportedMediaFile(entity.path)) {
+              lastKnownMediaFileCount += 1;
+            }
+          }
+        } catch (e) {
+          LoggingService.instance.warning(
+            'Failed to fingerprint directory ${directory.path}: $e',
+          );
+        }
+      }
+
+      return DirectoryTreeFingerprint(
+        lastKnownTreeModified: lastKnownTreeModified,
+        lastKnownChildDirectoryCount: lastKnownChildDirectoryCount,
+        lastKnownMediaFileCount: lastKnownMediaFileCount,
+      );
+    } catch (e) {
+      if (e is AppError) {
+        rethrow;
+      }
+      throw DirectoryScanError('Failed to fingerprint directory tree: $e');
+    } finally {
+      if (startedAccess && rootDirectory.bookmarkData != null) {
+        try {
+          await bookmarkService.stopAccessingBookmark(rootDirectory.bookmarkData!);
+        } catch (e) {
+          LoggingService.instance.warning(
+            'Failed to stop accessing bookmark for directory '
+            '${rootDirectory.path}: $e',
+          );
         }
       }
     }
@@ -331,6 +431,28 @@ class LocalDirectoryDataSource {
       lastModified: DateTime.fromMillisecondsSinceEpoch(modifiedEpoch),
     );
   }
+
+
+  bool _isSupportedMediaFile(String filePath) {
+    final extension = path.extension(filePath).toLowerCase().replaceFirst('.', '');
+    return _mediaExtensions.contains(extension);
+  }
+
+  bool _isExcludedName(String name) {
+    return _excludedNames.contains(name) || name.startsWith('.');
+  }
+}
+
+class DirectoryTreeFingerprint {
+  const DirectoryTreeFingerprint({
+    required this.lastKnownTreeModified,
+    required this.lastKnownChildDirectoryCount,
+    required this.lastKnownMediaFileCount,
+  });
+
+  final DateTime lastKnownTreeModified;
+  final int lastKnownChildDirectoryCount;
+  final int lastKnownMediaFileCount;
 }
 
 class DirectoryScanProgress {

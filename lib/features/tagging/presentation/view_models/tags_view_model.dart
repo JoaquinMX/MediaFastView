@@ -8,6 +8,7 @@ import '../../../media_library/data/isar/isar_media_data_source.dart';
 import '../../../media_library/data/models/media_model.dart';
 import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../media_library/domain/repositories/directory_repository.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/domain/enums/tag_filter_mode.dart';
 import '../../../tagging/domain/enums/tag_media_type_filter.dart';
@@ -178,12 +179,14 @@ class TagsViewModel extends StateNotifier<TagsState> {
     this._filterByTagsUseCase,
     this._favoritesRepository,
     this._mediaDataSource,
+    this._directoryRepository,
   ) : super(const TagsLoading());
 
   final GetTagsUseCase _getTagsUseCase;
   final FilterByTagsUseCase _filterByTagsUseCase;
   final FavoritesRepository _favoritesRepository;
   final IsarMediaDataSource _mediaDataSource;
+  final DirectoryRepository _directoryRepository;
   Set<String> _selectedTagIds = <String>{};
   Set<String> _optionalTagIds = <String>{};
   Set<String> _excludedTagIds = <String>{};
@@ -262,6 +265,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
   Future<void> _reloadSections() async {
     try {
       final sections = <TagSection>[];
+
+      await _directoryRepository.refreshChangedLibraryRoots();
 
       final allDirectories =
           await _filterByTagsUseCase.filterDirectories(const []);
@@ -807,6 +812,7 @@ final tagsViewModelProvider =
         ref.watch(filterByTagsUseCaseProvider),
         ref.watch(favoritesRepositoryProvider),
         ref.watch(isarMediaDataSourceProvider),
+        ref.watch(directoryRepositoryProvider),
       );
       return viewModel;
     });
