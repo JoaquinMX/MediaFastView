@@ -11,6 +11,7 @@ import '../../core/services/file_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../core/services/isar_database.dart';
 import '../../core/services/isar_schemas.dart';
+import '../../features/media_library/data/data_sources/filesystem_media_data_source.dart';
 import '../../features/media_library/data/data_sources/local_directory_data_source.dart';
 import '../../features/media_library/data/repositories/directory_repository_impl.dart';
 import '../../features/media_library/data/repositories/file_operations_repository_impl.dart';
@@ -78,6 +79,13 @@ final isarMediaDataSourceProvider = Provider<IsarMediaDataSource>(
   (ref) => IsarMediaDataSource(ref.watch(isarDatabaseProvider)),
 );
 
+final filesystemMediaDataSourceProvider = Provider<FilesystemMediaDataSource>(
+  (ref) => FilesystemMediaDataSource(
+    ref.watch(bookmarkServiceProvider),
+    ref.watch(permissionServiceProvider),
+  ),
+);
+
 // Local directory data source provider
 final localDirectoryDataSourceProvider = Provider<LocalDirectoryDataSource>(
   (ref) => LocalDirectoryDataSource(
@@ -118,6 +126,7 @@ final directoryRepositoryProvider =
             ref.watch(bookmarkServiceProvider),
             ref.watch(permissionServiceProvider),
             ref.watch(isarMediaDataSourceProvider),
+            ref.watch(filesystemMediaDataSourceProvider),
           ),
         );
       },
@@ -132,6 +141,7 @@ final mediaRepositoryProvider =
             ref.watch(directoryRepositoryProvider),
             ref.watch(isarMediaDataSourceProvider),
             permissionService: ref.watch(permissionServiceProvider),
+            filesystemDataSource: ref.watch(filesystemMediaDataSourceProvider),
           ),
         );
       },

@@ -45,6 +45,10 @@ abstract class DirectoryRepository {
     String? bookmarkData,
   });
 
+
+  /// Refreshes stored library roots whose filesystem fingerprints changed.
+  Future<void> refreshChangedLibraryRoots();
+
   /// Clears all stored directory data.
   Future<void> clearAllDirectories();
 }

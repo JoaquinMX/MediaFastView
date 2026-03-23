@@ -10,6 +10,10 @@ class DirectoryEntity {
     required this.tagIds,
     required this.lastModified,
     this.bookmarkData,
+    this.lastScanAt,
+    this.lastKnownTreeModified,
+    this.lastKnownChildDirectoryCount,
+    this.lastKnownMediaFileCount,
     this.mediaCounts = const DirectoryMediaCounts(),
   });
 
@@ -20,6 +24,10 @@ class DirectoryEntity {
   final List<String> tagIds;
   final DateTime lastModified;
   final String? bookmarkData;
+  final DateTime? lastScanAt;
+  final DateTime? lastKnownTreeModified;
+  final int? lastKnownChildDirectoryCount;
+  final int? lastKnownMediaFileCount;
   final DirectoryMediaCounts mediaCounts;
 
   /// Creates a copy with updated fields.
@@ -31,6 +39,10 @@ class DirectoryEntity {
     List<String>? tagIds,
     DateTime? lastModified,
     String? bookmarkData,
+    DateTime? lastScanAt,
+    DateTime? lastKnownTreeModified,
+    int? lastKnownChildDirectoryCount,
+    int? lastKnownMediaFileCount,
     DirectoryMediaCounts? mediaCounts,
   }) {
     return DirectoryEntity(
@@ -41,6 +53,13 @@ class DirectoryEntity {
       tagIds: tagIds ?? this.tagIds,
       lastModified: lastModified ?? this.lastModified,
       bookmarkData: bookmarkData ?? this.bookmarkData,
+      lastScanAt: lastScanAt ?? this.lastScanAt,
+      lastKnownTreeModified:
+          lastKnownTreeModified ?? this.lastKnownTreeModified,
+      lastKnownChildDirectoryCount:
+          lastKnownChildDirectoryCount ?? this.lastKnownChildDirectoryCount,
+      lastKnownMediaFileCount:
+          lastKnownMediaFileCount ?? this.lastKnownMediaFileCount,
       mediaCounts: mediaCounts ?? this.mediaCounts,
     );
   }
@@ -56,6 +75,20 @@ class DirectoryEntity {
   int get hashCode => id.hashCode;
 
   @override
-  String toString() =>
-      'DirectoryEntity(id: $id, path: $path, name: $name, thumbnailPath: $thumbnailPath, tagIds: $tagIds, lastModified: $lastModified, bookmarkData: $bookmarkData, mediaCounts: $mediaCounts)';
+  String toString() {
+    return 'DirectoryEntity('
+        'id: $id, '
+        'path: $path, '
+        'name: $name, '
+        'thumbnailPath: $thumbnailPath, '
+        'tagIds: $tagIds, '
+        'lastModified: $lastModified, '
+        'bookmarkData: $bookmarkData, '
+        'lastScanAt: $lastScanAt, '
+        'lastKnownTreeModified: $lastKnownTreeModified, '
+        'lastKnownChildDirectoryCount: $lastKnownChildDirectoryCount, '
+        'lastKnownMediaFileCount: $lastKnownMediaFileCount, '
+        'mediaCounts: $mediaCounts'
+        ')';
+  }
 }
