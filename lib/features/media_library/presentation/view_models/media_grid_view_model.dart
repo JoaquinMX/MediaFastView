@@ -313,6 +313,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     if (result.successfulIds.isNotEmpty) {
       final updatedIds = result.successfulIds.toSet();
       _cachedMedia = _updateMediaTagsForSelection(sanitizedTags, updatedIds);
+      _ref.invalidate(directoryMediaCountsProvider);
     }
 
     if (result.hasFailures) {
@@ -369,6 +370,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     }
 
     _cachedMedia = updatedMedia;
+    _ref.invalidate(directoryMediaCountsProvider);
     _emitLoadedStateFromCache();
   }
 
@@ -466,6 +468,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final persistStartTime = DateTime.now();
       await _mediaDataSource.removeMediaForDirectory(directoryId);
       await _mediaDataSource.upsertMedia(mediaModels);
+      _ref.invalidate(directoryMediaCountsProvider);
       final persistTime = DateTime.now().difference(persistStartTime);
 
       final totalTime = DateTime.now().difference(loadStartTime);
@@ -597,6 +600,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       // Merge filtered results to ensure tag updates are persisted without
       // discarding media from other directories or filters
       await _mediaDataSource.upsertMedia(mediaModels);
+      _ref.invalidate(directoryMediaCountsProvider);
 
       _cachedMedia = _sortMedia(media, _currentSortOption);
 

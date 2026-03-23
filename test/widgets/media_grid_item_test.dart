@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/core/services/file_service.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/directory_media_counts.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/presentation/widgets/media_grid_item.dart';
 import 'package:media_fast_view/shared/providers/repository_providers.dart';
+import 'package:media_fast_view/shared/providers/settings_providers.dart';
+import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
 import 'package:mockito/mockito.dart';
 
 class _MockFileService extends Mock implements FileService {}
@@ -58,7 +61,11 @@ void main() {
     });
 
     testWidgets('renders directory media type', (WidgetTester tester) async {
-      final dirMedia = testMedia.copyWith(type: MediaType.directory);
+      final dirMedia = testMedia.copyWith(
+        type: MediaType.directory,
+        path: '/test/subdir',
+        name: 'subdir',
+      );
 
       when(mockFileService.getDirectoryContents(any)).thenAnswer((_) async => []);
 
@@ -84,6 +91,52 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.folder), findsOneWidget);
+      expect(find.text('0 / 0 tagged'), findsNothing);
+    });
+
+    testWidgets('shows cached tagged counts for directory media when enabled', (
+      WidgetTester tester,
+    ) async {
+      final dirMedia = testMedia.copyWith(
+        type: MediaType.directory,
+        path: '/test/subdir',
+        name: 'subdir',
+      );
+
+      when(mockFileService.getDirectoryContents(any)).thenAnswer((_) async => []);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            fileServiceProvider.overrideWithValue(mockFileService),
+            showDirectoryTaggedMediaCountsProvider.overrideWith((ref) => true),
+            directoryMediaCountsProvider.overrideWith(
+              (ref) async => <String, DirectoryMediaCounts>{
+                generateDirectoryId(dirMedia.path):
+                    const DirectoryMediaCounts(
+                      taggedMediaCount: 3,
+                      totalMediaCount: 7,
+                    ),
+              },
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: MediaGridItem(
+                media: dirMedia,
+                onTap: () {},
+                onSelectionToggle: () {},
+                isSelected: false,
+                isSelectionMode: false,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('3 / 7 tagged'), findsOneWidget);
     });
 
     testWidgets('renders video media type', (WidgetTester tester) async {
