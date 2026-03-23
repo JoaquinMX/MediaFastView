@@ -9,6 +9,7 @@ import 'package:media_fast_view/features/favorites/domain/use_cases/favorite_med
 import 'package:media_fast_view/features/favorites/presentation/view_models/favorites_view_model.dart';
 import 'package:media_fast_view/features/media_library/data/data_sources/local_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/directory_media_counts.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/add_directory_use_case.dart';
@@ -25,6 +26,7 @@ import 'package:media_fast_view/features/tagging/domain/repositories/tag_reposit
 import 'package:media_fast_view/features/tagging/presentation/states/tag_state.dart';
 import 'package:media_fast_view/features/tagging/presentation/view_models/tag_management_view_model.dart';
 import 'package:media_fast_view/shared/providers/grid_columns_provider.dart';
+import 'package:media_fast_view/shared/providers/settings_providers.dart';
 import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
 import 'package:media_fast_view/core/services/permission_service.dart';
 
@@ -315,6 +317,10 @@ void main() {
           name: 'Music',
           thumbnailPath: null,
           tagIds: const ['tag-1'],
+          mediaCounts: const DirectoryMediaCounts(
+            taggedMediaCount: 2,
+            totalMediaCount: 5,
+          ),
           lastModified: DateTime(2024, 1, 1),
         ),
         DirectoryEntity(
@@ -323,6 +329,10 @@ void main() {
           name: 'Pictures',
           thumbnailPath: null,
           tagIds: const [],
+          mediaCounts: const DirectoryMediaCounts(
+            taggedMediaCount: 0,
+            totalMediaCount: 0,
+          ),
           lastModified: DateTime(2024, 1, 2),
         ),
       ];
@@ -337,6 +347,7 @@ void main() {
               (ref) => _StubFavoritesViewModel(),
             ),
             tagViewModelProvider.overrideWith((ref) => _StubTagViewModel()),
+            showDirectoryTaggedMediaCountsProvider.overrideWith((ref) => false),
             directoryViewModelProvider.overrideWith((ref) {
               viewModel = _StubDirectoryViewModel(directories, ref);
               return viewModel;
@@ -350,6 +361,7 @@ void main() {
 
       expect(find.text('Music'), findsOneWidget);
       expect(find.text('Pictures'), findsOneWidget);
+      expect(find.text('2 / 5 tagged'), findsNothing);
 
       await tester.tap(
         find.descendant(
@@ -365,6 +377,52 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(viewModel.removedDirectoryId, directories.first.id);
+    });
+
+    testWidgets('shows tagged media counts when the setting is enabled', (
+      tester,
+    ) async {
+      final directories = [
+        DirectoryEntity(
+          id: generateDirectoryId('/music'),
+          path: '/music',
+          name: 'Music',
+          thumbnailPath: null,
+          tagIds: const ['tag-1'],
+          mediaCounts: const DirectoryMediaCounts(
+            taggedMediaCount: 2,
+            totalMediaCount: 5,
+          ),
+          lastModified: DateTime(2024, 1, 1),
+        ),
+      ];
+      late _StubDirectoryViewModel viewModel;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            gridColumnsProvider
+                .overrideWith((ref) => _StubGridColumnsNotifier()),
+            favoritesViewModelProvider.overrideWith(
+              (ref) => _StubFavoritesViewModel(),
+            ),
+            tagViewModelProvider.overrideWith((ref) => _StubTagViewModel()),
+            showDirectoryTaggedMediaCountsProvider.overrideWith((ref) => true),
+            directoryViewModelProvider.overrideWith((ref) {
+              viewModel = _StubDirectoryViewModel(directories, ref);
+              return viewModel;
+            }),
+          ],
+          child: const MaterialApp(
+            home: DirectoryGridScreen(),
+          ),
+        ),
+      );
+
+      expect(find.text('Music'), findsOneWidget);
+      expect(find.text('1 tags'), findsOneWidget);
+      expect(find.text('2 / 5 tagged'), findsOneWidget);
+      expect(viewModel.state, isA<DirectoryLoaded>());
     });
   });
 }

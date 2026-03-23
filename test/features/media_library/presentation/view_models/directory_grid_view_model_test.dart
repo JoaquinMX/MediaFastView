@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/core/services/bookmark_service.dart';
+import 'package:media_fast_view/core/utils/batch_update_result.dart';
 
 import '../../../../../lib/core/services/permission_service.dart';
 import '../../../../../lib/features/favorites/domain/entities/favorite_entity.dart';
@@ -8,6 +9,7 @@ import '../../../../../lib/features/favorites/domain/entities/favorite_item_type
 import '../../../../../lib/features/favorites/domain/repositories/favorites_repository.dart';
 import '../../../../../lib/features/media_library/data/data_sources/local_directory_data_source.dart';
 import '../../../../../lib/features/media_library/domain/entities/directory_entity.dart';
+import '../../../../../lib/features/media_library/domain/entities/directory_media_counts.dart';
 import '../../../../../lib/features/media_library/domain/entities/media_entity.dart';
 import '../../../../../lib/features/media_library/domain/repositories/directory_repository.dart';
 import '../../../../../lib/features/media_library/domain/repositories/media_repository.dart';
@@ -157,6 +159,28 @@ class InMemoryMediaRepository implements MediaRepository {
   }
 
   @override
+  Future<List<MediaEntity>> getAllMedia() async {
+    return List<MediaEntity>.from(_media);
+  }
+
+  @override
+  Future<Map<String, DirectoryMediaCounts>> getDirectoryMediaCounts() async {
+    final countsByDirectory = <String, DirectoryMediaCounts>{};
+
+    for (final item in _media) {
+      final previous = countsByDirectory[item.directoryId] ??
+          const DirectoryMediaCounts();
+      countsByDirectory[item.directoryId] = DirectoryMediaCounts(
+        totalMediaCount: previous.totalMediaCount + 1,
+        taggedMediaCount: previous.taggedMediaCount +
+            (item.tagIds.isNotEmpty ? 1 : 0),
+      );
+    }
+
+    return countsByDirectory;
+  }
+
+  @override
   Future<MediaEntity?> getMediaById(String id) async {
     try {
       return _media.firstWhere((item) => item.id == id);
@@ -176,6 +200,47 @@ class InMemoryMediaRepository implements MediaRepository {
     if (index != -1) {
       _media[index] = _media[index].copyWith(tagIds: tagIds);
     }
+  }
+
+  @override
+  Future<BatchUpdateResult> updateMediaTagsBatch(
+    Map<String, List<String>> mediaTags,
+  ) async {
+    final successfulIds = <String>[];
+    for (final entry in mediaTags.entries) {
+      final index = _media.indexWhere((item) => item.id == entry.key);
+      if (index == -1) {
+        continue;
+      }
+      _media[index] = _media[index].copyWith(tagIds: entry.value);
+      successfulIds.add(entry.key);
+    }
+    return BatchUpdateResult(
+      successfulIds: successfulIds,
+      failureReasons: const <String, String>{},
+    );
+  }
+
+  @override
+  Future<void> removeMediaNotInDirectories(List<String> directoryIds) async {
+    final allowedIds = directoryIds.toSet();
+    _media.removeWhere((item) => !allowedIds.contains(item.directoryId));
+  }
+
+  @override
+  Future<void> clearAllMedia() async {
+    _media.clear();
+  }
+
+  @override
+  Future<void> upsertMedia(List<MediaEntity> media) async {
+    final mediaById = {for (final item in _media) item.id: item};
+    for (final item in media) {
+      mediaById[item.id] = item;
+    }
+    _media
+      ..clear()
+      ..addAll(mediaById.values);
   }
 }
 
@@ -407,7 +472,6 @@ void main() {
         directoryRepository: directoryRepository,
         mediaRepository: mediaRepository,
         favoritesRepository: favoritesRepository,
-        sharedPreferences: sharedPreferences,
       );
       addTearDown(container.dispose);
 
@@ -434,4 +498,61 @@ void main() {
       ]);
     },
   );
+
+  test('loadDirectories enriches directories with cached media counts', () async {
+    mediaRepository = InMemoryMediaRepository([
+      MediaEntity(
+        id: 'media-1',
+        path: '/dir1/a.jpg',
+        name: 'a.jpg',
+        type: MediaType.image,
+        size: 100,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const ['tag-1'],
+        directoryId: '1',
+      ),
+      MediaEntity(
+        id: 'media-2',
+        path: '/dir1/b.jpg',
+        name: 'b.jpg',
+        type: MediaType.image,
+        size: 100,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const <String>[],
+        directoryId: '1',
+      ),
+      MediaEntity(
+        id: 'media-3',
+        path: '/dir2/c.jpg',
+        name: 'c.jpg',
+        type: MediaType.image,
+        size: 100,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const ['tag-2'],
+        directoryId: '2',
+      ),
+    ]);
+
+    final container = await _createDirectoryTestContainer(
+      directoryRepository: directoryRepository,
+      mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(directoryViewModelProvider.notifier);
+    await viewModel.loadDirectories();
+
+    final state = container.read(directoryViewModelProvider) as DirectoryLoaded;
+    final directoryOne = state.directories.firstWhere((dir) => dir.id == '1');
+    final directoryTwo = state.directories.firstWhere((dir) => dir.id == '2');
+    final directoryThree = state.directories.firstWhere((dir) => dir.id == '3');
+
+    expect(directoryOne.mediaCounts.totalMediaCount, 2);
+    expect(directoryOne.mediaCounts.taggedMediaCount, 1);
+    expect(directoryTwo.mediaCounts.totalMediaCount, 1);
+    expect(directoryTwo.mediaCounts.taggedMediaCount, 1);
+    expect(directoryThree.mediaCounts.totalMediaCount, 0);
+    expect(directoryThree.mediaCounts.taggedMediaCount, 0);
+  });
 }

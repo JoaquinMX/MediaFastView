@@ -3,6 +3,7 @@ import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/utils/batch_update_result.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
+import '../../domain/entities/directory_media_counts.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
 import '../../domain/repositories/media_repository.dart';
@@ -181,6 +182,12 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   Future<List<MediaEntity>> getAllMedia() async {
     final models = await _mediaDataSource.getMedia();
     return models.map(_modelToEntity).toList();
+  }
+
+  @override
+  Future<Map<String, DirectoryMediaCounts>> getDirectoryMediaCounts() async {
+    final allMedia = await getAllMedia();
+    return _buildDirectoryMediaCounts(allMedia);
   }
 
   /// Gets media by ID from a specific directory.
@@ -408,4 +415,22 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
 
     return null;
   }
+}
+
+Map<String, DirectoryMediaCounts> _buildDirectoryMediaCounts(
+  List<MediaEntity> media,
+) {
+  final countsByDirectory = <String, DirectoryMediaCounts>{};
+
+  for (final item in media) {
+    final previous = countsByDirectory[item.directoryId] ??
+        const DirectoryMediaCounts();
+    countsByDirectory[item.directoryId] = DirectoryMediaCounts(
+      totalMediaCount: previous.totalMediaCount + 1,
+      taggedMediaCount: previous.taggedMediaCount +
+          (item.tagIds.isNotEmpty ? 1 : 0),
+    );
+  }
+
+  return countsByDirectory;
 }

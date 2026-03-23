@@ -49,6 +49,14 @@ final autoNavigateSiblingDirectoriesProvider = Provider<bool>((ref) {
   );
 });
 
+final showDirectoryTaggedMediaCountsProvider = Provider<bool>((ref) {
+  final settings = ref.watch(settingsProvider);
+  return settings.maybeWhen(
+    data: (value) => value.showDirectoryTaggedMediaCounts,
+    orElse: () => const AppSettings.initial().showDirectoryTaggedMediaCounts,
+  );
+});
+
 final slideshowControlsHideDelayProvider = Provider<Duration>((ref) {
   final settings = ref.watch(settingsProvider);
   return settings.maybeWhen(

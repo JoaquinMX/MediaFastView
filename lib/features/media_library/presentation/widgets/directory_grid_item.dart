@@ -17,6 +17,7 @@ class DirectoryGridItem extends StatefulWidget {
     required this.onSelectionToggle,
     required this.isSelected,
     required this.isSelectionMode,
+    required this.showTaggedMediaCounts,
   });
 
   final DirectoryEntity directory;
@@ -26,6 +27,7 @@ class DirectoryGridItem extends StatefulWidget {
   final VoidCallback onSelectionToggle;
   final bool isSelected;
   final bool isSelectionMode;
+  final bool showTaggedMediaCounts;
 
   @override
   State<DirectoryGridItem> createState() => _DirectoryGridItemState();
@@ -166,6 +168,21 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                                                 .onSurfaceVariant,
                                           ),
                                     ),
+                                    if (widget.showTaggedMediaCounts) ...[
+                                      SizedBox(height: UiSpacing.extraSmallGap),
+                                      Text(
+                                        '${widget.directory.mediaCounts.taggedMediaCount} / '
+                                        '${widget.directory.mediaCounts.totalMediaCount} tagged',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ],
                                     const Spacer(),
                                     Row(
                                       children: [

@@ -1,3 +1,5 @@
+import 'directory_media_counts.dart';
+
 /// Domain entity representing a directory.
 class DirectoryEntity {
   const DirectoryEntity({
@@ -8,6 +10,7 @@ class DirectoryEntity {
     required this.tagIds,
     required this.lastModified,
     this.bookmarkData,
+    this.mediaCounts = const DirectoryMediaCounts(),
   });
 
   final String id;
@@ -17,6 +20,7 @@ class DirectoryEntity {
   final List<String> tagIds;
   final DateTime lastModified;
   final String? bookmarkData;
+  final DirectoryMediaCounts mediaCounts;
 
   /// Creates a copy with updated fields.
   DirectoryEntity copyWith({
@@ -27,6 +31,7 @@ class DirectoryEntity {
     List<String>? tagIds,
     DateTime? lastModified,
     String? bookmarkData,
+    DirectoryMediaCounts? mediaCounts,
   }) {
     return DirectoryEntity(
       id: id ?? this.id,
@@ -36,6 +41,7 @@ class DirectoryEntity {
       tagIds: tagIds ?? this.tagIds,
       lastModified: lastModified ?? this.lastModified,
       bookmarkData: bookmarkData ?? this.bookmarkData,
+      mediaCounts: mediaCounts ?? this.mediaCounts,
     );
   }
 
@@ -51,5 +57,5 @@ class DirectoryEntity {
 
   @override
   String toString() =>
-      'DirectoryEntity(id: $id, path: $path, name: $name, thumbnailPath: $thumbnailPath, tagIds: $tagIds, lastModified: $lastModified, bookmarkData: $bookmarkData)';
+      'DirectoryEntity(id: $id, path: $path, name: $name, thumbnailPath: $thumbnailPath, tagIds: $tagIds, lastModified: $lastModified, bookmarkData: $bookmarkData, mediaCounts: $mediaCounts)';
 }

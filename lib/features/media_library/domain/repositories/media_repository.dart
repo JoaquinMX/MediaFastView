@@ -1,4 +1,5 @@
 import '../../../../core/utils/batch_update_result.dart';
+import '../entities/directory_media_counts.dart';
 import '../entities/media_entity.dart';
 
 /// Repository interface for media operations.
@@ -16,6 +17,9 @@ abstract class MediaRepository {
 
   /// Retrieves all persisted media entries without touching the filesystem.
   Future<List<MediaEntity>> getAllMedia();
+
+  /// Aggregates cached media counts per directory without rescanning disk.
+  Future<Map<String, DirectoryMediaCounts>> getDirectoryMediaCounts();
 
   /// Retrieves a media item by its ID.
   Future<MediaEntity?> getMediaById(String id);
