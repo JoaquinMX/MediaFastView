@@ -107,6 +107,7 @@ class _StubDirectoryViewModel extends DirectoryViewModel {
   final List<DirectoryEntity> _directories;
   String? lastSearchQuery;
   String? removedDirectoryId;
+  DirectorySortOption lastSortOption = DirectorySortOption.nameAscending;
 
   @override
   Future<void> loadDirectories() async {
@@ -140,6 +141,21 @@ class _StubDirectoryViewModel extends DirectoryViewModel {
   @override
   Future<void> removeDirectory(String id) async {
     removedDirectoryId = id;
+  }
+
+  @override
+  void changeSortOption(DirectorySortOption option) {
+    lastSortOption = option;
+    state = DirectoryLoaded(
+      directories: _directories,
+      searchQuery: lastSearchQuery ?? '',
+      selectedTagIds: const [],
+      columns: 2,
+      sortOption: option,
+      selectedDirectoryIds: const {},
+      isSelectionMode: false,
+      showFavoritesOnly: false,
+    );
   }
 }
 
@@ -423,6 +439,60 @@ void main() {
       expect(find.text('1 tags'), findsOneWidget);
       expect(find.text('2 / 5 tagged'), findsOneWidget);
       expect(viewModel.state, isA<DirectoryLoaded>());
+    });
+
+    testWidgets('shows tagged percentage sort option in the sort menu', (
+      tester,
+    ) async {
+      final directories = [
+        DirectoryEntity(
+          id: generateDirectoryId('/music'),
+          path: '/music',
+          name: 'Music',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 1),
+        ),
+      ];
+      late _StubDirectoryViewModel viewModel;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            gridColumnsProvider
+                .overrideWith((ref) => _StubGridColumnsNotifier()),
+            favoritesViewModelProvider.overrideWith(
+              (ref) => _StubFavoritesViewModel(),
+            ),
+            tagViewModelProvider.overrideWith((ref) => _StubTagViewModel()),
+            directoryViewModelProvider.overrideWith((ref) {
+              viewModel = _StubDirectoryViewModel(directories, ref);
+              return viewModel;
+            }),
+          ],
+          child: const MaterialApp(
+            home: DirectoryGridScreen(),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Sort'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tagged % (High-Low)'), findsOneWidget);
+
+      await tester.tap(find.text('Tagged % (High-Low)'));
+      await tester.pumpAndSettle();
+
+      expect(
+        viewModel.lastSortOption,
+        DirectorySortOption.taggedPercentageDescending,
+      );
+      expect(viewModel.state, isA<DirectoryLoaded>());
+      expect(
+        (viewModel.state as DirectoryLoaded).sortOption,
+        DirectorySortOption.taggedPercentageDescending,
+      );
     });
   });
 }
