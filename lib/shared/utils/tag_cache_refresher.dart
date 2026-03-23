@@ -14,6 +14,7 @@ class TagCacheRefresher {
   /// Refreshes the tag selection and tagging dashboards to reflect new data.
   Future<void> refresh() async {
     final futures = <Future<void>>[];
+    _ref.invalidate(directoryMediaCountsProvider);
 
     try {
       final tagsViewModel = _ref.read(tagsViewModelProvider.notifier);

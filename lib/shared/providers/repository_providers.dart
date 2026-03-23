@@ -17,6 +17,7 @@ import '../../features/media_library/data/repositories/file_operations_repositor
 import '../../features/media_library/data/repositories/filesystem_media_repository_impl.dart';
 import '../../features/media_library/data/isar/isar_directory_data_source.dart';
 import '../../features/media_library/data/isar/isar_media_data_source.dart';
+import '../../features/media_library/domain/entities/directory_media_counts.dart';
 import '../../features/media_library/domain/repositories/directory_repository.dart';
 import '../../features/media_library/domain/repositories/file_operations_repository.dart';
 import '../../features/media_library/domain/repositories/media_repository.dart';
@@ -135,6 +136,11 @@ final mediaRepositoryProvider =
         );
       },
     );
+
+final directoryMediaCountsProvider =
+    FutureProvider.autoDispose<Map<String, DirectoryMediaCounts>>((ref) async {
+      return ref.watch(mediaRepositoryProvider).getDirectoryMediaCounts();
+    });
 
 final tagRepositoryProvider =
     StateNotifierProvider.autoDispose<TagRepositoryNotifier, TagRepository>(

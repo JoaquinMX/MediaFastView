@@ -9,9 +9,11 @@ import 'package:visibility_detector/visibility_detector.dart';
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/settings_providers.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
 import '../../../../shared/widgets/file_operation_button.dart';
 import '../../../favorites/presentation/widgets/favorite_toggle_button.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
+import '../../domain/entities/directory_media_counts.dart';
 import '../../domain/entities/media_entity.dart';
 
 /// Widget for displaying a media item in the grid.
@@ -361,6 +363,11 @@ class _MediaGridItemState extends State<MediaGridItem> {
   Widget _buildDirectoryContent(WidgetRef ref) {
     final previewAsync = ref.watch(directoryPreviewProvider(widget.media.path));
     final isCachingEnabled = ref.watch(thumbnailCachingProvider);
+    final showTaggedMediaCounts = ref.watch(showDirectoryTaggedMediaCountsProvider);
+    final directoryCountsAsync = ref.watch(directoryMediaCountsProvider);
+    final directoryCounts =
+        directoryCountsAsync.valueOrNull?[generateDirectoryId(widget.media.path)] ??
+        const DirectoryMediaCounts();
     return previewAsync.when(
       data: (String? previewPath) {
         return Column(
@@ -410,16 +417,34 @@ class _MediaGridItemState extends State<MediaGridItem> {
             Expanded(
               flex: UiGrid.directoryNameFlex,
               child: Container(
-                alignment: Alignment.center,
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 padding: UiSpacing.horizontalSmall,
-                child: Text(
-                  widget.media.name,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: UiContent.maxLinesSingle,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      widget.media.name,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: UiContent.maxLinesSingle,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                    if (showTaggedMediaCounts) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '${directoryCounts.taggedMediaCount} / '
+                        '${directoryCounts.totalMediaCount} tagged',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        maxLines: UiContent.maxLinesSingle,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
