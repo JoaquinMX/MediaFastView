@@ -1,7 +1,6 @@
 import 'dart:collection';
-import 'dart:convert';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +8,8 @@ import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
+import '../../domain/entities/directory_media_counts.dart';
 import '../../domain/use_cases/get_media_use_case.dart';
 import '../../domain/use_cases/update_directory_access_use_case.dart';
 import '../../domain/entities/media_entity.dart';
@@ -26,6 +27,8 @@ enum MediaSortOption {
   lastModifiedDescending,
   lastModifiedAscending,
   sizeDescending,
+  taggedPercentageAscending,
+  taggedPercentageDescending,
 }
 
 extension MediaSortOptionX on MediaSortOption {
@@ -35,6 +38,8 @@ extension MediaSortOptionX on MediaSortOption {
     MediaSortOption.lastModifiedDescending => 'Last Modified (Newest)',
     MediaSortOption.lastModifiedAscending => 'Last Modified (Oldest)',
     MediaSortOption.sizeDescending => 'Size',
+    MediaSortOption.taggedPercentageAscending => 'Tagged % (Low-High)',
+    MediaSortOption.taggedPercentageDescending => 'Tagged % (High-Low)',
   };
 }
 
@@ -189,6 +194,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
   bool _showUntaggedOnly = false;
   late final ProviderSubscription<FavoritesState> _favoritesSubscription;
   Set<MediaType> _visibleMediaTypes = Set<MediaType>.from(MediaType.values);
+  Map<String, DirectoryMediaCounts> _directoryMediaCounts =
+      const <String, DirectoryMediaCounts>{};
 
   MediaSortOption get currentSortOption => _currentSortOption;
   Set<String> get selectedMediaIds =>
@@ -242,9 +249,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
   /// Gets the directory ID generated from the directory path.
   String get directoryId {
-    final bytes = utf8.encode(_directoryPath);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
+    return generateDirectoryId(_directoryPath);
   }
 
   @override
@@ -314,6 +319,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final updatedIds = result.successfulIds.toSet();
       _cachedMedia = _updateMediaTagsForSelection(sanitizedTags, updatedIds);
       _ref.invalidate(directoryMediaCountsProvider);
+      await _refreshDirectoryMediaCounts();
+      _cachedMedia = _sortMedia(_cachedMedia, _currentSortOption);
     }
 
     if (result.hasFailures) {
@@ -371,6 +378,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
     _cachedMedia = updatedMedia;
     _ref.invalidate(directoryMediaCountsProvider);
+    await _refreshDirectoryMediaCounts();
+    _cachedMedia = _sortMedia(_cachedMedia, _currentSortOption);
     _emitLoadedStateFromCache();
   }
 
@@ -469,6 +478,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       await _mediaDataSource.removeMediaForDirectory(directoryId);
       await _mediaDataSource.upsertMedia(mediaModels);
       _ref.invalidate(directoryMediaCountsProvider);
+      await _refreshDirectoryMediaCounts();
       final persistTime = DateTime.now().difference(persistStartTime);
 
       final totalTime = DateTime.now().difference(loadStartTime);
@@ -510,6 +520,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       // Check if this is a permission-related error
       final errorMessage = e.toString();
       _cachedMedia = const [];
+      _directoryMediaCounts = const <String, DirectoryMediaCounts>{};
       if (_isPermissionError(errorMessage)) {
         LoggingService.instance.warning(
           'Permission error detected, setting permission revoked state',
@@ -601,6 +612,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       // discarding media from other directories or filters
       await _mediaDataSource.upsertMedia(mediaModels);
       _ref.invalidate(directoryMediaCountsProvider);
+      await _refreshDirectoryMediaCounts();
 
       _cachedMedia = _sortMedia(media, _currentSortOption);
 
@@ -623,6 +635,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       // Check if this is a permission-related error
       final errorMessage = e.toString();
       _cachedMedia = const [];
+      _directoryMediaCounts = const <String, DirectoryMediaCounts>{};
       if (_isPermissionError(errorMessage)) {
         state = MediaPermissionRevoked(
           directoryPath: _directoryPath,
@@ -1012,8 +1025,95 @@ class MediaViewModel extends StateNotifier<MediaState> {
       case MediaSortOption.sizeDescending:
         sorted.sort((a, b) => b.size.compareTo(a.size));
         break;
+      case MediaSortOption.taggedPercentageAscending:
+        sorted.sort(
+          (a, b) => _compareByTaggedPercentage(
+            a,
+            b,
+            descending: false,
+          ),
+        );
+        break;
+      case MediaSortOption.taggedPercentageDescending:
+        sorted.sort(
+          (a, b) => _compareByTaggedPercentage(
+            a,
+            b,
+            descending: true,
+          ),
+        );
+        break;
     }
     return sorted;
+  }
+
+  Future<void> _refreshDirectoryMediaCounts() async {
+    _directoryMediaCounts = await _ref
+        .read(mediaRepositoryProvider)
+        .getDirectoryMediaCounts();
+  }
+
+  int _compareByTaggedPercentage(
+    MediaEntity a,
+    MediaEntity b, {
+    required bool descending,
+  }) {
+    final aIsDirectory = a.type == MediaType.directory;
+    final bIsDirectory = b.type == MediaType.directory;
+
+    if (aIsDirectory != bIsDirectory) {
+      return aIsDirectory ? -1 : 1;
+    }
+
+    if (!aIsDirectory && !bIsDirectory) {
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    }
+
+    final percentageComparison = _orderedComparison(
+      _taggedPercentage(a),
+      _taggedPercentage(b),
+      descending: descending,
+    );
+    if (percentageComparison != 0) {
+      return percentageComparison;
+    }
+
+    final taggedCountComparison = _orderedComparison(
+      _directoryCountsForMedia(a).taggedMediaCount,
+      _directoryCountsForMedia(b).taggedMediaCount,
+      descending: descending,
+    );
+    if (taggedCountComparison != 0) {
+      return taggedCountComparison;
+    }
+
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  }
+
+  DirectoryMediaCounts _directoryCountsForMedia(MediaEntity media) {
+    if (media.type != MediaType.directory) {
+      return const DirectoryMediaCounts();
+    }
+
+    return _directoryMediaCounts[generateDirectoryId(media.path)] ??
+        const DirectoryMediaCounts();
+  }
+
+  double _taggedPercentage(MediaEntity media) {
+    final counts = _directoryCountsForMedia(media);
+    if (counts.totalMediaCount == 0) {
+      return 0;
+    }
+
+    return counts.taggedMediaCount / counts.totalMediaCount;
+  }
+
+  int _orderedComparison(
+    num left,
+    num right, {
+    required bool descending,
+  }) {
+    return descending ? right.compareTo(left) : left.compareTo(right);
   }
 }
 
