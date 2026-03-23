@@ -555,4 +555,133 @@ void main() {
     expect(directoryThree.mediaCounts.totalMediaCount, 0);
     expect(directoryThree.mediaCounts.taggedMediaCount, 0);
   });
+
+  test(
+    'changeSortOption sorts directories by tagged percentage with stable ties',
+    () async {
+      directoryRepository = InMemoryDirectoryRepository([
+        DirectoryEntity(
+          id: '1',
+          path: '/alpha',
+          name: 'Alpha',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 1),
+        ),
+        DirectoryEntity(
+          id: '2',
+          path: '/beta',
+          name: 'Beta',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 2),
+        ),
+        DirectoryEntity(
+          id: '3',
+          path: '/gamma',
+          name: 'Gamma',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 3),
+        ),
+        DirectoryEntity(
+          id: '4',
+          path: '/empty',
+          name: 'Empty',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 4),
+        ),
+        DirectoryEntity(
+          id: '5',
+          path: '/aardvark',
+          name: 'Aardvark',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 5),
+        ),
+        DirectoryEntity(
+          id: '6',
+          path: '/sparse',
+          name: 'Sparse',
+          thumbnailPath: null,
+          tagIds: const [],
+          lastModified: DateTime(2024, 1, 6),
+        ),
+      ]);
+
+      List<MediaEntity> createMediaForDirectory({
+        required String directoryId,
+        required int taggedCount,
+        required int totalCount,
+      }) {
+        return List<MediaEntity>.generate(totalCount, (index) {
+          final isTagged = index < taggedCount;
+          return MediaEntity(
+            id: '$directoryId-media-$index',
+            path: '/$directoryId/$index.jpg',
+            name: '$index.jpg',
+            type: MediaType.image,
+            size: 100,
+            lastModified: DateTime(2024, 1, 1),
+            tagIds: isTagged ? ['tag-$directoryId'] : const <String>[],
+            directoryId: directoryId,
+          );
+        });
+      }
+
+      mediaRepository = InMemoryMediaRepository([
+        ...createMediaForDirectory(
+          directoryId: '1',
+          taggedCount: 1,
+          totalCount: 2,
+        ),
+        ...createMediaForDirectory(
+          directoryId: '2',
+          taggedCount: 2,
+          totalCount: 4,
+        ),
+        ...createMediaForDirectory(
+          directoryId: '3',
+          taggedCount: 3,
+          totalCount: 4,
+        ),
+        ...createMediaForDirectory(
+          directoryId: '5',
+          taggedCount: 1,
+          totalCount: 2,
+        ),
+        ...createMediaForDirectory(
+          directoryId: '6',
+          taggedCount: 4,
+          totalCount: 10,
+        ),
+      ]);
+
+      final container = await _createDirectoryTestContainer(
+        directoryRepository: directoryRepository,
+        mediaRepository: mediaRepository,
+        favoritesRepository: favoritesRepository,
+      );
+      addTearDown(container.dispose);
+
+      final viewModel = container.read(directoryViewModelProvider.notifier);
+      await viewModel.loadDirectories();
+
+      viewModel.changeSortOption(DirectorySortOption.taggedPercentageDescending);
+
+      final state =
+          container.read(directoryViewModelProvider) as DirectoryLoaded;
+      expect(
+        state.directories.map((directory) => directory.name).toList(),
+        ['Gamma', 'Beta', 'Aardvark', 'Alpha', 'Sparse', 'Empty'],
+      );
+      expect(state.sortOption, DirectorySortOption.taggedPercentageDescending);
+
+      final emptyDirectory = state.directories.last;
+      expect(emptyDirectory.name, 'Empty');
+      expect(emptyDirectory.mediaCounts.totalMediaCount, 0);
+      expect(emptyDirectory.mediaCounts.taggedMediaCount, 0);
+    },
+  );
 }

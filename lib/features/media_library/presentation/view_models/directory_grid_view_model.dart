@@ -25,6 +25,7 @@ enum DirectorySortOption {
   nameDescending,
   lastModifiedDescending,
   lastModifiedAscending,
+  taggedPercentageDescending,
 }
 
 extension DirectorySortOptionX on DirectorySortOption {
@@ -33,6 +34,7 @@ extension DirectorySortOptionX on DirectorySortOption {
     DirectorySortOption.nameDescending => 'Name (Z-A)',
     DirectorySortOption.lastModifiedDescending => 'Last Modified (Newest)',
     DirectorySortOption.lastModifiedAscending => 'Last Modified (Oldest)',
+    DirectorySortOption.taggedPercentageDescending => 'Tagged % (High-Low)',
   };
 }
 
@@ -947,8 +949,45 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
       case DirectorySortOption.lastModifiedAscending:
         sorted.sort((a, b) => a.lastModified.compareTo(b.lastModified));
         break;
+      case DirectorySortOption.taggedPercentageDescending:
+        sorted.sort(_compareByTaggedPercentageDescending);
+        break;
     }
     return sorted;
+  }
+
+  int _compareByTaggedPercentageDescending(
+    DirectoryEntity a,
+    DirectoryEntity b,
+  ) {
+    final percentageComparison = _taggedPercentage(b).compareTo(
+      _taggedPercentage(a),
+    );
+    if (percentageComparison != 0) {
+      return percentageComparison;
+    }
+
+    final taggedCountComparison = b.mediaCounts.taggedMediaCount.compareTo(
+      a.mediaCounts.taggedMediaCount,
+    );
+    if (taggedCountComparison != 0) {
+      return taggedCountComparison;
+    }
+
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  }
+
+  /// Returns a safe tagged ratio for sorting.
+  ///
+  /// Directories with `0 / 0` media counts are treated as `0%` tagged so they
+  /// remain below any directory with a positive tagging ratio.
+  double _taggedPercentage(DirectoryEntity directory) {
+    final totalMediaCount = directory.mediaCounts.totalMediaCount;
+    if (totalMediaCount == 0) {
+      return 0;
+    }
+
+    return directory.mediaCounts.taggedMediaCount / totalMediaCount;
   }
 
   DirectoryEntity _applyMediaCounts(
