@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/features/favorites/presentation/view_models/slideshow_view_model.dart';
 import 'package:media_fast_view/features/favorites/presentation/widgets/slideshow_overlay.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
+import 'package:media_fast_view/features/settings/domain/entities/playback_settings.dart';
 import 'package:media_fast_view/shared/providers/repository_providers.dart';
 import 'package:media_fast_view/shared/utils/tag_cache_refresher.dart';
 import 'package:media_fast_view/shared/utils/tag_lookup.dart';
@@ -61,6 +62,7 @@ void main() {
         tagLookup: _FakeTagLookup(),
         tagCacheRefresher: const _FakeTagCacheRefresher(),
       ),
+      playbackSettings: const PlaybackSettings.initial(),
     );
 
     var playPauseTapped = false;

@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
+import '../../../settings/domain/entities/playback_settings.dart';
+import '../../../../shared/providers/settings_providers.dart';
 
 /// Sealed class representing the state of slideshow.
 sealed class SlideshowState {
@@ -107,7 +109,9 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
   SlideshowViewModel(
     this._mediaList, {
     required TagMutationService tagMutationService,
+    required PlaybackSettings playbackSettings,
   }) : _tagMutationService = tagMutationService,
+       _playbackSettings = playbackSettings,
        super(const SlideshowIdle()) {
     if (_mediaList.isNotEmpty) {
       _initializeSlideshow();
@@ -116,6 +120,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
 
   final List<MediaEntity> _mediaList;
   final TagMutationService _tagMutationService;
+  final PlaybackSettings _playbackSettings;
   Timer? _timer;
   final Random _random = Random();
   bool _isShuffleEnabled = false;
@@ -270,7 +275,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
       currentIndex: 0,
       isLooping: false,
       isVideoLooping: false,
-      isMuted: false,
+      isMuted: _playbackSettings.startMuted,
       progress: 0.0,
       isShuffleEnabled: _isShuffleEnabled,
       imageDisplayDuration: _imageDisplayDuration,
@@ -817,5 +822,6 @@ final slideshowViewModelProvider = StateNotifierProvider.autoDispose
       (ref, mediaList) => SlideshowViewModel(
         mediaList,
         tagMutationService: ref.watch(tagMutationServiceProvider),
+        playbackSettings: ref.watch(videoPlaybackSettingsProvider),
       ),
     );

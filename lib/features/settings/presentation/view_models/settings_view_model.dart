@@ -99,6 +99,12 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
     );
   }
 
+  Future<void> updateStartMuted(bool enabled) async {
+    await _updatePlayback(
+      (playback) => playback.copyWith(startMuted: enabled),
+    );
+  }
+
   Future<void> updateAutoNavigateSiblingDirectories(bool enabled) async {
     await _updateSetting(
       () => _updateAutoNavigateSiblingDirectoriesUseCase(enabled),
