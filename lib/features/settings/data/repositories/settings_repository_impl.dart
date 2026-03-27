@@ -14,6 +14,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const String _deleteFromSourceKey = 'delete_from_source_enabled';
   static const String _autoplayKey = 'video_autoplay_enabled';
   static const String _loopKey = 'video_loop_enabled';
+  static const String _startMutedKey = 'video_start_muted';
   static const String _autoNavigateKey = 'auto_navigate_sibling_directories';
   static const String _showDirectoryTaggedMediaCountsKey =
       'show_directory_tagged_media_counts';
@@ -26,6 +27,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final themeIndex = prefs.getInt(_themeKey) ?? ThemeMode.system.index;
     final autoplay = prefs.getBool(_autoplayKey) ?? false;
     final loop = prefs.getBool(_loopKey) ?? false;
+    final startMuted = prefs.getBool(_startMutedKey) ?? false;
     final thumbnailCachingEnabled = prefs.getBool(_thumbnailCachingKey) ?? true;
     final deleteFromSourceEnabled = prefs.getBool(_deleteFromSourceKey) ?? false;
     final autoNavigateSiblingDirectories =
@@ -48,6 +50,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
       playbackSettings: PlaybackSettings(
         autoplayVideos: autoplay,
         loopVideos: loop,
+        startMuted: startMuted,
       ),
       autoNavigateSiblingDirectories: autoNavigateSiblingDirectories,
       showDirectoryTaggedMediaCounts: showDirectoryTaggedMediaCounts,
@@ -80,6 +83,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoplayKey, settings.autoplayVideos);
     await prefs.setBool(_loopKey, settings.loopVideos);
+    await prefs.setBool(_startMutedKey, settings.startMuted);
   }
 
   @override

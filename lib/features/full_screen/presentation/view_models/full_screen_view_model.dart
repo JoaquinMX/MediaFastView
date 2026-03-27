@@ -217,7 +217,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
           mediaList: finalMediaList,
           currentIndex: currentIndex,
           isPlaying: isVideo && _playbackSettings.autoplayVideos,
-          isMuted: false,
+          isMuted: isVideo && _playbackSettings.startMuted,
           isLooping: isVideo && _playbackSettings.loopVideos,
           playbackSpeed: 1.0,
           currentPosition: Duration.zero,
@@ -293,6 +293,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         totalDuration: Duration.zero,
         isPlaying:
             nextMedia.type == MediaType.video && _playbackSettings.autoplayVideos,
+        isMuted:
+            nextMedia.type == MediaType.video && _playbackSettings.startMuted,
         isLooping:
             nextMedia.type == MediaType.video && _playbackSettings.loopVideos,
         currentMediaTags: nextTags,
@@ -331,6 +333,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         totalDuration: Duration.zero,
         isPlaying: previousMedia.type == MediaType.video &&
             _playbackSettings.autoplayVideos,
+        isMuted: previousMedia.type == MediaType.video &&
+            _playbackSettings.startMuted,
         isLooping: previousMedia.type == MediaType.video &&
             _playbackSettings.loopVideos,
         currentMediaTags: previousTags,
@@ -595,6 +599,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       totalDuration: Duration.zero,
       isPlaying:
           targetMedia.type == MediaType.video && _playbackSettings.autoplayVideos,
+      isMuted:
+          targetMedia.type == MediaType.video && _playbackSettings.startMuted,
       isLooping:
           targetMedia.type == MediaType.video && _playbackSettings.loopVideos,
       currentMediaTags: targetTags,

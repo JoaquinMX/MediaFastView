@@ -4,6 +4,7 @@ import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/favorites/presentation/view_models/slideshow_view_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
+import 'package:media_fast_view/features/settings/domain/entities/playback_settings.dart';
 import 'package:media_fast_view/features/tagging/domain/entities/tag_entity.dart';
 import 'package:media_fast_view/shared/utils/tag_mutation_service.dart';
 
@@ -45,6 +46,7 @@ void main() {
     final viewModel = SlideshowViewModel(
       media,
       tagMutationService: tagMutationService,
+      playbackSettings: const PlaybackSettings.initial(),
     );
 
     expect(viewModel.state, isA<SlideshowPaused>());
@@ -56,6 +58,7 @@ void main() {
     final viewModel = SlideshowViewModel(
       media,
       tagMutationService: tagMutationService,
+      playbackSettings: const PlaybackSettings.initial(),
     );
 
     viewModel.startSlideshow();
@@ -73,6 +76,7 @@ void main() {
       final viewModel = SlideshowViewModel(
         media,
         tagMutationService: tagMutationService,
+        playbackSettings: const PlaybackSettings.initial(),
       );
 
       viewModel.startSlideshow();
@@ -92,6 +96,7 @@ void main() {
     final viewModel = SlideshowViewModel(
       media,
       tagMutationService: tagMutationService,
+      playbackSettings: const PlaybackSettings.initial(),
     );
 
     viewModel.startSlideshow();
@@ -114,6 +119,7 @@ void main() {
     final viewModel = SlideshowViewModel(
       media,
       tagMutationService: tagMutationService,
+      playbackSettings: const PlaybackSettings.initial(),
     );
 
     final result = await viewModel.toggleTag(tag);

@@ -73,6 +73,10 @@ class SettingsScreen extends ConsumerWidget {
             settings.playbackSettings.loopVideos,
             viewModel,
           ),
+          _buildStartMutedSetting(
+            settings.playbackSettings.startMuted,
+            viewModel,
+          ),
           _buildSlideshowControlsHideDelaySetting(
             settings.slideshowControlsHideDelay,
             viewModel,
@@ -207,6 +211,22 @@ class SettingsScreen extends ConsumerWidget {
         value: isEnabled,
         onChanged: (bool value) {
           viewModel.updateLoopVideos(value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildStartMutedSetting(
+    bool isEnabled,
+    SettingsViewModel viewModel,
+  ) {
+    return ListTile(
+      title: const Text('Start Videos Muted'),
+      subtitle: const Text('Mute videos by default when they begin playback'),
+      trailing: Switch(
+        value: isEnabled,
+        onChanged: (bool value) {
+          viewModel.updateStartMuted(value);
         },
       ),
     );

@@ -103,6 +103,7 @@ void main() {
           playbackSettings: PlaybackSettings(
             autoplayVideos: false,
             loopVideos: false,
+            startMuted: false,
           ),
           autoNavigateSiblingDirectories: false,
           showDirectoryTaggedMediaCounts: false,
@@ -146,6 +147,14 @@ void main() {
       await tester.tap(loopSwitch);
       await tester.pumpAndSettle();
       expect(settingsRepository.settings.playbackSettings.loopVideos, isTrue);
+
+      final startMutedSwitch = find.descendant(
+        of: find.widgetWithText(ListTile, 'Start Videos Muted'),
+        matching: find.byType(Switch),
+      );
+      await tester.tap(startMutedSwitch);
+      await tester.pumpAndSettle();
+      expect(settingsRepository.settings.playbackSettings.startMuted, isTrue);
 
       final siblingNavigationSwitch = find.descendant(
         of: find.widgetWithText(

@@ -36,7 +36,11 @@ class _FakeFullScreenViewModel extends FullScreenViewModel {
           assignTagUseCase,
           tagLookup,
           tagCacheRefresher,
-          const PlaybackSettings(autoplayVideos: false, loopVideos: false),
+          const PlaybackSettings(
+            autoplayVideos: false,
+            loopVideos: false,
+            startMuted: false,
+          ),
           tagUsageRanker: const TagUsageRanker(limit: 10),
         );
 

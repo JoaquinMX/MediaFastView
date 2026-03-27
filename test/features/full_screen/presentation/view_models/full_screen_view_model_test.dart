@@ -25,7 +25,11 @@ void main() {
   late FullScreenViewModel viewModel;
 
   const playbackSettings =
-      PlaybackSettings(autoplayVideos: false, loopVideos: false);
+      PlaybackSettings(
+        autoplayVideos: false,
+        loopVideos: false,
+        startMuted: false,
+      );
 
   setUp(() {
     loadMediaForViewingUseCase = MockLoadMediaForViewingUseCase();
