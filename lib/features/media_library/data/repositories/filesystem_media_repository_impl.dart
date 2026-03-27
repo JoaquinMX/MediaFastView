@@ -125,10 +125,9 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
         bookmarkData: effectiveBookmarkData,
       );
 
-      // Merge tags from local storage
-      final mergedModels = await _mergeTagsWithLocalStorage(
+      final mergedModels = await _replaceDirectoryCacheWithMergedScan(
+        directoryId,
         models,
-        directoryId: directoryId,
       );
 
       _permissionService.logPermissionEvent(
@@ -281,9 +280,9 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       bookmarkData: bookmarkData,
       mediaPersistence: _mediaDataSource,
     );
-    final mergedModels = await _mergeTagsWithLocalStorage(
+    final mergedModels = await _replaceDirectoryCacheWithMergedScan(
+      directoryId,
       models,
-      directoryId: directoryId,
     );
     return mergedModels.map(_modelToEntity).toList();
   }
@@ -302,9 +301,9 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
       bookmarkData: bookmarkData,
       mediaPersistence: _mediaDataSource,
     );
-    final mergedModels = await _mergeTagsWithLocalStorage(
+    final mergedModels = await _replaceDirectoryCacheWithMergedScan(
+      directoryId,
       models,
-      directoryId: directoryId,
     );
     return mergedModels.map(_modelToEntity).toList();
   }
@@ -321,11 +320,11 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     return _mediaDataSource.updateMediaTagsBatch(mediaTags);
   }
 
-  /// Merges tags from local storage with filesystem-scanned media.
-  Future<List<MediaModel>> _mergeTagsWithLocalStorage(
-    List<MediaModel> scannedMedia, {
-    required String directoryId,
-  }) async {
+  /// Replaces a directory cache with a merged filesystem scan result.
+  Future<List<MediaModel>> _replaceDirectoryCacheWithMergedScan(
+    String directoryId,
+    List<MediaModel> scannedMedia,
+  ) async {
     final existingMedia = await _mediaDataSource.getMediaForDirectory(
       directoryId,
     );
@@ -352,6 +351,7 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
         bookmarkData: entity.bookmarkData,
       );
     }).toList();
+    await _mediaDataSource.removeMediaForDirectory(directoryId);
     await _mediaDataSource.addMedia(mergedModels);
     return mergedModels;
   }

@@ -40,6 +40,7 @@ void main() {
     when(isarMediaDataSource.getMedia()).thenAnswer((_) async => <MediaModel>[]);
     when(isarMediaDataSource.getMediaForDirectory(any)).thenAnswer((_) async => <MediaModel>[]);
     when(isarMediaDataSource.saveMedia(any)).thenAnswer((_) async {});
+    when(isarMediaDataSource.addMedia(any)).thenAnswer((_) async {});
     when(isarMediaDataSource.upsertMedia(any)).thenAnswer((_) async {});
     when(isarMediaDataSource.updateMediaTags(any, any)).thenAnswer((_) async {});
     when(isarMediaDataSource.removeMediaForDirectory(any)).thenAnswer((_) async {});
@@ -111,7 +112,7 @@ void main() {
       ).called(1);
     });
 
-    test('merges tags by querying persisted rows scoped to directory', () async {
+    test('replaces cached rows for directory and preserves tags for scanned IDs', () async {
       const directoryPath = '/test/scoped';
       final directoryId = generateDirectoryId(directoryPath);
       final scannedModel = MediaModel(
@@ -125,6 +126,16 @@ void main() {
         directoryId: directoryId,
       );
       final persistedModel = scannedModel.copyWith(tagIds: const ['from-cache']);
+      final removedModel = MediaModel(
+        id: 'media-removed',
+        path: '$directoryPath/removed.jpg',
+        name: 'removed.jpg',
+        type: MediaType.image,
+        size: 64,
+        lastModified: DateTime(2024),
+        tagIds: const ['removed-tag'],
+        directoryId: directoryId,
+      );
 
       when(
         filesystemDataSource.scanMediaForDirectory(
@@ -134,7 +145,7 @@ void main() {
         ),
       ).thenAnswer((_) async => <MediaModel>[scannedModel]);
       when(isarMediaDataSource.getMediaForDirectory(directoryId)).thenAnswer(
-        (_) async => <MediaModel>[persistedModel],
+        (_) async => <MediaModel>[persistedModel, removedModel],
       );
 
       final media = await repository.getMediaForDirectoryPath(directoryPath);
@@ -142,12 +153,16 @@ void main() {
       expect(media, hasLength(1));
       expect(media.first.tagIds, containsAll(const ['from-scan', 'from-cache']));
       verify(isarMediaDataSource.getMediaForDirectory(directoryId)).called(1);
+      verify(isarMediaDataSource.removeMediaForDirectory(directoryId)).called(1);
+      final captured = verify(isarMediaDataSource.addMedia(captureAny)).captured;
+      final persisted = captured.single as List<MediaModel>;
+      expect(persisted.map((model) => model.id), equals(const ['media-1']));
       verifyNever(isarMediaDataSource.getMedia());
     });
   });
 
   group('filterMediaByTagsForDirectory', () {
-    test('queries persisted rows scoped to the requested directory', () async {
+    test('replaces cached rows for directory and removes deleted files', () async {
       const directoryPath = '/test/filter';
       final directoryId = generateDirectoryId(directoryPath);
       final scannedModel = MediaModel(
@@ -161,6 +176,16 @@ void main() {
         directoryId: directoryId,
       );
       final persistedModel = scannedModel.copyWith(tagIds: const ['from-cache']);
+      final removedModel = MediaModel(
+        id: 'media-filter-removed',
+        path: '$directoryPath/removed.jpg',
+        name: 'removed.jpg',
+        type: MediaType.image,
+        size: 700,
+        lastModified: DateTime(2024),
+        tagIds: const ['from-cache'],
+        directoryId: directoryId,
+      );
 
       when(
         filesystemDataSource.filterMediaByTags(
@@ -172,7 +197,7 @@ void main() {
         ),
       ).thenAnswer((_) async => <MediaModel>[scannedModel]);
       when(isarMediaDataSource.getMediaForDirectory(directoryId)).thenAnswer(
-        (_) async => <MediaModel>[persistedModel],
+        (_) async => <MediaModel>[persistedModel, removedModel],
       );
 
       final media = await repository.filterMediaByTagsForDirectory(
@@ -183,7 +208,64 @@ void main() {
       expect(media, hasLength(1));
       expect(media.first.tagIds, containsAll(const ['from-scan', 'from-cache']));
       verify(isarMediaDataSource.getMediaForDirectory(directoryId)).called(1);
+      verify(isarMediaDataSource.removeMediaForDirectory(directoryId)).called(1);
+      final captured = verify(isarMediaDataSource.addMedia(captureAny)).captured;
+      final persisted = captured.single as List<MediaModel>;
+      expect(persisted.map((model) => model.id), equals(const ['media-filter']));
       verifyNever(isarMediaDataSource.getMedia());
+    });
+  });
+
+  group('filterMediaByTagsFromDirectory', () {
+    test('replaces only target directory cache and preserves scanned tags', () async {
+      const directoryPath = '/test/filter/from-directory';
+      final directoryId = generateDirectoryId(directoryPath);
+      final scannedModel = MediaModel(
+        id: 'media-filter-directory',
+        path: '$directoryPath/file.jpg',
+        name: 'file.jpg',
+        type: MediaType.image,
+        size: 512,
+        lastModified: DateTime(2024),
+        tagIds: const ['from-scan'],
+        directoryId: directoryId,
+      );
+      final persistedModel = scannedModel.copyWith(tagIds: const ['from-cache']);
+      final removedModel = scannedModel.copyWith(
+        id: 'media-filter-directory-removed',
+        path: '$directoryPath/removed.jpg',
+      );
+
+      when(
+        filesystemDataSource.filterMediaByTags(
+          any,
+          any,
+          any,
+          bookmarkData: anyNamed('bookmarkData'),
+          mediaPersistence: anyNamed('mediaPersistence'),
+        ),
+      ).thenAnswer((_) async => <MediaModel>[scannedModel]);
+      when(isarMediaDataSource.getMediaForDirectory(directoryId)).thenAnswer(
+        (_) async => <MediaModel>[persistedModel, removedModel],
+      );
+
+      final media = await repository.filterMediaByTagsFromDirectory(
+        const ['tag-1'],
+        directoryPath,
+        directoryId,
+      );
+
+      expect(media, hasLength(1));
+      expect(media.first.tagIds, containsAll(const ['from-scan', 'from-cache']));
+      verify(isarMediaDataSource.getMediaForDirectory(directoryId)).called(1);
+      verify(isarMediaDataSource.removeMediaForDirectory(directoryId)).called(1);
+      final captured = verify(isarMediaDataSource.addMedia(captureAny)).captured;
+      final persisted = captured.single as List<MediaModel>;
+      expect(
+        persisted.map((model) => model.id),
+        equals(const ['media-filter-directory']),
+      );
+      verifyNever(isarMediaDataSource.removeMediaForDirectory('other-directory'));
     });
   });
 
