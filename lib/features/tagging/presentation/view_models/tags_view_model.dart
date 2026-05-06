@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -54,28 +55,27 @@ class TagSection {
   }
 }
 
+typedef _LibraryRoot = ({String id, String normalizedPath});
+
 sealed class TagsState {
   const TagsState();
 }
 
-enum TagSelectionMode {
-  required,
-  optional,
-  excluded,
-}
+enum TagSelectionMode { required, optional, excluded }
 
 extension TagSelectionModeX on TagSelectionMode {
   String get label => switch (this) {
-        TagSelectionMode.required => 'Must include',
-        TagSelectionMode.optional => 'Match any',
-        TagSelectionMode.excluded => 'Exclude',
-      };
+    TagSelectionMode.required => 'Must include',
+    TagSelectionMode.optional => 'Match any',
+    TagSelectionMode.excluded => 'Exclude',
+  };
 
   String get helperText => switch (this) {
-        TagSelectionMode.required => 'Media must include every required tag.',
-        TagSelectionMode.optional => 'Media must include at least one optional tag.',
-        TagSelectionMode.excluded => 'Media must not include excluded tags.',
-      };
+    TagSelectionMode.required => 'Media must include every required tag.',
+    TagSelectionMode.optional =>
+      'Media must include at least one optional tag.',
+    TagSelectionMode.excluded => 'Media must not include excluded tags.',
+  };
 }
 
 class TagsLoading extends TagsState {
@@ -195,6 +195,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
   TagMediaTypeFilter _mediaTypeFilter = TagMediaTypeFilter.all;
   TagSelectionMode _selectionMode = TagSelectionMode.required;
   List<DirectoryEntity> _libraryDirectories = const [];
+  List<_LibraryRoot> _normalizedLibraryRoots = const [];
   Map<String, int> _directoryMediaCounts = const {};
 
   Future<void> loadTags() async {
@@ -271,35 +272,47 @@ class TagsViewModel extends StateNotifier<TagsState> {
       final allDirectories =
           await _filterByTagsUseCase.filterDirectories(const []);
       _libraryDirectories = _extractTopLevelDirectories(allDirectories);
+      _normalizedLibraryRoots = _libraryDirectories
+          .map((d) => (id: d.id, normalizedPath: p.normalize(d.path)))
+          .toList(growable: false);
 
       final cachedMediaModels = await _mediaDataSource.getMedia();
-      final cachedMediaEntities = cachedMediaModels
-          .map(_toEntity)
-          .toList(growable: false);
-      _directoryMediaCounts = _countMediaByTopDirectory(cachedMediaEntities);
-      final cachedMediaById = {
-        for (final media in cachedMediaEntities) media.id: media,
-      };
-      final mediaOrderById = {
-        for (var index = 0; index < cachedMediaEntities.length; index += 1)
-          cachedMediaEntities[index].id: index,
-      };
+      final mediaCount = cachedMediaModels.length;
+      final cachedMediaEntities = List<MediaEntity>.generate(
+        mediaCount,
+        (index) => _toEntity(cachedMediaModels[index]),
+        growable: false,
+      );
+
+      final cachedMediaById = <String, MediaEntity>{};
+      final mediaOrderById = <String, int>{};
+      final directoryMediaCounts = <String, int>{};
       final mediaIdsByTagId = <String, Set<String>>{};
       final mediaIdsByTopDirectoryId = <String, Set<String>>{};
-      for (final media in cachedMediaEntities) {
+
+      for (var index = 0; index < mediaCount; index += 1) {
+        final media = cachedMediaEntities[index];
+        cachedMediaById[media.id] = media;
+        mediaOrderById[media.id] = index;
+
         for (final tagId in media.tagIds) {
-          mediaIdsByTagId
-              .putIfAbsent(tagId, () => <String>{})
-              .add(media.id);
+          mediaIdsByTagId.putIfAbsent(tagId, () => <String>{}).add(media.id);
         }
 
         final topDirectoryId = _findTopDirectoryIdForPath(media.path);
         if (topDirectoryId != null) {
+          directoryMediaCounts.update(
+            topDirectoryId,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
           mediaIdsByTopDirectoryId
               .putIfAbsent(topDirectoryId, () => <String>{})
               .add(media.id);
         }
       }
+
+      _directoryMediaCounts = directoryMediaCounts;
 
       final favoritesSection = await _buildFavoritesSection(
         cachedMediaById: cachedMediaById,
@@ -367,8 +380,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
   }
 
   void setTagSelected(String tagId, bool isSelected) {
-    final selectionMode =
-        _filterMode.isHybrid ? _selectionMode : TagSelectionMode.required;
+    final selectionMode = _filterMode.isHybrid
+        ? _selectionMode
+        : TagSelectionMode.required;
     switch (selectionMode) {
       case TagSelectionMode.required:
         _updateRequired(tagId, isSelected);
@@ -597,8 +611,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
     Map<String, Set<String>> mediaIdsByTopDirectoryId,
     Map<String, int> mediaOrderById,
   ) async {
-    final untaggedMedia =
-        cachedMedia.where((media) => media.tagIds.isEmpty).toList();
+    final untaggedMedia = cachedMedia
+        .where((media) => media.tagIds.isEmpty)
+        .toList();
     if (untaggedMedia.isEmpty) {
       return null;
     }
@@ -607,16 +622,14 @@ class TagsViewModel extends StateNotifier<TagsState> {
     final directoryContents = <TagDirectoryContent>[];
     final collectedMediaIds = <String>{};
     for (final directory in _libraryDirectories) {
-      final directoryMediaIds = mediaIdsByTopDirectoryId[directory.id] ??
-          const <String>{};
-      final idsForDirectory = directoryMediaIds
-          .where(untaggedIds.contains)
-          .toList()
-        ..sort(
-          (a, b) => (mediaOrderById[a] ?? 1 << 30).compareTo(
-            mediaOrderById[b] ?? 1 << 30,
-          ),
-        );
+      final directoryMediaIds =
+          mediaIdsByTopDirectoryId[directory.id] ?? const <String>{};
+      final idsForDirectory =
+          directoryMediaIds.where(untaggedIds.contains).toList()..sort(
+            (a, b) => (mediaOrderById[a] ?? 1 << 30).compareTo(
+              mediaOrderById[b] ?? 1 << 30,
+            ),
+          );
 
       if (idsForDirectory.isEmpty) {
         continue;
@@ -624,10 +637,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
       collectedMediaIds.addAll(idsForDirectory);
       directoryContents.add(
-        TagDirectoryContent(
-          directory: directory,
-          mediaIds: idsForDirectory,
-        ),
+        TagDirectoryContent(directory: directory, mediaIds: idsForDirectory),
       );
     }
 
@@ -636,8 +646,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
         .map((media) => media.id)
         .toList(growable: false);
 
-    final itemCount =
-        standaloneMedia.length + collectedMediaIds.length;
+    final itemCount = standaloneMedia.length + collectedMediaIds.length;
 
     return TagSection(
       id: 'untagged',
@@ -660,33 +669,40 @@ class TagsViewModel extends StateNotifier<TagsState> {
     final directorySections = <TagDirectoryContent>[];
 
     for (final directory in _libraryDirectories) {
-      final directoryMediaIds = mediaIdsByTopDirectoryId[directory.id] ??
-          const <String>{};
-      final mediaIdsForDirectory =
-          directoryMediaIds.where(tagMediaIds.contains).toList();
+      final directoryMediaIds =
+          mediaIdsByTopDirectoryId[directory.id] ?? const <String>{};
+      final mediaIdsForDirectory = directoryMediaIds
+          .where(tagMediaIds.contains)
+          .toList();
 
       if (mediaIdsForDirectory.isEmpty) {
         continue;
       }
 
       mediaIdsForDirectory.sort(
-        (a, b) =>
-            (mediaOrderById[a] ?? 1 << 30).compareTo(mediaOrderById[b] ?? 1 << 30),
+        (a, b) => (mediaOrderById[a] ?? 1 << 30).compareTo(
+          mediaOrderById[b] ?? 1 << 30,
+        ),
       );
 
       collectedMediaIds.addAll(mediaIdsForDirectory);
       directorySections.add(
-        TagDirectoryContent(directory: directory, mediaIds: mediaIdsForDirectory),
+        TagDirectoryContent(
+          directory: directory,
+          mediaIds: mediaIdsForDirectory,
+        ),
       );
     }
 
-    final standaloneMediaIds = tagMediaIds
-        .where((mediaId) => !collectedMediaIds.contains(mediaId))
-        .toList()
-      ..sort(
-        (a, b) =>
-            (mediaOrderById[a] ?? 1 << 30).compareTo(mediaOrderById[b] ?? 1 << 30),
-      );
+    final standaloneMediaIds =
+        tagMediaIds
+            .where((mediaId) => !collectedMediaIds.contains(mediaId))
+            .toList()
+          ..sort(
+            (a, b) => (mediaOrderById[a] ?? 1 << 30).compareTo(
+              mediaOrderById[b] ?? 1 << 30,
+            ),
+          );
 
     final itemCount = collectedMediaIds.length + standaloneMediaIds.length;
 
@@ -701,22 +717,6 @@ class TagsViewModel extends StateNotifier<TagsState> {
     );
   }
 
-  Map<String, int> _countMediaByTopDirectory(List<MediaEntity> media) {
-    if (media.isEmpty || _libraryDirectories.isEmpty) {
-      return const {};
-    }
-
-    final counts = <String, int>{};
-    for (final item in media) {
-      final directoryId = _findTopDirectoryIdForPath(item.path);
-      if (directoryId == null) {
-        continue;
-      }
-      counts.update(directoryId, (value) => value + 1, ifAbsent: () => 1);
-    }
-    return counts;
-  }
-
   List<DirectoryEntity> _extractTopLevelDirectories(
     List<DirectoryEntity> directories,
   ) {
@@ -724,17 +724,21 @@ class TagsViewModel extends StateNotifier<TagsState> {
       return const [];
     }
 
-    final normalized = directories
-        .map(
-          (directory) => directory.copyWith(path: p.normalize(directory.path)),
-        )
-        .toList()
-      ..sort((a, b) => a.path.length.compareTo(b.path.length));
+    final normalized =
+        directories
+            .map(
+              (directory) =>
+                  directory.copyWith(path: p.normalize(directory.path)),
+            )
+            .toList()
+          ..sort((a, b) => a.path.length.compareTo(b.path.length));
 
     final topDirectories = <DirectoryEntity>[];
     for (final directory in normalized) {
       final isNested = topDirectories.any(
-        (top) => _isPathWithin(top.path, directory.path),
+        (top) =>
+            directory.path == top.path ||
+            p.isWithin(top.path, directory.path),
       );
       if (!isNested) {
         topDirectories.add(directory);
@@ -746,24 +750,18 @@ class TagsViewModel extends StateNotifier<TagsState> {
   }
 
   String? _findTopDirectoryIdForPath(String path) {
-    if (_libraryDirectories.isEmpty) {
+    if (_normalizedLibraryRoots.isEmpty) {
       return null;
     }
 
     final normalized = p.normalize(path);
-    for (final directory in _libraryDirectories) {
-      if (_isPathWithin(directory.path, normalized)) {
-        return directory.id;
+    for (final root in _normalizedLibraryRoots) {
+      if (normalized == root.normalizedPath ||
+          p.isWithin(root.normalizedPath, normalized)) {
+        return root.id;
       }
     }
     return null;
-  }
-
-  bool _isPathWithin(String parentPath, String childPath) {
-    final normalizedParent = p.normalize(parentPath);
-    final normalizedChild = p.normalize(childPath);
-    return normalizedChild == normalizedParent ||
-        p.isWithin(normalizedParent, normalizedChild);
   }
 
   Future<List<MediaEntity>> _loadMediaByIds(

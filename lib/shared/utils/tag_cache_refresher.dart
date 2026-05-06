@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_fast_view/shared/providers/repository_providers.dart';
 
 import '../../core/services/logging_service.dart';
 import '../../features/media_library/presentation/view_models/directory_grid_view_model.dart';

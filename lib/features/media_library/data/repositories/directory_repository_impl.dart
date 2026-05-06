@@ -308,19 +308,34 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
 
   @override
   Future<void> refreshChangedLibraryRoots() async {
-    final models = await _isarDirectoryDataSource.getDirectories();
+    final rawModels = await _isarDirectoryDataSource.getDirectories();
+    if (rawModels.isEmpty) {
+      return;
+    }
 
-    for (final model in models) {
-      final normalizedModel = await _ensureStableDirectoryId(model);
+    final normalizedModels = <DirectoryModel>[];
+    for (final model in rawModels) {
+      normalizedModels.add(await _ensureStableDirectoryId(model));
+    }
+
+    final fingerprints = await Future.wait(
+      normalizedModels.map(_safeFingerprint),
+      eagerError: false,
+    );
+
+    for (var index = 0; index < normalizedModels.length; index += 1) {
+      final fingerprint = fingerprints[index];
+      if (fingerprint == null) {
+        continue;
+      }
+
+      final normalizedModel = normalizedModels[index];
+      if (!_hasDirectoryFingerprintChanged(normalizedModel, fingerprint)) {
+        continue;
+      }
+
       final directory = _modelToEntity(normalizedModel);
-
       try {
-        final fingerprint = await _localDirectoryDataSource
-            .fingerprintDirectoryTree(directory);
-        if (!_hasDirectoryFingerprintChanged(normalizedModel, fingerprint)) {
-          continue;
-        }
-
         final rescannedMedia = await _filesystemMediaDataSource
             .scanMediaForDirectory(
               directory.path,
@@ -347,6 +362,23 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
         );
         LoggingService.instance.debug(stackTrace.toString());
       }
+    }
+  }
+
+  Future<DirectoryTreeFingerprint?> _safeFingerprint(
+    DirectoryModel normalizedModel,
+  ) async {
+    final directory = _modelToEntity(normalizedModel);
+    try {
+      return await _localDirectoryDataSource.fingerprintDirectoryTree(
+        directory,
+      );
+    } catch (error, stackTrace) {
+      LoggingService.instance.warning(
+        'Failed to fingerprint library root ${directory.path}: $error',
+      );
+      LoggingService.instance.debug(stackTrace.toString());
+      return null;
     }
   }
 

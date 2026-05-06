@@ -205,50 +205,16 @@ class LocalDirectoryDataSource {
         );
       }
 
-      final directoriesToVisit = ListQueue<Directory>.of([rootDir]);
-      var lastKnownTreeModified = (await rootDir.stat()).modified;
-      var lastKnownChildDirectoryCount = 0;
-      var lastKnownMediaFileCount = 0;
+      final scanPath = actualPath;
+      final mediaExtensions = _mediaExtensions.toList();
+      final excludedNames = _excludedNames.toList();
 
-      while (directoriesToVisit.isNotEmpty) {
-        final directory = directoriesToVisit.removeFirst();
-
-        try {
-          await for (final entity in directory.list(
-            recursive: false,
-            followLinks: false,
-          )) {
-            final name = path.basename(entity.path);
-            if (_isExcludedName(name)) {
-              continue;
-            }
-
-            final stat = await entity.stat();
-            if (stat.modified.isAfter(lastKnownTreeModified)) {
-              lastKnownTreeModified = stat.modified;
-            }
-
-            if (entity is Directory) {
-              directoriesToVisit.add(entity);
-              lastKnownChildDirectoryCount += 1;
-              continue;
-            }
-
-            if (entity is File && _isSupportedMediaFile(entity.path)) {
-              lastKnownMediaFileCount += 1;
-            }
-          }
-        } catch (e) {
-          LoggingService.instance.warning(
-            'Failed to fingerprint directory ${directory.path}: $e',
-          );
-        }
-      }
-
-      return DirectoryTreeFingerprint(
-        lastKnownTreeModified: lastKnownTreeModified,
-        lastKnownChildDirectoryCount: lastKnownChildDirectoryCount,
-        lastKnownMediaFileCount: lastKnownMediaFileCount,
+      return await Isolate.run<DirectoryTreeFingerprint>(
+        () => _fingerprintDirectoryTreeInIsolate(
+          scanPath,
+          mediaExtensions,
+          excludedNames,
+        ),
       );
     } catch (e) {
       if (e is AppError) {
@@ -433,14 +399,6 @@ class LocalDirectoryDataSource {
   }
 
 
-  bool _isSupportedMediaFile(String filePath) {
-    final extension = path.extension(filePath).toLowerCase().replaceFirst('.', '');
-    return _mediaExtensions.contains(extension);
-  }
-
-  bool _isExcludedName(String name) {
-    return _excludedNames.contains(name) || name.startsWith('.');
-  }
 }
 
 class DirectoryTreeFingerprint {
@@ -604,6 +562,72 @@ Future<void> _scanDirectoryRecursiveIsolate(
   });
 
   controlPort.close();
+}
+
+Future<DirectoryTreeFingerprint> _fingerprintDirectoryTreeInIsolate(
+  String rootPath,
+  List<String> mediaExtensionsList,
+  List<String> excludedNamesList,
+) async {
+  final mediaExtensions = Set<String>.from(mediaExtensionsList);
+  final excludedNames = Set<String>.from(excludedNamesList);
+
+  bool isExcluded(String name) =>
+      excludedNames.contains(name) || name.startsWith('.');
+
+  bool isSupportedMediaFile(String filePath) {
+    final extension = path
+        .extension(filePath)
+        .toLowerCase()
+        .replaceFirst('.', '');
+    return mediaExtensions.contains(extension);
+  }
+
+  final rootDir = Directory(rootPath);
+  final directoriesToVisit = ListQueue<Directory>.of([rootDir]);
+  var lastKnownTreeModified = (await rootDir.stat()).modified;
+  var lastKnownChildDirectoryCount = 0;
+  var lastKnownMediaFileCount = 0;
+
+  while (directoriesToVisit.isNotEmpty) {
+    final directory = directoriesToVisit.removeFirst();
+
+    try {
+      await for (final entity in directory.list(
+        recursive: false,
+        followLinks: false,
+      )) {
+        final name = path.basename(entity.path);
+        if (isExcluded(name)) {
+          continue;
+        }
+
+        final stat = await entity.stat();
+        if (stat.modified.isAfter(lastKnownTreeModified)) {
+          lastKnownTreeModified = stat.modified;
+        }
+
+        if (entity is Directory) {
+          directoriesToVisit.add(entity);
+          lastKnownChildDirectoryCount += 1;
+          continue;
+        }
+
+        if (entity is File && isSupportedMediaFile(entity.path)) {
+          lastKnownMediaFileCount += 1;
+        }
+      }
+    } catch (_) {
+      // Ignore directories that cannot be enumerated; the surrounding
+      // walk continues with whatever entries it already collected.
+    }
+  }
+
+  return DirectoryTreeFingerprint(
+    lastKnownTreeModified: lastKnownTreeModified,
+    lastKnownChildDirectoryCount: lastKnownChildDirectoryCount,
+    lastKnownMediaFileCount: lastKnownMediaFileCount,
+  );
 }
 
 Future<bool> _directoryContainsMediaInIsolate(
