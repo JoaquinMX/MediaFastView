@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
+
 import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/core/services/permission_service.dart';
 import 'package:media_fast_view/features/media_library/data/data_sources/filesystem_media_data_source.dart';
@@ -11,31 +13,29 @@ import 'package:media_fast_view/features/media_library/domain/entities/media_ent
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
 
-class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
+import 'filesystem_media_repository_impl_test.mocks.dart';
 
-class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
-
-class _MockBookmarkService extends Mock implements BookmarkService {}
-
-class _MockFilesystemMediaDataSource extends Mock
-    implements FilesystemMediaDataSource {}
-
-class _MockPermissionService extends Mock implements PermissionService {}
-
+@GenerateMocks([
+  DirectoryRepository,
+  IsarMediaDataSource,
+  BookmarkService,
+  FilesystemMediaDataSource,
+  PermissionService,
+])
 void main() {
   late FilesystemMediaRepositoryImpl repository;
-  late _MockBookmarkService bookmarkService;
-  late _MockDirectoryRepository directoryRepository;
-  late _MockFilesystemMediaDataSource filesystemDataSource;
-  late _MockPermissionService permissionService;
-  late _MockIsarMediaDataSource isarMediaDataSource;
+  late MockBookmarkService bookmarkService;
+  late MockDirectoryRepository directoryRepository;
+  late MockFilesystemMediaDataSource filesystemDataSource;
+  late MockPermissionService permissionService;
+  late MockIsarMediaDataSource isarMediaDataSource;
 
   setUp(() {
-    bookmarkService = _MockBookmarkService();
-    directoryRepository = _MockDirectoryRepository();
-    filesystemDataSource = _MockFilesystemMediaDataSource();
-    permissionService = _MockPermissionService();
-    isarMediaDataSource = _MockIsarMediaDataSource();
+    bookmarkService = MockBookmarkService();
+    directoryRepository = MockDirectoryRepository();
+    filesystemDataSource = MockFilesystemMediaDataSource();
+    permissionService = MockPermissionService();
+    isarMediaDataSource = MockIsarMediaDataSource();
 
     when(isarMediaDataSource.getMedia()).thenAnswer((_) async => <MediaModel>[]);
     when(isarMediaDataSource.getMediaForDirectory(any)).thenAnswer((_) async => <MediaModel>[]);

@@ -164,6 +164,12 @@ class _InMemoryMediaCollectionStore implements MediaCollectionStore {
   }
 
   @override
+  Future<MediaCollection?> getByMediaId(String mediaId) async {
+    final media = _data[isarIdForString(mediaId)];
+    return media == null ? null : _clone(media);
+  }
+
+  @override
   Future<List<MediaCollection>> getByDirectoryId(String directoryId) async {
     return _data.values
         .where((media) => media.directoryId == directoryId)

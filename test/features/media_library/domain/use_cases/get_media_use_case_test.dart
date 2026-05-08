@@ -1,14 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/get_media_use_case.dart';
 
-class _MockMediaRepository extends Mock implements MediaRepository {}
+import 'get_media_use_case_test.mocks.dart';
+
+@GenerateMocks([MediaRepository])
+void _dummy() {}
 
 void main() {
-  late _MockMediaRepository mediaRepository;
+  late MockMediaRepository mediaRepository;
   late GetMediaUseCase useCase;
 
   const directoryPath = '/path/to/directory';
@@ -16,7 +20,7 @@ void main() {
   const bookmark = 'bookmark-data';
 
   setUp(() {
-    mediaRepository = _MockMediaRepository();
+    mediaRepository = MockMediaRepository();
     useCase = GetMediaUseCase(mediaRepository);
   });
 

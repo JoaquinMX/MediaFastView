@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/full_screen/domain/use_cases/load_media_for_viewing_use_case.dart';
@@ -7,7 +8,9 @@ import 'package:media_fast_view/features/media_library/data/isar/isar_media_data
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 
-class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
+import 'load_media_for_viewing_use_case_test.mocks.dart';
+
+@GenerateMocks([IsarMediaDataSource])
 
 class _StubFilesystemMediaDataSource extends FilesystemMediaDataSource {
   _StubFilesystemMediaDataSource(
@@ -41,10 +44,10 @@ class _StubFilesystemMediaDataSource extends FilesystemMediaDataSource {
 
 void main() {
   group('LoadMediaForViewingUseCase', () {
-    late _MockIsarMediaDataSource mediaDataSource;
+    late MockIsarMediaDataSource mediaDataSource;
 
     setUp(() {
-      mediaDataSource = _MockIsarMediaDataSource();
+      mediaDataSource = MockIsarMediaDataSource();
     });
 
     test('preserves persisted tag assignments when scanning media', () async {

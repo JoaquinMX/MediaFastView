@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/media_library/data/models/tag_model.dart';
@@ -6,14 +7,15 @@ import 'package:media_fast_view/features/media_library/data/repositories/tag_rep
 import 'package:media_fast_view/features/media_library/domain/entities/tag_entity.dart';
 import 'package:media_fast_view/features/tagging/data/isar/isar_tag_data_source.dart';
 
+import 'tag_repository_impl_test.mocks.dart';
 
-class _MockIsarTagDataSource extends Mock implements IsarTagDataSource {}
+@GenerateMocks([IsarTagDataSource])
 void main() {
-  late _MockIsarTagDataSource tagDataSource;
+  late MockIsarTagDataSource tagDataSource;
   late TagRepositoryImpl repository;
 
   setUp(() {
-    tagDataSource = _MockIsarTagDataSource();
+    tagDataSource = MockIsarTagDataSource();
     repository = TagRepositoryImpl(tagDataSource);
   });
 

@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 import 'package:isar/isar.dart';
 import 'package:media_fast_view/core/services/isar_database.dart';
 import 'package:media_fast_view/core/utils/batch_update_result.dart';
@@ -50,13 +52,19 @@ class _InMemoryDirectoryCollectionStore implements DirectoryCollectionStore {
 
   @override
   Future<DirectoryCollection?> getByDirectoryId(String directoryId) async {
-    final directory = _data[isarIdForString(directoryId)];
-    return directory != null ? _clone(directory) : null;
+    try {
+      final directory = _data.values.firstWhere(
+        (d) => d.directoryId == directoryId,
+      );
+      return _clone(directory);
+    } catch (e) {
+      return null;
+    }
   }
 
   @override
   Future<void> put(DirectoryCollection directory) async {
-    _data[isarIdForString(directory.directoryId)] = _clone(directory);
+    _data[directory.id] = _clone(directory);
   }
 
   @override

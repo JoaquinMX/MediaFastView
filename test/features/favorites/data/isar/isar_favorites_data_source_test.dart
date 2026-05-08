@@ -13,7 +13,7 @@ import 'package:media_fast_view/features/media_library/data/models/directory_mod
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 
-import '../../../../helpers/isar_id.dart';
+import '../../../../../test/helpers/isar_id.dart';
 
 class _FakeIsarDatabase extends IsarDatabase {
   _FakeIsarDatabase()
@@ -148,6 +148,18 @@ class _InMemoryMediaCollectionStore implements MediaCollectionStore {
   Future<MediaCollection?> getById(Id id) async {
     final media = _data[id];
     return media == null ? null : _clone(media);
+  }
+
+  @override
+  Future<MediaCollection?> getByMediaId(String mediaId) async {
+    try {
+      final media = _data.values.firstWhere(
+        (m) => m.mediaId == mediaId,
+      );
+      return _clone(media);
+    } catch (e) {
+      return null;
+    }
   }
 
   @override

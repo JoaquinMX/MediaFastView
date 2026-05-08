@@ -5,7 +5,7 @@ import 'package:media_fast_view/features/favorites/data/isar/favorite_collection
 import 'package:media_fast_view/features/favorites/data/models/favorite_model.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 
-import '../../../../helpers/isar_id.dart';
+import '../../../../../test/helpers/isar_id.dart';
 
 void main() {
   group('FavoriteCollection', () {

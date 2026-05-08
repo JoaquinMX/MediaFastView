@@ -1,20 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/core/services/bookmark_service.dart';
+import 'package:media_fast_view/core/services/permission_service.dart';
 import 'package:media_fast_view/core/utils/batch_update_result.dart';
-
-import '../../../../../lib/core/services/permission_service.dart';
-import '../../../../../lib/features/favorites/domain/entities/favorite_entity.dart';
-import '../../../../../lib/features/favorites/domain/entities/favorite_item_type.dart';
-import '../../../../../lib/features/favorites/domain/repositories/favorites_repository.dart';
-import '../../../../../lib/features/media_library/data/data_sources/local_directory_data_source.dart';
-import '../../../../../lib/features/media_library/domain/entities/directory_entity.dart';
-import '../../../../../lib/features/media_library/domain/entities/directory_media_counts.dart';
-import '../../../../../lib/features/media_library/domain/entities/media_entity.dart';
-import '../../../../../lib/features/media_library/domain/repositories/directory_repository.dart';
-import '../../../../../lib/features/media_library/domain/repositories/media_repository.dart';
-import '../../../../../lib/features/media_library/presentation/view_models/directory_grid_view_model.dart';
-import '../../../../../lib/shared/providers/repository_providers.dart';
+import 'package:media_fast_view/features/favorites/domain/entities/favorite_entity.dart';
+import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
+import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
+import 'package:media_fast_view/features/media_library/data/data_sources/local_directory_data_source.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/directory_media_counts.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
+import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
+import 'package:media_fast_view/features/media_library/presentation/view_models/directory_grid_view_model.dart';
+import 'package:media_fast_view/shared/providers/repository_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class InMemoryDirectoryRepository implements DirectoryRepository {
   InMemoryDirectoryRepository(this._directories);
@@ -121,6 +121,26 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
       name: name ?? existing.name,
       bookmarkData: bookmarkData ?? existing.bookmarkData,
     );
+  }
+
+  @override
+  Future<BatchUpdateResult> updateDirectoryTagsBatch(
+    Map<String, List<String>> directoryTags,
+  ) async {
+    int updated = 0;
+    int failed = 0;
+    for (final entry in directoryTags.entries) {
+      final index = _directories.indexWhere((dir) => dir.id == entry.key);
+      if (index != -1) {
+        _directories[index] =
+            _directories[index].copyWith(tagIds: entry.value);
+        updated++;
+      } else {
+        failed++;
+      }
+    }
+    final successfulIds = _directories.take(updated).map((d) => d.id).toList();
+    return BatchUpdateResult(successfulIds: successfulIds);
   }
 }
 
@@ -301,6 +321,14 @@ class InMemoryFavoritesRepository implements FavoritesRepository {
     final ids = itemIds.toSet();
     _favorites.removeWhere((key, value) => ids.contains(value.itemId));
   }
+
+  @override
+  Future<List<String>> getFavoriteDirectoryIds() async {
+    return _favorites.values
+        .where((fav) => fav.itemType == FavoriteItemType.directory)
+        .map((fav) => fav.itemId)
+        .toList();
+  }
 }
 
 class FakeLocalDirectoryDataSource extends LocalDirectoryDataSource {
@@ -349,6 +377,11 @@ void main() {
   late InMemoryFavoritesRepository favoritesRepository;
 
   setUp(() async {
+    // Mock SharedPreferences platform channel; production GridColumnsNotifier
+    // (read transitively by DirectoryGridViewModel) calls
+    // SharedPreferences.getInstance() in its constructor and would otherwise
+    // throw MissingPluginException in pure-Dart tests.
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     directoryRepository = InMemoryDirectoryRepository([
       DirectoryEntity(
         id: '1',

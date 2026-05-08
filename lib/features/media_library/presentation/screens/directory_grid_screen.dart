@@ -28,6 +28,7 @@ import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../models/directory_navigation_target.dart';
 import '../view_models/directory_grid_view_model.dart';
+import '../view_models/directory_selection_view_model.dart';
 import '../widgets/directory_grid_item.dart';
 import '../widgets/directory_search_bar.dart';
 import '../widgets/column_selector_popup.dart';
@@ -46,13 +47,6 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   bool _isDragging = false;
   final GlobalKey _directoryGridOverlayKey = GlobalKey();
   final Map<String, GlobalKey> _directoryItemKeys = <String, GlobalKey>{};
-  Rect? _directorySelectionRect;
-  Offset? _directoryDragStart;
-  bool _isDirectoryMarqueeActive = false;
-  bool _directoryAppendMode = false;
-  Set<String> _directoryMarqueeBaseSelection = <String>{};
-  Set<String> _directoryLastMarqueeSelection = <String>{};
-  Map<String, Rect> _directoryCachedItemRects = <String, Rect>{};
   late final FocusNode _focusNode;
 
   @override
@@ -762,19 +756,22 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     required Widget child,
     required DirectoryViewModel viewModel,
   }) {
+    final selectionState = ref.watch(directorySelectionViewModelProvider);
+    final selectionNotifier = ref.read(directorySelectionViewModelProvider.notifier);
+
     return Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (event) => _handleDirectoryPointerDown(event, viewModel),
-      onPointerMove: (event) => _handleDirectoryPointerMove(event, viewModel),
-      onPointerUp: (_) => _endDirectoryMarquee(),
-      onPointerCancel: (_) => _endDirectoryMarquee(),
+      onPointerDown: (event) => _handleDirectoryPointerDown(event, viewModel, selectionNotifier),
+      onPointerMove: (event) => _handleDirectoryPointerMove(event, viewModel, selectionNotifier),
+      onPointerUp: (_) => selectionNotifier.endMarquee(),
+      onPointerCancel: (_) => selectionNotifier.endMarquee(),
       child: Stack(
         key: _directoryGridOverlayKey,
         children: [
           Positioned.fill(child: child),
-          if (_directorySelectionRect != null)
+          if (selectionState case DirectorySelectionActive(:final selectionRect))
             Positioned.fromRect(
-              rect: _directorySelectionRect!,
+              rect: selectionRect,
               child: IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
@@ -797,6 +794,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   void _handleDirectoryPointerDown(
     PointerDownEvent event,
     DirectoryViewModel viewModel,
+    DirectorySelectionViewModel selectionNotifier,
   ) {
     if (event.kind != PointerDeviceKind.mouse ||
         (event.buttons & kPrimaryMouseButton) == 0) {
@@ -812,40 +810,41 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       return;
     }
 
-    _directoryCachedItemRects = _computeDirectoryItemRects();
+    final cachedItemRects = _computeDirectoryItemRects();
     final localPosition = overlayBox.globalToLocal(event.position);
     if (_isPointInsideAnyRect(
       localPosition,
-      _directoryCachedItemRects.values,
+      cachedItemRects.values,
     )) {
       return;
     }
 
     final baseSelection = viewModel.selectedDirectoryIds;
-    _directoryMarqueeBaseSelection = Set<String>.from(baseSelection);
-    _directoryLastMarqueeSelection = Set<String>.from(baseSelection);
-    _directoryAppendMode = _isMultiSelectModifierPressed();
-    _isDirectoryMarqueeActive = true;
-    _directoryDragStart = localPosition;
+    final appendMode = _isMultiSelectModifierPressed();
 
-    setState(() {
-      _directorySelectionRect = Rect.fromPoints(localPosition, localPosition);
-    });
+    selectionNotifier.startMarquee(
+      baseSelection: baseSelection,
+      dragStart: localPosition,
+      appendMode: appendMode,
+      cachedItemRects: cachedItemRects,
+    );
 
-    _updateDirectoryMarqueeSelection(viewModel);
+    _updateDirectoryMarqueeSelection(viewModel, selectionNotifier);
   }
 
   void _handleDirectoryPointerMove(
     PointerMoveEvent event,
     DirectoryViewModel viewModel,
+    DirectorySelectionViewModel selectionNotifier,
   ) {
-    if (!_isDirectoryMarqueeActive || _directoryDragStart == null) {
+    final selectionState = ref.read(directorySelectionViewModelProvider);
+    if (selectionState is! DirectorySelectionActive) {
       return;
     }
 
     if (event.kind == PointerDeviceKind.mouse &&
         (event.buttons & kPrimaryMouseButton) == 0) {
-      _endDirectoryMarquee();
+      selectionNotifier.endMarquee();
       return;
     }
 
@@ -859,59 +858,43 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     }
 
     final localPosition = overlayBox.globalToLocal(event.position);
-    setState(() {
-      _directorySelectionRect = Rect.fromPoints(
-        _directoryDragStart!,
-        localPosition,
-      );
-    });
+    final cachedItemRects = _computeDirectoryItemRects();
 
-    _directoryCachedItemRects = _computeDirectoryItemRects();
-    _updateDirectoryMarqueeSelection(viewModel);
+    selectionNotifier.updateMarqueeDrag(
+      currentPosition: localPosition,
+      cachedItemRects: cachedItemRects,
+    );
+
+    _updateDirectoryMarqueeSelection(viewModel, selectionNotifier);
   }
 
-  void _endDirectoryMarquee() {
-    if (!_isDirectoryMarqueeActive && _directorySelectionRect == null) {
+  void _updateDirectoryMarqueeSelection(
+    DirectoryViewModel viewModel,
+    DirectorySelectionViewModel selectionNotifier,
+  ) {
+    final selectionState = ref.read(directorySelectionViewModelProvider);
+    if (selectionState is! DirectorySelectionActive) {
       return;
     }
 
-    setState(() {
-      _directorySelectionRect = null;
-    });
-    _isDirectoryMarqueeActive = false;
-    _directoryDragStart = null;
-    _directoryAppendMode = false;
-    _directoryMarqueeBaseSelection = <String>{};
-    _directoryLastMarqueeSelection = <String>{};
-    _directoryCachedItemRects = <String, Rect>{};
-  }
-
-  void _updateDirectoryMarqueeSelection(DirectoryViewModel viewModel) {
-    if (!_isDirectoryMarqueeActive) {
-      return;
-    }
-
-    final selectionRect = _directorySelectionRect;
-    final rects = _directoryCachedItemRects;
+    final active = selectionState as DirectorySelectionActive;
     final intersectingIds = <String>{};
 
-    if (selectionRect != null) {
-      for (final entry in rects.entries) {
-        if (entry.value.overlaps(selectionRect)) {
-          intersectingIds.add(entry.key);
-        }
+    for (final entry in active.cachedItemRects.entries) {
+      if (entry.value.overlaps(active.selectionRect)) {
+        intersectingIds.add(entry.key);
       }
     }
 
-    final desiredSelection = _directoryAppendMode
-        ? {..._directoryMarqueeBaseSelection, ...intersectingIds}
+    final desiredSelection = active.appendMode
+        ? {...active.marqueeBaseSelection, ...intersectingIds}
         : intersectingIds;
 
-    if (setEquals(desiredSelection, _directoryLastMarqueeSelection)) {
+    if (setEquals(desiredSelection, active.lastMarqueeSelection)) {
       return;
     }
 
-    _directoryLastMarqueeSelection = desiredSelection;
+    selectionNotifier.updateMarqueeSelection(desiredSelection: desiredSelection);
     viewModel.selectDirectoryRange(desiredSelection, append: false);
   }
 

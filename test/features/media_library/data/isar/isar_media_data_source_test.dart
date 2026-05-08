@@ -81,7 +81,7 @@ class _InMemoryDirectoryCollectionStore implements DirectoryCollectionStore {
 }
 
 class _InMemoryMediaCollectionStore implements MediaCollectionStore {
-  final Map<Id, MediaCollection> _data = <Id, MediaCollection>{};
+  final Map<String, MediaCollection> _data = <String, MediaCollection>{};
 
   @override
   Future<void> clear() async {
@@ -90,9 +90,10 @@ class _InMemoryMediaCollectionStore implements MediaCollectionStore {
 
   @override
   Future<void> deleteByIds(List<Id> ids) async {
-    for (final id in ids) {
-      _data.remove(id);
-    }
+    // Production `MediaCollection.id` is computed via
+    // `mediaCollectionIdFromMediaId(mediaId)`, not `isarIdForString(mediaId)`.
+    // Use the same function so this fake matches what production hands us.
+    _data.removeWhere((key, _) => ids.contains(mediaCollectionIdFromMediaId(key)));
   }
 
   @override
@@ -102,7 +103,20 @@ class _InMemoryMediaCollectionStore implements MediaCollectionStore {
 
   @override
   Future<MediaCollection?> getById(Id id) async {
-    final media = _data[id];
+    // Match production: id is `mediaCollectionIdFromMediaId(mediaId)`.
+    try {
+      final entry = _data.entries.firstWhere(
+        (e) => mediaCollectionIdFromMediaId(e.key) == id,
+      );
+      return _clone(entry.value);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<MediaCollection?> getByMediaId(String mediaId) async {
+    final media = _data[mediaId];
     return media != null ? _clone(media) : null;
   }
 
@@ -116,7 +130,7 @@ class _InMemoryMediaCollectionStore implements MediaCollectionStore {
 
   @override
   Future<void> put(MediaCollection media) async {
-    _data[isarIdForString(media.mediaId)] = _clone(media);
+    _data[media.mediaId] = _clone(media);
   }
 
   @override

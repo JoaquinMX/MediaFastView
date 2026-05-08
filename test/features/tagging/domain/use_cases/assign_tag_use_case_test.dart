@@ -5,21 +5,22 @@ import 'package:media_fast_view/features/media_library/domain/entities/tag_entit
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/assign_tag_use_case.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
-import 'package:test/test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
-class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
+import 'assign_tag_use_case_test.mocks.dart';
 
-class _MockMediaRepository extends Mock implements MediaRepository {}
+@GenerateMocks([DirectoryRepository, MediaRepository])
 
 void main() {
-  late _MockDirectoryRepository directoryRepository;
-  late _MockMediaRepository mediaRepository;
+  late MockDirectoryRepository directoryRepository;
+  late MockMediaRepository mediaRepository;
   late AssignTagUseCase useCase;
 
   setUp(() {
-    directoryRepository = _MockDirectoryRepository();
-    mediaRepository = _MockMediaRepository();
+    directoryRepository = MockDirectoryRepository();
+    mediaRepository = MockMediaRepository();
     useCase = AssignTagUseCase(
       directoryRepository: directoryRepository,
       mediaRepository: mediaRepository,

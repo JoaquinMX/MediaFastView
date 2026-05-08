@@ -1,20 +1,24 @@
+import 'package:mockito/annotations.dart';
+import 'package:mockito/mockito.dart';
+import 'package:flutter_test/flutter_test.dart';
+
 import 'package:media_fast_view/features/favorites/data/isar/isar_favorites_data_source.dart';
 import 'package:media_fast_view/features/favorites/data/models/favorite_model.dart';
 import 'package:media_fast_view/features/favorites/data/repositories/favorites_repository_impl.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_entity.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
-import 'package:mockito/mockito.dart';
-import 'package:test/test.dart';
 
-class _MockIsarFavoritesDataSource extends Mock implements IsarFavoritesDataSource {}
+import 'favorites_repository_impl_test.mocks.dart';
+
+@GenerateMocks([IsarFavoritesDataSource])
 
 void main() {
   group('FavoritesRepositoryImpl', () {
     late FavoritesRepositoryImpl repository;
-    late _MockIsarFavoritesDataSource isarFavoritesDataSource;
+    late MockIsarFavoritesDataSource isarFavoritesDataSource;
 
     setUp(() {
-      isarFavoritesDataSource = _MockIsarFavoritesDataSource();
+      isarFavoritesDataSource = MockIsarFavoritesDataSource();
       repository = FavoritesRepositoryImpl(isarFavoritesDataSource);
     });
 

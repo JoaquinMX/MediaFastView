@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 
+import 'package:media_fast_view/core/utils/batch_update_result.dart';
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
 import 'package:media_fast_view/features/favorites/presentation/view_models/favorites_view_model.dart';
 import 'package:media_fast_view/features/full_screen/domain/entities/viewer_state_entity.dart';
@@ -12,6 +14,7 @@ import 'package:media_fast_view/features/tagging/domain/use_cases/assign_tag_use
 import 'package:media_fast_view/features/settings/domain/entities/playback_settings.dart';
 import 'package:media_fast_view/shared/utils/tag_cache_refresher.dart';
 import 'package:media_fast_view/shared/utils/tag_lookup.dart';
+import 'package:media_fast_view/shared/utils/tag_mutation_service.dart';
 import 'package:media_fast_view/shared/utils/tag_usage_ranker.dart';
 
 import '../mocks.dart';
@@ -75,10 +78,12 @@ void main() {
       isPlaying: false,
       isMuted: false,
       isLooping: false,
+      playbackSpeed: 1.0,
       currentPosition: Duration.zero,
       totalDuration: Duration.zero,
       isFavorite: false,
       currentMediaTags: const <TagEntity>[],
+      allTags: const <TagEntity>[],
       shortcutTags: const <TagEntity>[],
     );
 
@@ -126,10 +131,12 @@ void main() {
       isPlaying: false,
       isMuted: false,
       isLooping: false,
+      playbackSpeed: 1.0,
       currentPosition: Duration.zero,
       totalDuration: Duration.zero,
       isFavorite: false,
       currentMediaTags: [tag],
+      allTags: const <TagEntity>[],
       shortcutTags: [tag],
     );
 
@@ -183,15 +190,17 @@ void main() {
       isPlaying: false,
       isMuted: false,
       isLooping: false,
+      playbackSpeed: 1.0,
       currentPosition: Duration.zero,
       totalDuration: Duration.zero,
       isFavorite: false,
       currentMediaTags: [originalTag],
+      allTags: const <TagEntity>[],
       shortcutTags: [originalTag],
     );
 
     when(assignTagUseCase.setTagsForMedia(['media-1'], ['tag-2', 'tag-1']))
-        .thenAnswer((_) async {});
+        .thenAnswer((_) async => BatchUpdateResult.empty);
     when(tagLookup.getTagsByIds(any)).thenAnswer((invocation) async {
       final ids = List<String>.from(invocation.positionalArguments.first);
       if (ids.length == 2 && ids.first == 'tag-2') {

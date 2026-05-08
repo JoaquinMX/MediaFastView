@@ -1,17 +1,20 @@
 import 'package:media_fast_view/features/media_library/domain/entities/tag_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/tag_repository.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/create_tag_use_case.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
-import 'package:test/test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
-class _MockTagRepository extends Mock implements TagRepository {}
+import 'create_tag_use_case_test.mocks.dart';
+
+@GenerateMocks([TagRepository])
 
 void main() {
-  late _MockTagRepository tagRepository;
+  late MockTagRepository tagRepository;
   late CreateTagUseCase useCase;
 
   setUp(() {
-    tagRepository = _MockTagRepository();
+    tagRepository = MockTagRepository();
     useCase = CreateTagUseCase(tagRepository);
   });
 

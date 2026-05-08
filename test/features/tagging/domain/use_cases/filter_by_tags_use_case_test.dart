@@ -1,20 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
-
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/filter_by_tags_use_case.dart';
+import 'package:mockito/annotations.dart';
+import 'package:mockito/mockito.dart';
 
-class _MockMediaRepository extends Mock implements MediaRepository {}
+import 'filter_by_tags_use_case_test.mocks.dart';
 
-class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
+@GenerateMocks([MediaRepository, DirectoryRepository])
 
 void main() {
-  late _MockMediaRepository mediaRepository;
+  late MockMediaRepository mediaRepository;
   late FilterByTagsUseCase useCase;
-  late _MockDirectoryRepository directoryRepository;
+  late MockDirectoryRepository directoryRepository;
   const tagId = 'tag-1';
   final directory = DirectoryEntity(
     id: 'dir-1',
@@ -51,8 +51,8 @@ void main() {
   ];
 
   setUp(() {
-    directoryRepository = _MockDirectoryRepository();
-    mediaRepository = _MockMediaRepository();
+    directoryRepository = MockDirectoryRepository();
+    mediaRepository = MockMediaRepository();
     useCase = FilterByTagsUseCase(
       directoryRepository: directoryRepository,
       mediaRepository: mediaRepository,

@@ -1,3 +1,7 @@
+import 'package:mockito/annotations.dart';
+import 'package:mockito/mockito.dart';
+import 'package:flutter_test/flutter_test.dart';
+
 import 'package:media_fast_view/core/error/app_error.dart';
 import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/core/services/permission_service.dart';
@@ -11,41 +15,34 @@ import 'package:media_fast_view/features/media_library/data/repositories/directo
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
-import 'package:mockito/mockito.dart';
-import 'package:test/test.dart';
 
-class _MockLocalDirectoryDataSource extends Mock
-    implements LocalDirectoryDataSource {}
+import 'directory_repository_impl_test.mocks.dart';
 
-class _MockFilesystemMediaDataSource extends Mock
-    implements FilesystemMediaDataSource {}
-
-class _MockIsarDirectoryDataSource extends Mock
-    implements IsarDirectoryDataSource {}
-
-class _MockIsarMediaDataSource extends Mock implements IsarMediaDataSource {}
-
-class _MockBookmarkService extends Mock implements BookmarkService {}
-
-class _MockPermissionService extends Mock implements PermissionService {}
-
+@GenerateMocks([
+  LocalDirectoryDataSource,
+  FilesystemMediaDataSource,
+  IsarDirectoryDataSource,
+  IsarMediaDataSource,
+  BookmarkService,
+  PermissionService,
+])
 void main() {
   group('DirectoryRepositoryImpl', () {
     late DirectoryRepositoryImpl repository;
-    late _MockLocalDirectoryDataSource localDirectoryDataSource;
-    late _MockFilesystemMediaDataSource filesystemMediaDataSource;
-    late _MockBookmarkService bookmarkService;
-    late _MockPermissionService permissionService;
-    late _MockIsarDirectoryDataSource isarDirectoryDataSource;
-    late _MockIsarMediaDataSource isarMediaDataSource;
+    late MockLocalDirectoryDataSource localDirectoryDataSource;
+    late MockFilesystemMediaDataSource filesystemMediaDataSource;
+    late MockBookmarkService bookmarkService;
+    late MockPermissionService permissionService;
+    late MockIsarDirectoryDataSource isarDirectoryDataSource;
+    late MockIsarMediaDataSource isarMediaDataSource;
 
     setUp(() {
-      localDirectoryDataSource = _MockLocalDirectoryDataSource();
-      filesystemMediaDataSource = _MockFilesystemMediaDataSource();
-      bookmarkService = _MockBookmarkService();
-      permissionService = _MockPermissionService();
-      isarDirectoryDataSource = _MockIsarDirectoryDataSource();
-      isarMediaDataSource = _MockIsarMediaDataSource();
+      localDirectoryDataSource = MockLocalDirectoryDataSource();
+      filesystemMediaDataSource = MockFilesystemMediaDataSource();
+      bookmarkService = MockBookmarkService();
+      permissionService = MockPermissionService();
+      isarDirectoryDataSource = MockIsarDirectoryDataSource();
+      isarMediaDataSource = MockIsarMediaDataSource();
 
       repository = DirectoryRepositoryImpl(
         isarDirectoryDataSource,
@@ -217,7 +214,7 @@ void main() {
         when(isarDirectoryDataSource.getDirectories())
             .thenAnswer((_) async => [model]);
         when(localDirectoryDataSource.fingerprintDirectoryTree(any)).thenAnswer(
-          (_) async => const DirectoryTreeFingerprint(
+          (_) async => DirectoryTreeFingerprint(
             lastKnownTreeModified: DateTime(2024, 1, 2),
             lastKnownChildDirectoryCount: 3,
             lastKnownMediaFileCount: 8,
@@ -252,7 +249,7 @@ void main() {
         when(isarDirectoryDataSource.getDirectories())
             .thenAnswer((_) async => [model]);
         when(localDirectoryDataSource.fingerprintDirectoryTree(any)).thenAnswer(
-          (_) async => const DirectoryTreeFingerprint(
+          (_) async => DirectoryTreeFingerprint(
             lastKnownTreeModified: DateTime(2024, 1, 3),
             lastKnownChildDirectoryCount: 2,
             lastKnownMediaFileCount: 2,
@@ -313,7 +310,7 @@ void main() {
         when(isarDirectoryDataSource.getDirectories())
             .thenAnswer((_) async => [model]);
         when(localDirectoryDataSource.fingerprintDirectoryTree(any)).thenAnswer(
-          (_) async => const DirectoryTreeFingerprint(
+          (_) async => DirectoryTreeFingerprint(
             lastKnownTreeModified: DateTime(2024, 1, 4),
             lastKnownChildDirectoryCount: 0,
             lastKnownMediaFileCount: 1,
@@ -363,7 +360,7 @@ void main() {
             if (directory.id == failedModel.id) {
               throw const DirectoryAccessDeniedError('no access');
             }
-            return const DirectoryTreeFingerprint(
+            return DirectoryTreeFingerprint(
               lastKnownTreeModified: DateTime(2024, 1, 5),
               lastKnownChildDirectoryCount: 1,
               lastKnownMediaFileCount: 1,

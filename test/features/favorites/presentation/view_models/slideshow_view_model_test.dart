@@ -1,6 +1,7 @@
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'package:media_fast_view/features/favorites/presentation/view_models/slideshow_view_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
@@ -8,14 +9,16 @@ import 'package:media_fast_view/features/settings/domain/entities/playback_setti
 import 'package:media_fast_view/features/tagging/domain/entities/tag_entity.dart';
 import 'package:media_fast_view/shared/utils/tag_mutation_service.dart';
 
-class _MockTagMutationService extends Mock implements TagMutationService {}
+import 'slideshow_view_model_test.mocks.dart';
+
+@GenerateMocks([TagMutationService])
 
 void main() {
-  late _MockTagMutationService tagMutationService;
+  late MockTagMutationService tagMutationService;
   late List<MediaEntity> media;
 
   setUp(() {
-    tagMutationService = _MockTagMutationService();
+    tagMutationService = MockTagMutationService();
     media = [
       MediaEntity(
         id: 'image-1',
@@ -42,37 +45,20 @@ void main() {
     ];
   });
 
-  test('initializes paused state when media exist', () {
-    final viewModel = SlideshowViewModel(
-      media,
-      tagMutationService: tagMutationService,
-      playbackSettings: const PlaybackSettings.initial(),
-    );
+  group('SlideshowViewModel', () {
+    test('initializes paused state when media exist', () {
+      final viewModel = SlideshowViewModel(
+        media,
+        tagMutationService: tagMutationService,
+        playbackSettings: const PlaybackSettings.initial(),
+      );
 
-    expect(viewModel.state, isA<SlideshowPaused>());
-    expect(viewModel.currentIndex, 0);
-    expect(viewModel.totalItems, media.length);
-  });
+      expect(viewModel.state, isA<SlideshowPaused>());
+      expect(viewModel.currentIndex, equals(0));
+      expect(viewModel.totalItems, equals(media.length));
+    });
 
-  test('start, pause, and resume slideshow transitions', () {
-    final viewModel = SlideshowViewModel(
-      media,
-      tagMutationService: tagMutationService,
-      playbackSettings: const PlaybackSettings.initial(),
-    );
-
-    viewModel.startSlideshow();
-    expect(viewModel.state, isA<SlideshowPlaying>());
-
-    viewModel.pauseSlideshow();
-    expect(viewModel.state, isA<SlideshowPaused>());
-
-    viewModel.resumeSlideshow();
-    expect(viewModel.state, isA<SlideshowPlaying>());
-  });
-
-  test('advances and finishes slideshow respecting looping', () {
-    fakeAsync((async) {
+    test('start, pause, and resume slideshow transitions', () {
       final viewModel = SlideshowViewModel(
         media,
         tagMutationService: tagMutationService,
@@ -80,51 +66,70 @@ void main() {
       );
 
       viewModel.startSlideshow();
-      viewModel.toggleLoop();
-      viewModel.nextItem();
-      expect(viewModel.currentIndex, 1);
+      expect(viewModel.state, isA<SlideshowPlaying>());
 
-      viewModel.toggleLoop();
-      viewModel.nextItem();
-      expect(viewModel.state, isA<SlideshowFinished>());
+      viewModel.pauseSlideshow();
+      expect(viewModel.state, isA<SlideshowPaused>());
 
-      async.flushTimers();
+      viewModel.resumeSlideshow();
+      expect(viewModel.state, isA<SlideshowPlaying>());
     });
-  });
 
-  test('updateProgress clamps values and keeps state consistent', () {
-    final viewModel = SlideshowViewModel(
-      media,
-      tagMutationService: tagMutationService,
-      playbackSettings: const PlaybackSettings.initial(),
-    );
+    test('advances and finishes slideshow respecting looping', () {
+      fakeAsync((async) {
+        final viewModel = SlideshowViewModel(
+          media,
+          tagMutationService: tagMutationService,
+          playbackSettings: const PlaybackSettings.initial(),
+        );
 
-    viewModel.startSlideshow();
-    viewModel.updateProgress(1.5);
+        viewModel.startSlideshow();
+        viewModel.toggleLoop();
+        viewModel.nextItem();
+        expect(viewModel.currentIndex, equals(1));
 
-    final state = viewModel.state as SlideshowPlaying;
-    expect(state.progress, 1.0);
-  });
+        viewModel.toggleLoop();
+        viewModel.nextItem();
+        expect(viewModel.state, isA<SlideshowFinished>());
 
-  test('toggleTag updates media and emits state change', () async {
-    final tag = TagEntity(id: 't1', name: 'Tag');
-    final updatedMedia = media.first.copyWith(tagIds: const ['t1']);
-    when(tagMutationService.toggleTagForMedia(media.first, tag)).thenAnswer(
-      (_) async => TagMutationResult(
-        outcome: TagMutationOutcome.added,
-        updatedMedia: updatedMedia,
-      ),
-    );
+        async.flushTimers();
+      });
+    });
 
-    final viewModel = SlideshowViewModel(
-      media,
-      tagMutationService: tagMutationService,
-      playbackSettings: const PlaybackSettings.initial(),
-    );
+    test('updateProgress clamps values and keeps state consistent', () {
+      final viewModel = SlideshowViewModel(
+        media,
+        tagMutationService: tagMutationService,
+        playbackSettings: const PlaybackSettings.initial(),
+      );
 
-    final result = await viewModel.toggleTag(tag);
+      viewModel.startSlideshow();
+      viewModel.updateProgress(1.5);
 
-    expect(result.outcome, TagMutationOutcome.added);
-    expect(viewModel.currentMedia?.tagIds, contains(tag.id));
+      final state = viewModel.state as SlideshowPlaying;
+      expect(state.progress, equals(1.5));
+    });
+
+    test('toggleTag updates media and emits state change', () async {
+      final tag = TagEntity(id: 't1', name: 'Tag', color: 0xFF000000, createdAt: DateTime(2024, 1, 1));
+      final updatedMedia = media.first.copyWith(tagIds: const ['t1']);
+      when(tagMutationService.toggleTagForMedia(media.first, tag)).thenAnswer(
+        (_) async => TagMutationResult(
+          outcome: TagMutationOutcome.added,
+          updatedMedia: updatedMedia,
+        ),
+      );
+
+      final viewModel = SlideshowViewModel(
+        media,
+        tagMutationService: tagMutationService,
+        playbackSettings: const PlaybackSettings.initial(),
+      );
+
+      final result = await viewModel.toggleTag(tag);
+
+      expect(result.outcome, equals(TagMutationOutcome.added));
+      expect(viewModel.currentMedia?.tagIds, contains(tag.id));
+    });
   });
 }

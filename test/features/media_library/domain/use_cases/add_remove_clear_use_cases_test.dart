@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
@@ -11,19 +12,18 @@ import 'package:media_fast_view/features/media_library/domain/use_cases/clear_me
 import 'package:media_fast_view/features/media_library/domain/use_cases/remove_directory_use_case.dart';
 import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
 
-class _MockDirectoryRepository extends Mock implements DirectoryRepository {}
+import 'add_remove_clear_use_cases_test.mocks.dart';
 
-class _MockMediaRepository extends Mock implements MediaRepository {}
-
-class _MockFavoritesRepository extends Mock implements FavoritesRepository {}
+@GenerateMocks([DirectoryRepository, MediaRepository, FavoritesRepository])
+void _dummy() {}
 
 void main() {
   group('AddDirectoryUseCase', () {
-    late _MockDirectoryRepository directoryRepository;
+    late MockDirectoryRepository directoryRepository;
     late AddDirectoryUseCase useCase;
 
     setUp(() {
-      directoryRepository = _MockDirectoryRepository();
+      directoryRepository = MockDirectoryRepository();
       useCase = AddDirectoryUseCase(directoryRepository);
     });
 
@@ -50,18 +50,18 @@ void main() {
   });
 
   group('RemoveDirectoryUseCase', () {
-    late _MockDirectoryRepository directoryRepository;
-    late _MockMediaRepository mediaRepository;
-    late _MockFavoritesRepository favoritesRepository;
+    late MockDirectoryRepository directoryRepository;
+    late MockMediaRepository mediaRepository;
+    late MockFavoritesRepository favoritesRepository;
     late RemoveDirectoryUseCase useCase;
 
     const directoryId = 'dir-1';
     const directoryPath = '/library/dir-1';
 
     setUp(() {
-      directoryRepository = _MockDirectoryRepository();
-      mediaRepository = _MockMediaRepository();
-      favoritesRepository = _MockFavoritesRepository();
+      directoryRepository = MockDirectoryRepository();
+      mediaRepository = MockMediaRepository();
+      favoritesRepository = MockFavoritesRepository();
       useCase = RemoveDirectoryUseCase(
         directoryRepository,
         mediaRepository,
@@ -71,29 +71,25 @@ void main() {
 
     test('removes directory and cascades favorite/tag cleanup', () async {
       final media = [
-        const MediaEntity(
+        MediaEntity(
           id: 'media-1',
           directoryId: directoryId,
           path: '/file-1.jpg',
           name: 'file-1.jpg',
-          thumbnailPath: null,
+          type: MediaType.image,
+          size: 1024,
           tagIds: ['tag-1'],
-          lastModified: null,
-          duration: null,
-          width: null,
-          height: null,
+          lastModified: DateTime(2024, 1, 1),
         ),
-        const MediaEntity(
+        MediaEntity(
           id: 'media-2',
           directoryId: directoryId,
           path: '/file-2.jpg',
           name: 'file-2.jpg',
-          thumbnailPath: null,
+          type: MediaType.image,
+          size: 2048,
           tagIds: [],
-          lastModified: null,
-          duration: null,
-          width: null,
-          height: null,
+          lastModified: DateTime(2024, 1, 1),
         ),
       ];
 
@@ -113,7 +109,7 @@ void main() {
           any,
           bookmarkData: anyNamed('bookmarkData'),
         ),
-      ).thenAnswer((_) async => media);
+      ).thenAnswer((_) async => media.cast<MediaEntity>());
       when(favoritesRepository.isFavorite(any)).thenAnswer((_) async => true);
       when(favoritesRepository.removeFavorite(any)).thenAnswer((_) async {});
       when(mediaRepository.updateMediaTags(any, any))
@@ -153,24 +149,24 @@ void main() {
   });
 
   group('ClearMediaCacheUseCase', () {
-    late _MockDirectoryRepository directoryRepository;
-    late _MockMediaRepository mediaRepository;
+    late MockDirectoryRepository directoryRepository;
+    late MockMediaRepository mediaRepository;
     late ClearMediaCacheUseCase useCase;
 
     setUp(() {
-      directoryRepository = _MockDirectoryRepository();
-      mediaRepository = _MockMediaRepository();
+      directoryRepository = MockDirectoryRepository();
+      mediaRepository = MockMediaRepository();
       useCase = ClearMediaCacheUseCase(mediaRepository, directoryRepository);
     });
 
     test('removes media not linked to current directories', () async {
-      const directories = [
+      final directories = [
         DirectoryEntity(
           id: 'dir-a',
           path: '/a',
           name: 'A',
           thumbnailPath: null,
-          tagIds: [],
+          tagIds: const [],
           lastModified: DateTime(2024, 1, 1),
         ),
         DirectoryEntity(
@@ -178,7 +174,7 @@ void main() {
           path: '/b',
           name: 'B',
           thumbnailPath: null,
-          tagIds: [],
+          tagIds: const [],
           lastModified: DateTime(2024, 1, 1),
         ),
       ];
