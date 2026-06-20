@@ -537,6 +537,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
               for (final type in [
                 MediaType.image,
                 MediaType.video,
+                MediaType.audio,
                 MediaType.directory,
               ])
                 FilterChip(
@@ -587,6 +588,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   IconData _iconForType(MediaType type) => switch (type) {
     MediaType.image => Icons.image_outlined,
     MediaType.video => Icons.movie_creation_outlined,
+    MediaType.audio => Icons.audiotrack,
     MediaType.directory => Icons.folder,
     MediaType.text => Icons.description_outlined,
   };

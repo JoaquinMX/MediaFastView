@@ -230,4 +230,72 @@ void main() {
     verify(tagLookup.refresh()).called(1);
     verify(tagCacheRefresher.refresh()).called(1);
   });
+
+  group('audio playback controls', () {
+    FullScreenLoaded audioState({
+      bool isPlaying = false,
+      bool isMuted = false,
+      bool isLooping = false,
+      double playbackSpeed = 1.0,
+    }) {
+      final media = MediaEntity(
+        id: 'audio-1',
+        path: '/tmp/song.mp3',
+        name: 'song.mp3',
+        type: MediaType.audio,
+        size: 0,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const <String>[],
+        directoryId: 'dir-1',
+      );
+
+      return FullScreenLoaded(
+        mediaList: [media],
+        currentIndex: 0,
+        isPlaying: isPlaying,
+        isMuted: isMuted,
+        isLooping: isLooping,
+        playbackSpeed: playbackSpeed,
+        currentPosition: Duration.zero,
+        totalDuration: Duration.zero,
+        isFavorite: false,
+        currentMediaTags: const <TagEntity>[],
+        allTags: const <TagEntity>[],
+        shortcutTags: const <TagEntity>[],
+      );
+    }
+
+    test('togglePlayPause flips isPlaying for audio', () {
+      viewModel.state = audioState(isPlaying: false);
+      viewModel.togglePlayPause();
+      expect((viewModel.state as FullScreenLoaded).isPlaying, isTrue);
+    });
+
+    test('toggleMute flips isMuted for audio', () {
+      viewModel.state = audioState(isMuted: false);
+      viewModel.toggleMute();
+      expect((viewModel.state as FullScreenLoaded).isMuted, isTrue);
+    });
+
+    test('toggleLoop flips isLooping for audio', () {
+      viewModel.state = audioState(isLooping: false);
+      viewModel.toggleLoop();
+      expect((viewModel.state as FullScreenLoaded).isLooping, isTrue);
+    });
+
+    test('setPlaybackSpeed updates speed for audio', () {
+      viewModel.state = audioState();
+      viewModel.setPlaybackSpeed(2.0);
+      expect((viewModel.state as FullScreenLoaded).playbackSpeed, 2.0);
+    });
+
+    test('seekTo updates position for audio', () {
+      viewModel.state = audioState();
+      viewModel.seekTo(const Duration(seconds: 5));
+      expect(
+        (viewModel.state as FullScreenLoaded).currentPosition,
+        const Duration(seconds: 5),
+      );
+    });
+  });
 }

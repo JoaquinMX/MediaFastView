@@ -144,7 +144,7 @@ class MediaViewerOverlay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final style = this.style ?? const MediaOverlayStyle();
-    final isVideo = media?.type == MediaType.video;
+    final isVideo = media?.type.isTimeBased ?? false;
 
     final topDisplay = _OverlayDisplay(
       alignment: Alignment.topCenter,

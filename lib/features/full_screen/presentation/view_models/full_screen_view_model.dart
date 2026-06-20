@@ -199,7 +199,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
       final currentIndex = requestedIndex.clamp(0, finalMediaList.length - 1);
       final currentMedia = finalMediaList[currentIndex];
-      final isVideo = currentMedia.type == MediaType.video;
+      final isPlayable = currentMedia.type.isTimeBased;
 
       // Check if current media is favorite
       final isFavorite = await _favoritesRepository.isFavorite(
@@ -216,9 +216,9 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         state = FullScreenLoaded(
           mediaList: finalMediaList,
           currentIndex: currentIndex,
-          isPlaying: isVideo && _playbackSettings.autoplayVideos,
-          isMuted: isVideo && _playbackSettings.startMuted,
-          isLooping: isVideo && _playbackSettings.loopVideos,
+          isPlaying: isPlayable && _playbackSettings.autoplayVideos,
+          isMuted: isPlayable && _playbackSettings.startMuted,
+          isLooping: isPlayable && _playbackSettings.loopVideos,
           playbackSpeed: 1.0,
           currentPosition: Duration.zero,
           totalDuration: Duration.zero,
@@ -292,11 +292,11 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         currentPosition: Duration.zero,
         totalDuration: Duration.zero,
         isPlaying:
-            nextMedia.type == MediaType.video && _playbackSettings.autoplayVideos,
+            nextMedia.type.isTimeBased && _playbackSettings.autoplayVideos,
         isMuted:
-            nextMedia.type == MediaType.video && _playbackSettings.startMuted,
+            nextMedia.type.isTimeBased && _playbackSettings.startMuted,
         isLooping:
-            nextMedia.type == MediaType.video && _playbackSettings.loopVideos,
+            nextMedia.type.isTimeBased && _playbackSettings.loopVideos,
         currentMediaTags: nextTags,
       );
 
@@ -331,11 +331,11 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         isFavorite: isFavorite,
         currentPosition: Duration.zero,
         totalDuration: Duration.zero,
-        isPlaying: previousMedia.type == MediaType.video &&
+        isPlaying: previousMedia.type.isTimeBased &&
             _playbackSettings.autoplayVideos,
-        isMuted: previousMedia.type == MediaType.video &&
+        isMuted: previousMedia.type.isTimeBased &&
             _playbackSettings.startMuted,
-        isLooping: previousMedia.type == MediaType.video &&
+        isLooping: previousMedia.type.isTimeBased &&
             _playbackSettings.loopVideos,
         currentMediaTags: previousTags,
       );
@@ -438,7 +438,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     final currentState = state;
     if (currentState is! FullScreenLoaded) return;
 
-    if (currentState.currentMedia.type == MediaType.video) {
+    if (currentState.currentMedia.type.isTimeBased) {
       state = currentState.copyWith(isPlaying: !currentState.isPlaying);
     }
   }
@@ -448,7 +448,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     final currentState = state;
     if (currentState is! FullScreenLoaded) return;
 
-    if (currentState.currentMedia.type == MediaType.video) {
+    if (currentState.currentMedia.type.isTimeBased) {
       final newMuted = !currentState.isMuted;
       state = currentState.copyWith(isMuted: newMuted);
     }
@@ -459,7 +459,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     final currentState = state;
     if (currentState is! FullScreenLoaded) return;
 
-    if (currentState.currentMedia.type == MediaType.video) {
+    if (currentState.currentMedia.type.isTimeBased) {
       final newLooping = !currentState.isLooping;
       state = currentState.copyWith(isLooping: newLooping);
       _loopOverridden = true;
@@ -471,7 +471,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     final currentState = state;
     if (currentState is! FullScreenLoaded) return;
 
-    if (currentState.currentMedia.type == MediaType.video && speed > 0) {
+    if (currentState.currentMedia.type.isTimeBased && speed > 0) {
       state = currentState.copyWith(playbackSpeed: speed);
     }
   }
@@ -484,7 +484,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     if (_loopOverridden) return;
 
     if (currentState is FullScreenLoaded &&
-        currentState.currentMedia.type == MediaType.video &&
+        currentState.currentMedia.type.isTimeBased &&
         currentState.isLooping != settings.loopVideos) {
       state = currentState.copyWith(isLooping: settings.loopVideos);
     }
@@ -495,7 +495,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     final currentState = state;
     if (currentState is! FullScreenLoaded) return;
 
-    if (currentState.currentMedia.type == MediaType.video) {
+    if (currentState.currentMedia.type.isTimeBased) {
       state = currentState.copyWith(currentPosition: position);
     }
   }
@@ -598,11 +598,11 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       currentPosition: Duration.zero,
       totalDuration: Duration.zero,
       isPlaying:
-          targetMedia.type == MediaType.video && _playbackSettings.autoplayVideos,
+          targetMedia.type.isTimeBased && _playbackSettings.autoplayVideos,
       isMuted:
-          targetMedia.type == MediaType.video && _playbackSettings.startMuted,
+          targetMedia.type.isTimeBased && _playbackSettings.startMuted,
       isLooping:
-          targetMedia.type == MediaType.video && _playbackSettings.loopVideos,
+          targetMedia.type.isTimeBased && _playbackSettings.loopVideos,
       currentMediaTags: targetTags,
     );
 

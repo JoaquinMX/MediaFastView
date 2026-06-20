@@ -1,5 +1,9 @@
 /// Enum representing different types of media.
-enum MediaType { image, video, text, directory }
+///
+/// New values must be appended at the end: [MediaType] is persisted by name via
+/// Isar's `@Enumerated(EnumType.name)`, but appending keeps `MediaType.values`
+/// ordinals stable for any positional assumptions elsewhere.
+enum MediaType { image, video, text, directory, audio }
 
 extension MediaTypeX on MediaType {
   String get label => switch (this) {
@@ -7,7 +11,13 @@ extension MediaTypeX on MediaType {
         MediaType.video => 'Videos',
         MediaType.text => 'Text',
         MediaType.directory => 'Directories',
+        MediaType.audio => 'Audio',
       };
+
+  /// Whether this media kind has a playback timeline (driven by a player with
+  /// play/pause/seek/loop/speed). Used to gate playback state and controls so
+  /// audio reuses the same path as video.
+  bool get isTimeBased => this == MediaType.video || this == MediaType.audio;
 }
 
 /// Domain entity representing a media item.

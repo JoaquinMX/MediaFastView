@@ -178,7 +178,7 @@ class BaseMediaViewerOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isVideo = media?.type == MediaType.video;
+    final isVideo = media?.type.isTimeBased ?? false;
 
     return Stack(
       children: [

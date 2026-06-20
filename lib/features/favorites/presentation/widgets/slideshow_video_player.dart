@@ -171,10 +171,46 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
       );
     }
 
+    // Audio-only assets have no video surface, so render a music icon instead
+    // while the controller drives playback and progress.
+    if (widget.media.type == MediaType.audio) {
+      return _buildAudioSurface(context);
+    }
+
     return Center(
       child: AspectRatio(
         aspectRatio: controller.value.aspectRatio,
         child: VideoPlayer(controller),
+      ),
+    );
+  }
+
+  Widget _buildAudioSurface(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.music_note,
+            size: 160,
+            color: colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              widget.media.name,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: colorScheme.onSurface,
+                fontSize: 18,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

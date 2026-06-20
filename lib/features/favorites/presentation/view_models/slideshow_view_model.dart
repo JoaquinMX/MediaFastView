@@ -785,16 +785,16 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
   void _startTimer() {
     _timer?.cancel();
 
-    // Only start timer for images, videos handle their own timing
+    // Only start timer for images; videos and audio handle their own timing
     final currentMedia = this.currentMedia;
-    if (currentMedia != null && currentMedia.type != MediaType.video) {
+    if (currentMedia != null && !currentMedia.type.isTimeBased) {
       _timer = Timer.periodic(_progressInterval, _updateProgress);
     }
   }
 
   void _updateProgress(Timer timer) {
     final currentMedia = this.currentMedia;
-    if (currentMedia == null || currentMedia.type == MediaType.video) return;
+    if (currentMedia == null || currentMedia.type.isTimeBased) return;
 
     final updatedProgress = switch (state) {
       SlideshowPlaying(:final progress) => progress + _imageProgressIncrement,

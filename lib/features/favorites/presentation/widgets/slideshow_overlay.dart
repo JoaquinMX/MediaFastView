@@ -54,7 +54,7 @@ class SlideshowOverlay extends ConsumerWidget {
     Duration delay,
   ) {
     final isCompactLayout = MediaQuery.sizeOf(context).width < 600;
-    final isVideo = viewModel.currentMedia?.type == MediaType.video;
+    final isVideo = viewModel.currentMedia?.type.isTimeBased ?? false;
 
     final isPlaying = switch (state) {
       SlideshowPlaying(:final isPlaying) => isPlaying,

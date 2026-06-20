@@ -201,7 +201,7 @@ class _FullScreenViewerScreenState
                 onDurationSelected: (duration) {}, // Not supported
                 onPlaybackSpeedSelected: _viewModel.setPlaybackSpeed,
                 onSeek: _handleSeek,
-                playbackVisibility: state.currentMedia.type == MediaType.video
+                playbackVisibility: state.currentMedia.type.isTimeBased
                     ? const MediaPlaybackControlVisibility(
                         showPrevious:
                             false, // Hide overlay controls for videos - handled by VideoBottomControls
@@ -229,8 +229,8 @@ class _FullScreenViewerScreenState
                       ),
                 showPlaybackForImages: true,
                 showBottomControlsForVideos:
-                    state.currentMedia.type == MediaType.video,
-                bottomControlsConfig: state.currentMedia.type == MediaType.video
+                    state.currentMedia.type.isTimeBased,
+                bottomControlsConfig: state.currentMedia.type.isTimeBased
                     ? VideoBottomControlsConfig(
                         showRow1: false, // No media counter for full screen
                         showRow2: true, // Video progress
@@ -305,6 +305,7 @@ class _FullScreenViewerScreenState
                   setState(() => _showControls = !_showControls),
             ),
             MediaType.video => _buildVideoContent(media),
+            MediaType.audio => _buildVideoContent(media),
             MediaType.text => Center(
               child: Text(
                 'Text file viewing not implemented',
@@ -815,17 +816,17 @@ class _FullScreenViewerScreenState
         _viewModel.goToMedia(newIndex);
         return KeyEventResult.handled;
       case LogicalKeyboardKey.space:
-        if (state.currentMedia.type == MediaType.video) {
+        if (state.currentMedia.type.isTimeBased) {
           _viewModel.togglePlayPause();
         }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.keyM:
-        if (state.currentMedia.type == MediaType.video) {
+        if (state.currentMedia.type.isTimeBased) {
           _viewModel.toggleMute();
         }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.keyL:
-        if (state.currentMedia.type == MediaType.video) {
+        if (state.currentMedia.type.isTimeBased) {
           _viewModel.toggleLoop();
         }
         return KeyEventResult.handled;

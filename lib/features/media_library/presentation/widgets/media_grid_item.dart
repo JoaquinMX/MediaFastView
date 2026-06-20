@@ -274,6 +274,8 @@ class _MediaGridItemState extends State<MediaGridItem> {
         return _buildImageContent(ref);
       case MediaType.video:
         return _buildVideoContent();
+      case MediaType.audio:
+        return _buildAudioContent();
       case MediaType.text:
         return _buildTextContent();
       case MediaType.directory:
@@ -318,6 +320,19 @@ class _MediaGridItemState extends State<MediaGridItem> {
         ),
       );
     }
+  }
+
+  Widget _buildAudioContent() {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: Icon(
+          Icons.audiotrack,
+          size: UiSizing.iconExtraLarge,
+          color: UiColors.whiteOverlay,
+        ),
+      ),
+    );
   }
 
   Widget _buildTextContent() {

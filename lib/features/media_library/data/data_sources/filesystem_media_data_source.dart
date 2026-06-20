@@ -78,16 +78,40 @@ class FilesystemMediaDataSource {
     'flv',
     'webm',
     'm4v',
+    'ts',
+    'mts',
+    'm2ts',
+    'mpg',
+    'mpeg',
   };
 
   /// Supported text file extensions
   static const Set<String> _textExtensions = {'txt', 'md', 'log'};
 
-  /// Supported media file extensions across images, videos, and text.
+  /// Supported audio file extensions.
+  ///
+  /// Keep these in sync with [FileService.getMediaTypeFromExtension].
+  static const Set<String> _audioExtensions = {
+    'mp3',
+    'm4a',
+    'aac',
+    'wav',
+    'aiff',
+    'aif',
+    'flac',
+    'caf',
+    'alac',
+    'ogg',
+    'oga',
+    'opus',
+  };
+
+  /// Supported media file extensions across images, videos, text, and audio.
   static const Set<String> supportedMediaExtensions = {
     ..._imageExtensions,
     ..._videoExtensions,
     ..._textExtensions,
+    ..._audioExtensions,
   };
 
   /// System files to exclude (macOS specific)
@@ -460,6 +484,8 @@ class FilesystemMediaDataSource {
       return MediaType.video;
     } else if (_textExtensions.contains(extension)) {
       return MediaType.text;
+    } else if (_audioExtensions.contains(extension)) {
+      return MediaType.audio;
     }
     return null;
   }

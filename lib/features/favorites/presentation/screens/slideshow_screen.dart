@@ -126,7 +126,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
   }
 
   Widget _buildMediaContent(MediaEntity media, SlideshowViewModel viewModel) {
-    if (media.type == MediaType.video) {
+    if (media.type.isTimeBased) {
       return SlideshowVideoPlayer(
         media: media,
         isPlaying: viewModel.isPlaying,

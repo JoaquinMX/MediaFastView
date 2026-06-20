@@ -164,7 +164,25 @@ class FileService {
       case '.flv':
       case '.webm':
       case '.m4v':
+      case '.ts':
+      case '.mts':
+      case '.m2ts':
+      case '.mpg':
+      case '.mpeg':
         return 'video';
+      case '.mp3':
+      case '.m4a':
+      case '.aac':
+      case '.wav':
+      case '.aiff':
+      case '.aif':
+      case '.flac':
+      case '.caf':
+      case '.alac':
+      case '.ogg':
+      case '.oga':
+      case '.opus':
+        return 'audio';
       case '.txt':
       case '.md':
       case '.json':

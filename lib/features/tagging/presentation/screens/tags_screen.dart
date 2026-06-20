@@ -558,8 +558,12 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           return item.type == MediaType.image;
         case TagMediaTypeFilter.videos:
           return item.type == MediaType.video;
+        case TagMediaTypeFilter.audio:
+          return item.type == MediaType.audio;
         case TagMediaTypeFilter.all:
-          return item.type == MediaType.image || item.type == MediaType.video;
+          return item.type == MediaType.image ||
+              item.type == MediaType.video ||
+              item.type == MediaType.audio;
       }
     }).toList();
   }
