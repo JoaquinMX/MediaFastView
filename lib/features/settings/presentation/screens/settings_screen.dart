@@ -101,6 +101,10 @@ class SettingsScreen extends ConsumerWidget {
             settings.deleteFromSourceEnabled,
             viewModel,
           ),
+          _buildNavigateToSiblingAfterDirectoryDeleteSetting(
+            settings.navigateToSiblingAfterDirectoryDelete,
+            viewModel,
+          ),
           _buildClearMediaCacheTile(context, viewModel),
           _buildClearCacheTile(context, viewModel),
           _buildClearFavoritesTile(context, viewModel),
@@ -179,6 +183,26 @@ class SettingsScreen extends ConsumerWidget {
         value: isEnabled,
         onChanged: (bool value) {
           viewModel.updateDeleteFromSource(value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildNavigateToSiblingAfterDirectoryDeleteSetting(
+    bool isEnabled,
+    SettingsViewModel viewModel,
+  ) {
+    return ListTile(
+      title: const Text('Open Next Folder After Delete'),
+      subtitle: const Text(
+        'After deleting the folder you are viewing, open the next sibling '
+        'folder (or the previous one) instead of going back. Falls back to '
+        'going back when there are no sibling folders.',
+      ),
+      trailing: Switch(
+        value: isEnabled,
+        onChanged: (bool value) {
+          viewModel.updateNavigateToSiblingAfterDirectoryDelete(value);
         },
       ),
     );

@@ -14,6 +14,7 @@ import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/directory_picker_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
@@ -469,13 +470,66 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         .read(mediaRepositoryProvider)
         .removeMediaForDirectory(media.id);
     container.invalidate(directoryMediaCountsProvider);
-    container.invalidate(mediaViewModelProvider);
     if (trackedRoot != null) {
       container.invalidate(directoryViewModelProvider);
     }
-
     if (!mounted) return;
-    Navigator.of(context).pop();
+
+    // Optionally move to a sibling directory instead of going back. Do this
+    // while the view model is still valid, before invalidating the grid family.
+    final goToSibling =
+        container.read(navigateToSiblingAfterDirectoryDeleteProvider);
+    final navigatedToSibling = goToSibling && _navigateToSiblingAfterDelete();
+
+    // Refresh other media grids (e.g. a parent grid) so the deleted directory
+    // no longer appears when the user returns to them.
+    container.invalidate(mediaViewModelProvider);
+
+    if (!navigatedToSibling) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    }
+  }
+
+  /// Replaces the current route with a sibling directory — the next one, or the
+  /// previous one when already at the end. Returns false when there are no
+  /// other siblings (the caller then falls back to popping).
+  bool _navigateToSiblingAfterDelete() {
+    final siblings = _siblingNavigationTargets;
+    final currentIndex = _currentDirectoryNavigationIndex;
+    if (siblings.length < 2 ||
+        currentIndex < 0 ||
+        currentIndex >= siblings.length) {
+      return false;
+    }
+
+    final int targetIndex;
+    if (currentIndex + 1 < siblings.length) {
+      targetIndex = currentIndex + 1;
+    } else if (currentIndex - 1 >= 0) {
+      targetIndex = currentIndex - 1;
+    } else {
+      return false;
+    }
+
+    final target = siblings[targetIndex];
+    // Hand the next screen a sibling list without the just-deleted directory.
+    final updatedSiblings = <DirectoryNavigationTarget>[
+      for (var i = 0; i < siblings.length; i++)
+        if (i != currentIndex) siblings[i],
+    ];
+    final updatedIndex =
+        updatedSiblings.indexWhere((d) => d.path == target.path);
+
+    _viewModel?.navigateToDirectory(
+      target.path,
+      target.name,
+      bookmarkData: target.bookmarkData,
+      siblingDirectories: updatedSiblings.isEmpty ? null : updatedSiblings,
+      currentIndex: updatedIndex == -1 ? null : updatedIndex,
+      replaceCurrentRoute: true,
+    );
+    return true;
   }
 
   AppBar _buildSelectionAppBar(

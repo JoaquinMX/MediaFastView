@@ -17,6 +17,8 @@ abstract class SettingsRepository {
 
   Future<void> saveAutoNavigateSiblingDirectories(bool enabled);
 
+  Future<void> saveNavigateToSiblingAfterDirectoryDelete(bool enabled);
+
   Future<void> saveShowDirectoryTaggedMediaCounts(bool enabled);
 
   Future<void> saveSlideshowControlsHideDelay(Duration delay);

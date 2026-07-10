@@ -6,6 +6,7 @@ import '../../domain/entities/playback_settings.dart';
 import '../../domain/use_cases/get_app_settings_use_case.dart';
 import '../../domain/use_cases/update_auto_navigate_sibling_directories_use_case.dart';
 import '../../domain/use_cases/update_delete_from_source_use_case.dart';
+import '../../domain/use_cases/update_navigate_to_sibling_after_directory_delete_use_case.dart';
 import '../../domain/use_cases/update_playback_settings_use_case.dart';
 import '../../domain/use_cases/update_show_directory_tagged_media_counts_use_case.dart';
 import '../../domain/use_cases/update_slideshow_controls_hide_delay_use_case.dart';
@@ -41,6 +42,9 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
   late final UpdateAutoNavigateSiblingDirectoriesUseCase
       _updateAutoNavigateSiblingDirectoriesUseCase =
       ref.read(updateAutoNavigateSiblingDirectoriesUseCaseProvider);
+  late final UpdateNavigateToSiblingAfterDirectoryDeleteUseCase
+      _updateNavigateToSiblingAfterDirectoryDeleteUseCase =
+      ref.read(updateNavigateToSiblingAfterDirectoryDeleteUseCaseProvider);
   late final UpdateShowDirectoryTaggedMediaCountsUseCase
       _updateShowDirectoryTaggedMediaCountsUseCase =
       ref.read(updateShowDirectoryTaggedMediaCountsUseCaseProvider);
@@ -110,6 +114,14 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
       () => _updateAutoNavigateSiblingDirectoriesUseCase(enabled),
       (settings) =>
           settings.copyWith(autoNavigateSiblingDirectories: enabled),
+    );
+  }
+
+  Future<void> updateNavigateToSiblingAfterDirectoryDelete(bool enabled) async {
+    await _updateSetting(
+      () => _updateNavigateToSiblingAfterDirectoryDeleteUseCase(enabled),
+      (settings) =>
+          settings.copyWith(navigateToSiblingAfterDirectoryDelete: enabled),
     );
   }
 

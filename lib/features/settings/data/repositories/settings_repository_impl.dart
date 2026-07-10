@@ -16,6 +16,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const String _loopKey = 'video_loop_enabled';
   static const String _startMutedKey = 'video_start_muted';
   static const String _autoNavigateKey = 'auto_navigate_sibling_directories';
+  static const String _navigateToSiblingAfterDirectoryDeleteKey =
+      'navigate_to_sibling_after_directory_delete';
   static const String _showDirectoryTaggedMediaCountsKey =
       'show_directory_tagged_media_counts';
   static const String _slideshowControlsHideDelayKey =
@@ -32,6 +34,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final deleteFromSourceEnabled = prefs.getBool(_deleteFromSourceKey) ?? false;
     final autoNavigateSiblingDirectories =
         prefs.getBool(_autoNavigateKey) ?? false;
+    final navigateToSiblingAfterDirectoryDelete =
+        prefs.getBool(_navigateToSiblingAfterDirectoryDeleteKey) ?? false;
     final showDirectoryTaggedMediaCounts =
         prefs.getBool(_showDirectoryTaggedMediaCountsKey) ?? false;
     final storedHideDelay = prefs.getInt(_slideshowControlsHideDelayKey);
@@ -53,6 +57,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
         startMuted: startMuted,
       ),
       autoNavigateSiblingDirectories: autoNavigateSiblingDirectories,
+      navigateToSiblingAfterDirectoryDelete:
+          navigateToSiblingAfterDirectoryDelete,
       showDirectoryTaggedMediaCounts: showDirectoryTaggedMediaCounts,
       slideshowControlsHideDelay: Duration(
         seconds: hideDelaySeconds,
@@ -90,6 +96,12 @@ class SettingsRepositoryImpl implements SettingsRepository {
   Future<void> saveAutoNavigateSiblingDirectories(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoNavigateKey, enabled);
+  }
+
+  @override
+  Future<void> saveNavigateToSiblingAfterDirectoryDelete(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_navigateToSiblingAfterDirectoryDeleteKey, enabled);
   }
 
   @override

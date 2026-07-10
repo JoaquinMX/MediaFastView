@@ -14,6 +14,7 @@ class AppSettings {
     required this.deleteFromSourceEnabled,
     required this.playbackSettings,
     required this.autoNavigateSiblingDirectories,
+    required this.navigateToSiblingAfterDirectoryDelete,
     required this.showDirectoryTaggedMediaCounts,
     required this.slideshowControlsHideDelay,
   });
@@ -24,6 +25,7 @@ class AppSettings {
         deleteFromSourceEnabled = false,
         playbackSettings = const PlaybackSettings.initial(),
         autoNavigateSiblingDirectories = false,
+        navigateToSiblingAfterDirectoryDelete = false,
         showDirectoryTaggedMediaCounts = false,
         slideshowControlsHideDelay = AppConfig.defaultSlideshowControlsHideDelay;
 
@@ -32,6 +34,13 @@ class AppSettings {
   final bool deleteFromSourceEnabled;
   final PlaybackSettings playbackSettings;
   final bool autoNavigateSiblingDirectories;
+
+  /// When enabled, deleting the directory currently being viewed navigates to
+  /// a sibling directory (next, or previous when at the end) instead of popping
+  /// back to the previous route. Falls back to popping when there are no
+  /// siblings.
+  final bool navigateToSiblingAfterDirectoryDelete;
+
   final bool showDirectoryTaggedMediaCounts;
   final Duration slideshowControlsHideDelay;
 
@@ -41,6 +50,7 @@ class AppSettings {
     bool? deleteFromSourceEnabled,
     PlaybackSettings? playbackSettings,
     bool? autoNavigateSiblingDirectories,
+    bool? navigateToSiblingAfterDirectoryDelete,
     bool? showDirectoryTaggedMediaCounts,
     Duration? slideshowControlsHideDelay,
   }) {
@@ -53,6 +63,9 @@ class AppSettings {
       playbackSettings: playbackSettings ?? this.playbackSettings,
       autoNavigateSiblingDirectories:
           autoNavigateSiblingDirectories ?? this.autoNavigateSiblingDirectories,
+      navigateToSiblingAfterDirectoryDelete:
+          navigateToSiblingAfterDirectoryDelete ??
+          this.navigateToSiblingAfterDirectoryDelete,
       showDirectoryTaggedMediaCounts:
           showDirectoryTaggedMediaCounts ??
           this.showDirectoryTaggedMediaCounts,

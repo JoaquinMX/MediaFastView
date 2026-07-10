@@ -55,6 +55,7 @@ import '../../features/settings/domain/repositories/settings_repository.dart';
 import '../../features/settings/domain/use_cases/get_app_settings_use_case.dart';
 import '../../features/settings/domain/use_cases/update_auto_navigate_sibling_directories_use_case.dart';
 import '../../features/settings/domain/use_cases/update_delete_from_source_use_case.dart';
+import '../../features/settings/domain/use_cases/update_navigate_to_sibling_after_directory_delete_use_case.dart';
 import '../../features/settings/domain/use_cases/update_playback_settings_use_case.dart';
 import '../../features/settings/domain/use_cases/update_show_directory_tagged_media_counts_use_case.dart';
 import '../../features/settings/domain/use_cases/update_slideshow_controls_hide_delay_use_case.dart';
@@ -292,6 +293,13 @@ final updatePlaybackSettingsUseCaseProvider =
 final updateAutoNavigateSiblingDirectoriesUseCaseProvider = Provider<
     UpdateAutoNavigateSiblingDirectoriesUseCase>((ref) {
   return UpdateAutoNavigateSiblingDirectoriesUseCase(
+    ref.watch(settingsRepositoryProvider),
+  );
+});
+
+final updateNavigateToSiblingAfterDirectoryDeleteUseCaseProvider = Provider<
+    UpdateNavigateToSiblingAfterDirectoryDeleteUseCase>((ref) {
+  return UpdateNavigateToSiblingAfterDirectoryDeleteUseCase(
     ref.watch(settingsRepositoryProvider),
   );
 });

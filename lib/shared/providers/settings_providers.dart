@@ -49,6 +49,15 @@ final autoNavigateSiblingDirectoriesProvider = Provider<bool>((ref) {
   );
 });
 
+final navigateToSiblingAfterDirectoryDeleteProvider = Provider<bool>((ref) {
+  final settings = ref.watch(settingsProvider);
+  return settings.maybeWhen(
+    data: (value) => value.navigateToSiblingAfterDirectoryDelete,
+    orElse: () =>
+        const AppSettings.initial().navigateToSiblingAfterDirectoryDelete,
+  );
+});
+
 final showDirectoryTaggedMediaCountsProvider = Provider<bool>((ref) {
   final settings = ref.watch(settingsProvider);
   return settings.maybeWhen(
