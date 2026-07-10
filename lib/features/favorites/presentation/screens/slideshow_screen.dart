@@ -8,6 +8,9 @@ import 'package:media_fast_view/core/config/app_config.dart';
 import 'package:media_fast_view/shared/providers/settings_providers.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../media_library/presentation/view_models/media_grid_view_model.dart';
+import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/zoom_pan_viewer.dart';
 
 import '../view_models/slideshow_view_model.dart';
@@ -93,6 +96,9 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
                   viewModel: slideshowViewModel,
                   onClose: () => Navigator.of(context).pop(),
                   onPlayPause: _handlePlayPause,
+                  onDelete: Platform.isMacOS
+                      ? _handleDeleteCurrentMedia
+                      : null,
                 ),
             ],
           ),
@@ -209,6 +215,43 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     }
   }
 
+  /// Moves the current slideshow item to the Trash and advances (closing the
+  /// slideshow when nothing is left). Pauses playback during confirmation.
+  Future<void> _handleDeleteCurrentMedia() async {
+    final viewModel = ref.read(
+      slideshowViewModelProvider(widget.mediaList).notifier,
+    );
+    final media = viewModel.currentMedia;
+    if (media == null) return;
+
+    final wasPlaying = viewModel.isPlaying;
+    if (wasPlaying) {
+      viewModel.pauseSlideshow();
+    }
+
+    final deleted = await confirmAndDeleteMedia(context, media);
+    if (!mounted) return;
+
+    if (!deleted) {
+      if (wasPlaying) {
+        viewModel.resumeSlideshow();
+      }
+      return;
+    }
+
+    // Reflect the deletion in the grid and directory counts on return.
+    ref.invalidate(mediaViewModelProvider);
+    ref.invalidate(directoryMediaCountsProvider);
+
+    final hasMore = viewModel.removeCurrentItem();
+    if (!mounted) return;
+    if (hasMore) {
+      _focusNode.requestFocus();
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
@@ -217,6 +260,14 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     );
 
     switch (event.logicalKey) {
+      case LogicalKeyboardKey.delete:
+      case LogicalKeyboardKey.backspace:
+        if (Platform.isMacOS) {
+          unawaited(_handleDeleteCurrentMedia());
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+
       case LogicalKeyboardKey.arrowRight:
       case LogicalKeyboardKey.space:
         viewModel.nextItem();

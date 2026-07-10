@@ -464,6 +464,31 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
     }
   }
 
+  /// Removes the current item from the slideshow after it has been deleted
+  /// from disk, advancing to the next item. Returns `false` when the slideshow
+  /// becomes empty (the screen should close).
+  bool removeCurrentItem() {
+    if (_mediaList.isEmpty || _playOrder.isEmpty) return false;
+
+    final orderIndex = currentIndex;
+    if (orderIndex < 0 || orderIndex >= _playOrder.length) return false;
+    final mediaIndex = _playOrder[orderIndex];
+    if (mediaIndex < 0 || mediaIndex >= _mediaList.length) return false;
+
+    _timer?.cancel();
+    _mediaList.removeAt(mediaIndex);
+
+    if (_mediaList.isEmpty) {
+      state = const SlideshowFinished();
+      return false;
+    }
+
+    _rebuildPlayOrder();
+    final newIndex = orderIndex.clamp(0, _playOrder.length - 1);
+    _goToIndex(newIndex);
+    return true;
+  }
+
   /// Toggles loop mode.
   void toggleLoop() {
     state = switch (state) {

@@ -84,6 +84,14 @@ class PlatformService {
   /// Checks if the platform supports drag and drop
   bool get supportsDragAndDrop => Platform.isMacOS;
 
+  /// Whether deleting source files from the device is supported.
+  ///
+  /// macOS deletes via the native Trash within security-scoped access. iOS is
+  /// intentionally unsupported: picked files are copied into an app-sandbox
+  /// temp directory, so deleting would only remove a throwaway copy rather than
+  /// the user's original file.
+  bool get supportsFileDeletion => Platform.isMacOS;
+
   /// Gets platform-specific path separator
   String get pathSeparator => Platform.pathSeparator;
 

@@ -13,6 +13,9 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/directory_picker_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
+import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
+import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
 
@@ -24,6 +27,7 @@ import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
 import '../models/directory_navigation_target.dart';
+import '../view_models/directory_grid_view_model.dart';
 import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
@@ -415,8 +419,63 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           tooltip: 'Keyboard shortcuts (?)',
           onPressed: _showShortcutHelp,
         ),
+        if (_isMacOS)
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Delete this folder',
+            onPressed: () => unawaited(_deleteCurrentDirectory()),
+          ),
       ],
     );
+  }
+
+  /// Represents the directory currently being viewed as a deletable item.
+  MediaEntity _currentDirectoryAsMedia() {
+    final id = generateDirectoryId(widget.directoryPath);
+    return MediaEntity(
+      id: id,
+      path: widget.directoryPath,
+      name: widget.directoryName,
+      type: MediaType.directory,
+      size: 0,
+      lastModified: DateTime.now(),
+      tagIds: const [],
+      directoryId: id,
+      bookmarkData: widget.bookmarkData,
+    );
+  }
+
+  /// Moves the directory currently being viewed to the Trash, cleans up any
+  /// dangling library/cache state, and pops back to the previous route.
+  Future<void> _deleteCurrentDirectory() async {
+    final media = _currentDirectoryAsMedia();
+    final container = ProviderScope.containerOf(context, listen: false);
+    final directoryRepository = container.read(directoryRepositoryProvider);
+
+    // Determine up front whether this is a tracked library root (vs. a
+    // subdirectory), while the folder still exists on disk.
+    final trackedRoot = await directoryRepository.getDirectoryById(media.id);
+    if (!mounted) return;
+
+    final deleted = await confirmAndDeleteMedia(context, media);
+    if (!deleted || !mounted) return;
+
+    // The folder is now in the Trash. Drop library/cache state so the route we
+    // return to no longer references it.
+    if (trackedRoot != null) {
+      await directoryRepository.removeDirectory(trackedRoot.id);
+    }
+    await container
+        .read(mediaRepositoryProvider)
+        .removeMediaForDirectory(media.id);
+    container.invalidate(directoryMediaCountsProvider);
+    container.invalidate(mediaViewModelProvider);
+    if (trackedRoot != null) {
+      container.invalidate(directoryViewModelProvider);
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
   }
 
   AppBar _buildSelectionAppBar(

@@ -29,12 +29,17 @@ class SlideshowOverlay extends ConsumerWidget {
     required this.viewModel,
     required this.onClose,
     required this.onPlayPause,
+    this.onDelete,
   });
 
   final SlideshowState state;
   final SlideshowViewModel viewModel;
   final VoidCallback onClose;
   final VoidCallback onPlayPause;
+
+  /// Invoked to delete the current media item. When null, the delete control
+  /// is hidden (e.g. on platforms that don't support deletion).
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -189,6 +194,12 @@ class SlideshowOverlay extends ConsumerWidget {
             trailingActions: [
               if (viewModel.currentMedia != null)
                 FavoriteToggleButton(media: viewModel.currentMedia!),
+              if (onDelete != null)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.white),
+                  tooltip: 'Delete',
+                  onPressed: onDelete,
+                ),
             ],
             progress: MediaProgressData(
               currentIndex: viewModel.currentIndex,
@@ -386,6 +397,13 @@ class SlideshowOverlay extends ConsumerWidget {
       ),
       favoriteButton: viewModel.currentMedia != null
           ? FavoriteToggleButton(media: viewModel.currentMedia!)
+          : null,
+      deleteButton: onDelete != null
+          ? IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.white),
+              tooltip: 'Delete',
+              onPressed: onDelete,
+            )
           : null,
       progress: MediaProgressData(
         currentIndex: viewModel.currentIndex,

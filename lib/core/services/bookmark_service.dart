@@ -15,6 +15,7 @@ class BookmarkService {
   static const String _isBookmarkValid = 'isBookmarkValid';
   static const String _startAccessingBookmark = 'startAccessingBookmark';
   static const String _stopAccessingBookmark = 'stopAccessingBookmark';
+  static const String _moveToTrash = 'moveToTrash';
 
   // Singleton instance
   static final BookmarkService instance = BookmarkService._();
@@ -197,6 +198,32 @@ class BookmarkService {
     } catch (e) {
       _logError('Unexpected error starting bookmark access', e);
       throw Exception('Unexpected error starting bookmark access: $e');
+    }
+  }
+
+  /// Moves a file or directory to the system Trash (recoverable).
+  ///
+  /// macOS only. Runs the operation inside security-scoped access to the
+  /// enclosing bookmarked directory when [bookmarkData] is provided. Returns
+  /// the resulting Trash path when available.
+  Future<String?> moveToTrash(String path, {String? bookmarkData}) async {
+    if (!Platform.isMacOS) {
+      throw UnsupportedError(
+        'Moving items to Trash is only supported on macOS',
+      );
+    }
+
+    try {
+      return await _channel.invokeMethod<String>(_moveToTrash, {
+        'path': path,
+        if (bookmarkData != null) 'bookmarkData': bookmarkData,
+      });
+    } on PlatformException catch (e) {
+      _logError('Failed to move item to Trash: $path', e);
+      throw Exception('Failed to move item to Trash: ${e.message}');
+    } catch (e) {
+      _logError('Unexpected error moving item to Trash: $path', e);
+      throw Exception('Unexpected error moving item to Trash: $e');
     }
   }
 

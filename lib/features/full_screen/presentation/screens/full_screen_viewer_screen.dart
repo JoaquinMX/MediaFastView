@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/models/directory_navigation_target.dart';
+import '../../../media_library/presentation/view_models/media_grid_view_model.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/view_models/tags_view_model.dart';
 import '../../domain/entities/viewer_state_entity.dart';
@@ -21,6 +22,8 @@ import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
 import '../../../../shared/providers/settings_providers.dart';
+import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../../shared/widgets/tag_selection_dialog.dart';
@@ -173,6 +176,14 @@ class _FullScreenViewerScreenState
                     backgroundColor: colorScheme.primary.withOpacity(0.2),
                   ),
                 ),
+                deleteButton: Platform.isMacOS
+                    ? IconButton(
+                        onPressed: () =>
+                            _handleDeleteCurrentMedia(state.currentMedia),
+                        icon: Icon(Icons.delete_outline, color: colorScheme.error),
+                        tooltip: 'Delete (Del)',
+                      )
+                    : null,
                 progress: MediaProgressData(
                   currentIndex: state.currentIndex,
                   totalItems: state.mediaList.length,
@@ -360,9 +371,38 @@ class _FullScreenViewerScreenState
           child: const Text('Favorite'),
           onTap: () => _toggleFavoriteAndRefreshTags(),
         ),
-        // Add more menu items as needed
+        if (Platform.isMacOS)
+          PopupMenuItem(
+            onTap: () => _handleDeleteCurrentMedia(media),
+            child: const Text('Delete'),
+          ),
       ],
     );
+  }
+
+  /// Moves the current media to the Trash and advances the viewer (closing it
+  /// when nothing is left). Refreshes the grid/counts so the deletion is
+  /// reflected on return.
+  Future<void> _handleDeleteCurrentMedia(MediaEntity media) async {
+    _videoPlayerKey.currentState?.stopPlayback();
+    final deleted = await confirmAndDeleteMedia(context, media);
+    if (!deleted || !mounted) {
+      return;
+    }
+
+    // Reflect the deletion in the grid and directory counts on return.
+    ref.invalidate(mediaViewModelProvider);
+    ref.invalidate(directoryMediaCountsProvider);
+
+    final hasMore = await _viewModel.removeCurrentMedia();
+    if (!mounted) {
+      return;
+    }
+    if (hasMore) {
+      _focusNode.requestFocus();
+    } else {
+      _popWithResult();
+    }
   }
 
   Future<void> _toggleFavoriteAndRefreshTags() async {
@@ -836,6 +876,13 @@ class _FullScreenViewerScreenState
       case LogicalKeyboardKey.keyI:
         _showMediaInfo(state.currentMedia);
         return KeyEventResult.handled;
+      case LogicalKeyboardKey.delete:
+      case LogicalKeyboardKey.backspace:
+        if (Platform.isMacOS) {
+          unawaited(_handleDeleteCurrentMedia(state.currentMedia));
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
       case LogicalKeyboardKey.f11:
         // Toggle full-screen (though already full-screen, could toggle immersive mode)
         setState(() => _showControls = !_showControls);

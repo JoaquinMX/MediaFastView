@@ -16,8 +16,76 @@ class BookmarkHandler: NSObject {
             handleStartAccessingBookmark(call, result: result)
         case "stopAccessingBookmark":
             handleStopAccessingBookmark(call, result: result)
+        case "moveToTrash":
+            handleMoveToTrash(call, result: result)
         default:
             result(FlutterMethodNotImplemented)
+        }
+    }
+
+    /// Moves a file or directory to the Trash (recoverable), running the
+    /// operation inside security-scoped access to the enclosing bookmarked
+    /// directory when a bookmark is provided.
+    private func handleMoveToTrash(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String else {
+            logError("Invalid arguments for moveToTrash")
+            result(FlutterError(code: "INVALID_ARGUMENTS",
+                               message: "Path is required",
+                               details: nil))
+            return
+        }
+
+        var accessedURL: URL?
+        defer {
+            accessedURL?.stopAccessingSecurityScopedResource()
+        }
+
+        // Start security-scoped access on the enclosing directory bookmark so a
+        // sandboxed build is permitted to modify the user-selected location.
+        if let bookmarkDataString = args["bookmarkData"] as? String,
+           let bookmarkData = Data(base64Encoded: bookmarkDataString) {
+            do {
+                var isStale = false
+                let directoryURL = try URL(resolvingBookmarkData: bookmarkData,
+                                           options: .withSecurityScope,
+                                           relativeTo: nil,
+                                           bookmarkDataIsStale: &isStale)
+                if isStale {
+                    logWarning("Bookmark is stale when moving to Trash")
+                }
+                if directoryURL.startAccessingSecurityScopedResource() {
+                    accessedURL = directoryURL
+                } else {
+                    logWarning("Failed to start accessing bookmark for moveToTrash; attempting anyway")
+                }
+            } catch {
+                logWarning("Failed to resolve bookmark for moveToTrash: \(error); attempting anyway")
+            }
+        }
+
+        let fileURL = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: path) else {
+            result(FlutterError(code: "NOT_FOUND",
+                               message: "File does not exist: \(path)",
+                               details: nil))
+            return
+        }
+
+        do {
+            var resultingURL: NSURL?
+            try FileManager.default.trashItem(at: fileURL, resultingItemURL: &resultingURL)
+            logInfo("Moved item to Trash: \(path)")
+            result(resultingURL?.path ?? path)
+        } catch {
+            logError("Failed to move item to Trash \(path): \(error)")
+            let message = error.localizedDescription.lowercased()
+            let code = (message.contains("permission") || message.contains("not permitted"))
+                ? "BOOKMARK_ACCESS"
+                : "TRASH_FAILED"
+            result(FlutterError(code: code,
+                               message: "Failed to move item to Trash: \(error.localizedDescription)",
+                               details: nil))
         }
     }
 

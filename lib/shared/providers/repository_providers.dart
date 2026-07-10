@@ -187,6 +187,7 @@ final fileOperationsRepositoryProvider = Provider<FileOperationsRepository>((
   return FileOperationsRepositoryImpl(
     ref.watch(fileServiceProvider),
     ref.watch(permissionServiceProvider),
+    ref.watch(bookmarkServiceProvider),
   );
 });
 

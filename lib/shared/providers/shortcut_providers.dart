@@ -114,5 +114,17 @@ final shortcutCategoriesProvider = Provider<List<ShortcutCategory>>((ref) {
         ),
       ],
     ),
+    ShortcutCategory(
+      title: 'File actions',
+      actions: <ShortcutAction>[
+        ShortcutAction(
+          keys: <String>['Delete', 'Backspace'],
+          description:
+              'Move the current item to the Trash (macOS; requires '
+              '"Delete From Source" enabled in Settings).',
+          contexts: <String>[_fullScreenContext],
+        ),
+      ],
+    ),
   ];
 });

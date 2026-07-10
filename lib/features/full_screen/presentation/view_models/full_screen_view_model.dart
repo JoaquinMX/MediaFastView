@@ -610,6 +610,44 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
 
   }
 
+  /// Removes the current media from the in-memory list after it has been
+  /// deleted from disk, advancing to the next item (or clamping to the new
+  /// last item). Returns `false` when the list becomes empty, signalling that
+  /// the viewer should close.
+  Future<bool> removeCurrentMedia() async {
+    final currentState = state;
+    if (currentState is! FullScreenLoaded) return false;
+
+    final updatedList = [...currentState.mediaList]
+      ..removeAt(currentState.currentIndex);
+
+    if (updatedList.isEmpty) {
+      return false;
+    }
+
+    final newIndex = currentState.currentIndex.clamp(0, updatedList.length - 1);
+    final newMedia = updatedList[newIndex];
+    final isFavorite = await _favoritesRepository.isFavorite(newMedia.id);
+    final newTags = await _tagLookup.getTagsByIds(newMedia.tagIds);
+    final shortcutTags = await _buildShortcutTags(updatedList);
+
+    state = currentState.copyWith(
+      mediaList: updatedList,
+      currentIndex: newIndex,
+      isFavorite: isFavorite,
+      currentPosition: Duration.zero,
+      totalDuration: Duration.zero,
+      isPlaying: newMedia.type.isTimeBased && _playbackSettings.autoplayVideos,
+      isMuted: newMedia.type.isTimeBased && _playbackSettings.startMuted,
+      isLooping: newMedia.type.isTimeBased && _playbackSettings.loopVideos,
+      currentMediaTags: newTags,
+      shortcutTags: shortcutTags,
+    );
+
+    _loopOverridden = false;
+    return true;
+  }
+
   /// Helper method to check if an error is permission-related.
   bool _isPermissionError(String errorMessage) {
     return errorMessage.contains('Operation not permitted') ||
