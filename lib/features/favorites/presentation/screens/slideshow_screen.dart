@@ -8,8 +8,6 @@ import 'package:media_fast_view/core/config/app_config.dart';
 import 'package:media_fast_view/shared/providers/settings_providers.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
-import '../../../media_library/presentation/view_models/media_grid_view_model.dart';
-import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/zoom_pan_viewer.dart';
 
@@ -239,10 +237,8 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
       return;
     }
 
-    // Reflect the deletion in the grid and directory counts on return.
-    ref.invalidate(mediaViewModelProvider);
-    ref.invalidate(directoryMediaCountsProvider);
-
+    // The grid behind us drops the item from the mutation the delete published,
+    // so it is already correct on return.
     final hasMore = viewModel.removeCurrentItem();
     if (!mounted) return;
     if (hasMore) {

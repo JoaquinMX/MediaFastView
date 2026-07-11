@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+
+import '../../../../shared/providers/media_mutation_bus.dart';
 
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
@@ -51,6 +55,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final state = ref.watch(tagsViewModelProvider);
     final viewModel = ref.read(tagsViewModelProvider.notifier);
     final gridColumns = ref.watch(gridColumnsProvider);
+
+    // Deleting or moving an item from this grid used to leave its tile behind:
+    // nothing here ever refreshed. The rows have already been rewritten by the
+    // time this fires, so re-reading them is enough — and it sets no loading
+    // state, so the screen doesn't flash.
+    ref.listen(mediaMutationBusProvider, (_, __) {
+      unawaited(ref.read(tagsViewModelProvider.notifier).refreshTags());
+    });
 
     return Scaffold(
       appBar: AppBar(

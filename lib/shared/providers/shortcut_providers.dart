@@ -118,6 +118,14 @@ final shortcutCategoriesProvider = Provider<List<ShortcutCategory>>((ref) {
       title: 'File actions',
       actions: <ShortcutAction>[
         ShortcutAction(
+          keys: <String>['⌘', 'R'],
+          description:
+              'Re-read this folder from disk. Operations update the grid on '
+              'their own, so this is only needed to pick up a change made '
+              'outside the app.',
+          contexts: <String>[_mediaGridContext],
+        ),
+        ShortcutAction(
           keys: <String>['⌘', 'M'],
           description:
               'Move the current item to another folder (macOS). Plain M is '

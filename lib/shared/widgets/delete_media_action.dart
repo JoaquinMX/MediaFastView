@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/utils/batch_update_result.dart';
 import '../../features/media_library/domain/entities/media_entity.dart';
 import '../../features/media_library/presentation/view_models/file_operations_view_model.dart';
+import '../providers/media_mutation_bus.dart';
 import '../providers/settings_providers.dart';
 import 'confirmation_dialog.dart';
 import 'info_dialog.dart';
@@ -81,6 +82,9 @@ Future<bool> confirmAndDeleteMedia(
   }
 
   if (result is FileOperationsSuccess) {
+    // Announced only after the delete and its cache cleanup have settled, so
+    // every listener that reads the database sees the item already gone.
+    container.read(mediaMutationBusProvider.notifier).publishDeleted([media]);
     messenger.showSnackBar(SnackBar(content: Text(result.message)));
     onDeleted?.call();
     return true;
@@ -174,6 +178,15 @@ Future<BatchUpdateResult?> confirmAndDeleteMediaBatch(
 
   final moved = result.successfulIds.length;
   final failed = result.failureReasons.length;
+
+  // Only the items that actually made it. Anything that failed stays on screen —
+  // and stays selected, so it can be retried.
+  final deleted = items
+      .where((item) => result.successfulIds.contains(item.id))
+      .toList();
+  if (deleted.isNotEmpty) {
+    container.read(mediaMutationBusProvider.notifier).publishDeleted(deleted);
+  }
 
   if (moved == 0) {
     messenger.showSnackBar(

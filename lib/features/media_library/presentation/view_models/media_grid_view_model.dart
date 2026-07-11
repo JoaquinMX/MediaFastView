@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
+import '../../../../shared/providers/media_mutation_bus.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../domain/entities/directory_media_counts.dart';
@@ -173,6 +176,28 @@ class MediaViewModel extends StateNotifier<MediaState> {
       },
       fireImmediately: true,
     );
+    _mutationSubscription = _ref.listen<MediaMutation?>(
+      mediaMutationBusProvider,
+      (previous, next) {
+        if (next == null || next.sequence <= _lastAppliedMutation) {
+          return;
+        }
+        _lastAppliedMutation = next.sequence;
+
+        // A scan in flight is about to overwrite the cache wholesale, so hold
+        // the delta and apply it to the result rather than to a list that is
+        // about to be thrown away.
+        if (state is MediaLoading) {
+          _deferredMutations.add(next);
+          return;
+        }
+        unawaited(applyMutation(next));
+      },
+      // Never replay: the bus keeps its last mutation, and a view model created
+      // after it has already scanned the truth. Replaying an addition here would
+      // duplicate a tile that the scan just found.
+      fireImmediately: false,
+    );
     loadMedia();
   }
 
@@ -193,9 +218,12 @@ class MediaViewModel extends StateNotifier<MediaState> {
   bool _showFavoritesOnly = false;
   bool _showUntaggedOnly = false;
   late final ProviderSubscription<FavoritesState> _favoritesSubscription;
+  late final ProviderSubscription<MediaMutation?> _mutationSubscription;
   Set<MediaType> _visibleMediaTypes = Set<MediaType>.from(MediaType.values);
   Map<String, DirectoryMediaCounts> _directoryMediaCounts =
       const <String, DirectoryMediaCounts>{};
+  int _lastAppliedMutation = 0;
+  final List<MediaMutation> _deferredMutations = <MediaMutation>[];
 
   MediaSortOption get currentSortOption => _currentSortOption;
   Set<String> get selectedMediaIds =>
@@ -256,6 +284,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
   void dispose() {
     _gridColumnsSubscription.close();
     _favoritesSubscription.close();
+    _mutationSubscription.close();
     super.dispose();
   }
 
@@ -512,6 +541,8 @@ class MediaViewModel extends StateNotifier<MediaState> {
           visibleMediaTypes: _visibleMediaTypes,
         );
       }
+
+      await _drainDeferredMutations();
     } catch (e) {
       final totalTime = DateTime.now().difference(loadStartTime);
       LoggingService.instance.error(
@@ -893,6 +924,164 @@ class MediaViewModel extends StateNotifier<MediaState> {
     final favoritesFiltered = _applyFavoritesFilter(typeFiltered);
     final untaggedFiltered = _applyUntaggedFilter(favoritesFiltered);
     return _applySearch(untaggedFiltered, query);
+  }
+
+  /// Applies a completed file operation to this grid in place.
+  ///
+  /// This is what replaces the rescan: the operation already knows exactly what
+  /// changed, so the grid updates without a spinner and without losing the
+  /// user's search or tag filter.
+  Future<void> applyMutation(MediaMutation mutation) async {
+    // Nothing to reconcile against — these states carry no cache.
+    if (state is MediaError || state is MediaPermissionRevoked) {
+      return;
+    }
+
+    // Done even when this grid's own items are untouched: the operation may have
+    // landed inside a subfolder shown here, and that folder tile's count badge
+    // reads from this provider. It folds over the persisted rows, which the
+    // operation already rewrote — it does not touch the disk.
+    _ref.invalidate(directoryMediaCountsProvider);
+
+    // Resolved before the cache is touched, so two overlapping mutations can't
+    // interleave a read and a write of `_cachedMedia`. Only the tagged-share
+    // sorts depend on the counts, and deleting a folder reorders its siblings
+    // under them.
+    if (_sortDependsOnDirectoryCounts) {
+      await _refreshDirectoryMediaCounts();
+      if (!mounted) {
+        return;
+      }
+    }
+
+    final updated = _applyDelta(mutation);
+    if (updated == null) {
+      // The mutation happened somewhere this grid doesn't show. The common case
+      // for a copy.
+      return;
+    }
+
+    _cachedMedia = _sortMedia(updated, _currentSortOption);
+    _emitStateFromCache();
+  }
+
+  /// Applies mutations that landed while a scan was in flight.
+  ///
+  /// Without this, deleting from a viewer opened over a still-loading grid would
+  /// be lost: the scan would finish and re-list the item it had already read
+  /// from disk before the delete happened.
+  Future<void> _drainDeferredMutations() async {
+    if (_deferredMutations.isEmpty) {
+      return;
+    }
+
+    final pending = List<MediaMutation>.from(_deferredMutations);
+    _deferredMutations.clear();
+    for (final mutation in pending) {
+      await applyMutation(mutation);
+      if (!mounted) {
+        return;
+      }
+    }
+  }
+
+  /// Returns the cache with [mutation] applied, or null when this grid is
+  /// unaffected.
+  List<MediaEntity>? _applyDelta(MediaMutation mutation) {
+    final removedIds = {for (final item in mutation.removed) item.id};
+
+    final kept = _cachedMedia.where((item) {
+      if (removedIds.contains(item.id)) {
+        return false;
+      }
+      return !mutation.removed.any((removed) {
+        // Matched on path as well as id because the two are not always in step:
+        // a directory tile scanned into the grid and the same directory
+        // described by the screen it belongs to derive their ids from the path
+        // slightly differently. Also drops anything that lived under a removed
+        // folder.
+        if (p.equals(removed.path, item.path)) {
+          return true;
+        }
+        return removed.type == MediaType.directory &&
+            p.isWithin(removed.path, item.path);
+      });
+    }).toList();
+
+    final additions = mutation.added
+        .where(_belongsInThisDirectory)
+        .where(
+          (candidate) => !kept.any(
+            (item) =>
+                item.id == candidate.id || p.equals(item.path, candidate.path),
+          ),
+        )
+        .toList();
+
+    if (kept.length == _cachedMedia.length && additions.isEmpty) {
+      return null;
+    }
+
+    return [...kept, ...additions];
+  }
+
+  bool _belongsInThisDirectory(MediaEntity item) {
+    // Compared by path rather than by directory id: the destination path comes
+    // from the picker and may be spelled differently to `_directoryPath`, and
+    // `p.equals` normalizes both sides.
+    if (!p.equals(p.dirname(item.path), _directoryPath)) {
+      return false;
+    }
+
+    // While a tag filter is on, `_cachedMedia` holds a filtered set. Appending
+    // an item that doesn't match would break that.
+    if (state case MediaLoaded(:final selectedTagIds)
+        when selectedTagIds.isNotEmpty) {
+      return item.tagIds.any(selectedTagIds.contains);
+    }
+    return true;
+  }
+
+  bool get _sortDependsOnDirectoryCounts =>
+      _currentSortOption == MediaSortOption.taggedPercentageAscending ||
+      _currentSortOption == MediaSortOption.taggedPercentageDescending;
+
+  /// Re-emits from the cache, crossing between the loaded and empty states.
+  ///
+  /// [_emitLoadedStateFromCache] can only refresh an already-loaded grid, so on
+  /// its own it would leave an emptied grid rendering a loaded-but-blank list,
+  /// and could never bring an empty one back to life.
+  void _emitStateFromCache() {
+    if (_cachedMedia.isEmpty) {
+      _clearSelectionInternal();
+      if (state is! MediaEmpty) {
+        state = const MediaEmpty();
+      }
+      return;
+    }
+
+    if (state is MediaLoaded) {
+      _emitLoadedStateFromCache();
+      return;
+    }
+
+    // Coming back from empty: there is no previous loaded state to carry a
+    // search or tag filter over from, so start clean.
+    _synchronizeSelectionWithCache();
+    state = MediaLoaded(
+      media: _applySearchFilters(_cachedMedia, ''),
+      searchQuery: '',
+      selectedTagIds: const [],
+      columns: _ref.read(gridColumnsProvider),
+      currentDirectoryPath: _directoryPath,
+      currentDirectoryName: _directoryName,
+      sortOption: _currentSortOption,
+      selectedMediaIds: Set<String>.unmodifiable(_selectedMediaIds),
+      isSelectionMode: _isSelectionMode,
+      showFavoritesOnly: _showFavoritesOnly,
+      showUntaggedOnly: _showUntaggedOnly,
+      visibleMediaTypes: _visibleMediaTypes,
+    );
   }
 
   void _emitLoadedStateFromCache() {

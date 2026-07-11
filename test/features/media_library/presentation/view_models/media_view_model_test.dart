@@ -13,7 +13,9 @@ import 'package:media_fast_view/features/media_library/domain/repositories/media
 import 'package:media_fast_view/features/media_library/domain/use_cases/get_media_use_case.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/update_directory_access_use_case.dart';
 import 'package:media_fast_view/features/media_library/presentation/view_models/media_grid_view_model.dart';
+import 'package:media_fast_view/shared/providers/media_mutation_bus.dart';
 import 'package:media_fast_view/shared/providers/repository_providers.dart';
+import 'package:path/path.dart' as p;
 import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
@@ -563,4 +565,236 @@ void main() {
     },
   );
 
+  group('applyMutation', () {
+    /// The grid under test, already loaded with m1, m2, m3 from /dir1.
+    Future<({ProviderContainer container, MediaViewModel viewModel,
+             List<MediaState> states})> loadedGrid() async {
+      final container = _createMediaTestContainer(
+        mediaDataSource: mediaCache,
+        mediaRepository: mediaRepository,
+        getMediaUseCase: getMediaUseCase,
+        favoritesRepository: favoritesRepository,
+        updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
+      );
+      addTearDown(container.dispose);
+      container.listen(mediaViewModelProvider(params), (_, __) {});
+
+      final viewModel = container.read(mediaViewModelProvider(params).notifier);
+      await viewModel.loadMedia();
+
+      // Recorded only from here on, so the load's own MediaLoading is excluded.
+      final states = <MediaState>[];
+      container.listen<MediaState>(
+        mediaViewModelProvider(params),
+        (_, next) => states.add(next),
+      );
+      return (container: container, viewModel: viewModel, states: states);
+    }
+
+    MediaEntity entity(String id, String path, {MediaType type = MediaType.image}) {
+      return MediaEntity(
+        id: id,
+        path: path,
+        name: p.basename(path),
+        type: type,
+        size: 1,
+        lastModified: DateTime(2024, 1, 1),
+        tagIds: const [],
+        directoryId: '/dir1',
+      );
+    }
+
+    List<String> idsOf(MediaState state) =>
+        (state as MediaLoaded).media.map((m) => m.id).toList();
+
+    test('a delete drops the tile without ever showing a spinner', () async {
+      final grid = await loadedGrid();
+
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 1,
+          kind: MediaMutationKind.deleted,
+          removed: [entity('m2', '/dir1/media2.jpg')],
+        ),
+      );
+
+      expect(idsOf(grid.states.last), ['m1', 'm3']);
+      // The whole point of the change: no reload.
+      expect(grid.states.whereType<MediaLoading>(), isEmpty);
+    });
+
+    test('an active search survives the mutation', () async {
+      final grid = await loadedGrid();
+      grid.viewModel.searchMedia('media');
+
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 1,
+          kind: MediaMutationKind.deleted,
+          removed: [entity('m2', '/dir1/media2.jpg')],
+        ),
+      );
+
+      // A rescan used to reset the query to '' — the filter would silently drop.
+      expect((grid.states.last as MediaLoaded).searchQuery, 'media');
+      expect(idsOf(grid.states.last), ['m1', 'm3']);
+    });
+
+    test('a removal matches on path even when the ids differ', () async {
+      final grid = await loadedGrid();
+
+      // A folder tile scanned into the grid and the same folder described by the
+      // screen it belongs to can carry differently-derived ids.
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 1,
+          kind: MediaMutationKind.deleted,
+          removed: [entity('a-completely-different-id', '/dir1/media2.jpg')],
+        ),
+      );
+
+      expect(idsOf(grid.states.last), ['m1', 'm3']);
+    });
+
+    test('removing a folder also drops everything cached under it', () async {
+      final grid = await loadedGrid();
+
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 1,
+          kind: MediaMutationKind.deleted,
+          removed: [entity('d', '/dir1', type: MediaType.directory)],
+        ),
+      );
+
+      expect(grid.states.last, isA<MediaEmpty>());
+    });
+
+    test('emptying the grid lands on the empty state, and an add revives it',
+        () async {
+      final grid = await loadedGrid();
+
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 1,
+          kind: MediaMutationKind.deleted,
+          removed: [
+            entity('m1', '/dir1/media1.jpg'),
+            entity('m2', '/dir1/media2.jpg'),
+            entity('m3', '/dir1/media3.jpg'),
+          ],
+        ),
+      );
+      expect(grid.states.last, isA<MediaEmpty>());
+
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 2,
+          kind: MediaMutationKind.copied,
+          added: [entity('new', '/dir1/new.jpg')],
+        ),
+      );
+
+      expect(grid.states.last, isA<MediaLoaded>());
+      expect(idsOf(grid.states.last), ['new']);
+    });
+
+    test('an item added to another folder is ignored', () async {
+      final grid = await loadedGrid();
+
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 1,
+          kind: MediaMutationKind.copied,
+          added: [entity('elsewhere', '/other/copy.jpg')],
+        ),
+      );
+
+      // The common case for a copy: it landed somewhere this grid doesn't show.
+      expect(grid.states, isEmpty);
+    });
+
+    test('an item added to this folder appears, in sort order', () async {
+      final grid = await loadedGrid();
+
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 1,
+          kind: MediaMutationKind.copied,
+          added: [entity('aa', '/dir1/aaa.jpg')],
+        ),
+      );
+
+      expect(idsOf(grid.states.last), ['aa', 'm1', 'm2', 'm3']);
+    });
+
+    test('re-applying the same mutation changes nothing', () async {
+      final grid = await loadedGrid();
+      final mutation = MediaMutation(
+        sequence: 1,
+        kind: MediaMutationKind.deleted,
+        removed: [entity('m2', '/dir1/media2.jpg')],
+      );
+
+      await grid.viewModel.applyMutation(mutation);
+      final afterFirst = grid.states.length;
+      await grid.viewModel.applyMutation(mutation);
+
+      expect(grid.states.length, afterFirst);
+      expect(idsOf(grid.states.last), ['m1', 'm3']);
+    });
+
+    test('a removed item is pruned from the selection', () async {
+      final grid = await loadedGrid();
+      grid.viewModel.toggleMediaSelection('m1');
+      grid.viewModel.toggleMediaSelection('m2');
+
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 1,
+          kind: MediaMutationKind.deleted,
+          removed: [entity('m2', '/dir1/media2.jpg')],
+        ),
+      );
+
+      // m1 stays selected — a partially failed batch can be retried from it.
+      expect(grid.viewModel.selectedMediaIds, {'m1'});
+      expect(grid.viewModel.isSelectionMode, isTrue);
+
+      await grid.viewModel.applyMutation(
+        MediaMutation(
+          sequence: 2,
+          kind: MediaMutationKind.deleted,
+          removed: [entity('m1', '/dir1/media1.jpg')],
+        ),
+      );
+
+      expect(grid.viewModel.selectedMediaIds, isEmpty);
+      expect(grid.viewModel.isSelectionMode, isFalse);
+    });
+
+    test('a grid created after a mutation does not replay it', () async {
+      final container = _createMediaTestContainer(
+        mediaDataSource: mediaCache,
+        mediaRepository: mediaRepository,
+        getMediaUseCase: getMediaUseCase,
+        favoritesRepository: favoritesRepository,
+        updateDirectoryAccessUseCase: updateDirectoryAccessUseCase,
+      );
+      addTearDown(container.dispose);
+
+      container
+          .read(mediaMutationBusProvider.notifier)
+          .publishDeleted([entity('m2', '/dir1/media2.jpg')]);
+
+      // The bus keeps its last mutation. A grid built afterwards has already
+      // scanned the truth, so replaying it would drop a tile twice.
+      container.listen(mediaViewModelProvider(params), (_, __) {});
+      final viewModel = container.read(mediaViewModelProvider(params).notifier);
+      await viewModel.loadMedia();
+
+      final state = container.read(mediaViewModelProvider(params));
+      expect((state as MediaLoaded).media.map((m) => m.id), ['m1', 'm2', 'm3']);
+    });
+  });
 }

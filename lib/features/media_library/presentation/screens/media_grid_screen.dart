@@ -248,6 +248,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         if (hasSiblingNavigation)
           LogicalKeySet(LogicalKeyboardKey.arrowRight):
               const _NavigateToNextDirectoryIntent(),
+        LogicalKeySet(
+          _isMacOS ? LogicalKeyboardKey.meta : LogicalKeyboardKey.control,
+          LogicalKeyboardKey.keyR,
+        ): const _RefreshMediaIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -311,6 +315,12 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                   return null;
                 },
               ),
+          _RefreshMediaIntent: CallbackAction<_RefreshMediaIntent>(
+            onInvoke: (_) {
+              unawaited(_viewModel?.loadMedia() ?? Future<void>.value());
+              return null;
+            },
+          ),
         },
         child: Focus(
           focusNode: _focusNode,
@@ -443,6 +453,14 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           icon: const Icon(Icons.view_module),
           onPressed: () => _showColumnSelector(context),
         ),
+        // Operations update the grid in place, so nothing re-reads the folder on
+        // its own any more. This is how a change made outside the app gets
+        // picked up.
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: _isMacOS ? 'Refresh (⌘R)' : 'Refresh (Ctrl+R)',
+          onPressed: () => unawaited(viewModel.loadMedia()),
+        ),
         IconButton(
           icon: const Icon(Icons.help_outline),
           tooltip: 'Keyboard shortcuts (?)',
@@ -488,27 +506,22 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
     if (moved == null || !mounted) return;
 
-    // The cache was reconciled during the transfer, so these can be rebuilt from
-    // it. Neither touches the grid family that owns `_viewModel`.
-    container.invalidate(directoryMediaCountsProvider);
+    // The parent grid drops this folder's tile from the mutation the transfer
+    // published, so nothing needs rescanning. Only the library grid, which bakes
+    // counts into its own entities, still has to reload.
     if (trackedRoot != null) {
       container.invalidate(directoryViewModelProvider);
     }
     if (!mounted) return;
 
     // This route is keyed by the old path, which no longer exists. Replace it
-    // with one pointing at where the folder landed — while `_viewModel` is still
-    // alive, since invalidating the grid family below disposes it.
+    // with one pointing at where the folder landed.
     _viewModel?.navigateToDirectory(
       moved.path,
       moved.name,
       bookmarkData: trackedRoot?.bookmarkData ?? widget.bookmarkData,
       replaceCurrentRoute: true,
     );
-
-    // Refresh the other grids (a parent grid still lists the folder at its old
-    // path) now that we no longer need the current one.
-    container.invalidate(mediaViewModelProvider);
   }
 
   /// Represents the directory currently being viewed as a deletable item.
@@ -542,29 +555,19 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final deleted = await confirmAndDeleteMedia(context, media);
     if (!deleted || !mounted) return;
 
-    // The folder is now in the Trash. Drop library/cache state so the route we
-    // return to no longer references it.
+    // The folder is now in the Trash. Its cached rows were purged by the delete
+    // itself, and the parent grid drops its tile from the mutation that was
+    // published — so the only thing left is the library entry, if it was one.
     if (trackedRoot != null) {
       await directoryRepository.removeDirectory(trackedRoot.id);
-    }
-    await container
-        .read(mediaRepositoryProvider)
-        .removeMediaForDirectory(media.id);
-    container.invalidate(directoryMediaCountsProvider);
-    if (trackedRoot != null) {
       container.invalidate(directoryViewModelProvider);
     }
     if (!mounted) return;
 
-    // Optionally move to a sibling directory instead of going back. Do this
-    // while the view model is still valid, before invalidating the grid family.
+    // Optionally move to a sibling directory instead of going back.
     final goToSibling =
         container.read(navigateToSiblingAfterDirectoryDeleteProvider);
     final navigatedToSibling = goToSibling && _navigateToSiblingAfterDelete();
-
-    // Refresh other media grids (e.g. a parent grid) so the deleted directory
-    // no longer appears when the user returns to them.
-    container.invalidate(mediaViewModelProvider);
 
     if (!navigatedToSibling) {
       if (!mounted) return;
@@ -963,12 +966,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           item.type == MediaType.directory && deletedIds.contains(item.id),
     );
     await _dropLibraryEntriesFor(deletedDirectories, container);
-    if (!mounted) return;
 
-    // The rescan drops the trashed items, prunes them from the selection, and
-    // refreshes the directory media counts.
-    viewModel.clearMediaSelection();
-    await viewModel.loadMedia();
+    // The tiles are dropped by the mutation the delete published, and the
+    // selection prunes itself down to whatever survived — so anything that
+    // failed stays on screen and stays selected, ready to be retried.
   }
 
   /// Moves or copies the current selection into one folder.
@@ -985,22 +986,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       return;
     }
 
-    final container = ProviderScope.containerOf(context, listen: false);
-    final summary = await pickDestinationAndTransferMediaBatch(
-      context,
-      selected,
-      mode: mode,
-    );
-    if (summary == null || !summary.didAnything || !mounted) {
-      return;
-    }
+    await pickDestinationAndTransferMediaBatch(context, selected, mode: mode);
 
-    // A moved item can come back with a different id (a cross-volume move or a
-    // rename changes it), so the selection is stale either way — drop it before
-    // reloading rather than trying to carry it across.
-    viewModel.clearMediaSelection();
-    container.invalidate(directoryMediaCountsProvider);
-    await viewModel.loadMedia();
+    // The moved tiles are dropped by the mutation that was published, which also
+    // prunes them from the selection. A copy moves nothing, so its selection
+    // correctly survives.
   }
 
   /// Removes library/cache state for any trashed folder that also happened to
@@ -1015,7 +1005,6 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     }
 
     final directoryRepository = container.read(directoryRepositoryProvider);
-    final mediaRepository = container.read(mediaRepositoryProvider);
     // Match by path: the scan derives subdirectory ids from a normalized path,
     // which can differ from the tracked root's id.
     final trackedDirectories = await directoryRepository.getDirectories();
@@ -1023,9 +1012,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       for (final directory in trackedDirectories) directory.path: directory,
     };
 
+    // The cached rows under each trashed folder were already purged by the
+    // delete itself; only the library entry is left to remove.
     var removedTrackedRoot = false;
     for (final deleted in deletedDirectories) {
-      await mediaRepository.removeMediaForDirectory(deleted.id);
       final trackedRoot = trackedByPath[deleted.path];
       if (trackedRoot != null) {
         await directoryRepository.removeDirectory(trackedRoot.id);
@@ -1075,8 +1065,6 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           onDoubleTap: () => _onMediaDoubleTap(context, mediaItem),
           onLongPress: () => _onMediaLongPress(context, mediaItem),
           onSecondaryTap: () => _onMediaSecondaryTap(context, mediaItem),
-          onOperationComplete: () =>
-              viewModel.loadMedia(), // Refresh after delete
           onSelectionToggle: () => viewModel.toggleMediaSelection(mediaItem.id),
           isSelected: isSelected,
           isSelectionMode: isSelectionMode,
@@ -1697,19 +1685,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     );
   }
 
-  Future<void> _transferMedia(MediaEntity media, TransferMode mode) async {
-    final transferred = await pickDestinationAndTransferMedia(
-      context,
-      media,
-      mode: mode,
-    );
-    if (transferred == null || !mounted) return;
-
-    ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).invalidate(directoryMediaCountsProvider);
-    await _viewModel?.loadMedia();
+  /// The grid updates itself from the mutation the transfer publishes, so there
+  /// is nothing to do here afterwards.
+  Future<void> _transferMedia(MediaEntity media, TransferMode mode) {
+    return pickDestinationAndTransferMedia(context, media, mode: mode);
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -1778,6 +1757,10 @@ class _DeleteSelectedMediaIntent extends Intent {
 
 class _NavigateToPreviousDirectoryIntent extends Intent {
   const _NavigateToPreviousDirectoryIntent();
+}
+
+class _RefreshMediaIntent extends Intent {
+  const _RefreshMediaIntent();
 }
 
 class _NavigateToNextDirectoryIntent extends Intent {

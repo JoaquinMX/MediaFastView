@@ -195,6 +195,27 @@ class IsarMediaDataSource {
     }
   }
 
+  /// Removes the records for [mediaIds]. Ids with no record are ignored.
+  ///
+  /// Deleting a file has to purge its row explicitly. Nothing rescans a
+  /// directory after an operation any more, so a row left behind would linger
+  /// indefinitely — still counted by the directory badges, still matched by tag
+  /// filters, still listed on the tags screen.
+  Future<void> removeMediaByIds(List<String> mediaIds) async {
+    if (mediaIds.isEmpty) {
+      return;
+    }
+
+    await _executeSafely(() async {
+      final ids = mediaIds
+          .map(mediaCollectionIdFromMediaId)
+          .toList(growable: false);
+      await _mediaStore.writeTxn(() async {
+        await _mediaStore.deleteByIds(ids);
+      });
+    }, 'Failed to remove media by id');
+  }
+
   /// Removes every media record associated with [directoryId].
   Future<void> removeMediaForDirectory(String directoryId) async {
     await _executeSafely(() async {

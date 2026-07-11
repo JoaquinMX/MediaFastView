@@ -14,11 +14,9 @@ class FileOperationButton extends StatelessWidget {
   const FileOperationButton({
     super.key,
     required this.media,
-    this.onOperationComplete,
   });
 
   final MediaEntity media;
-  final VoidCallback? onOperationComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -28,11 +26,7 @@ class FileOperationButton extends StatelessWidget {
 
     return IconButton(
       icon: const Icon(Icons.delete, color: Colors.red),
-      onPressed: () => confirmAndDeleteMedia(
-        context,
-        media,
-        onDeleted: onOperationComplete,
-      ),
+      onPressed: () => confirmAndDeleteMedia(context, media),
       tooltip: 'Delete',
     );
   }

@@ -8,7 +8,9 @@ import '../../../../core/services/file_transfer_result.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/utils/batch_update_result.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/utils/directory_id_utils.dart';
 import '../../../favorites/domain/repositories/favorites_repository.dart';
+import '../../data/isar/isar_media_data_source.dart';
 import '../../domain/entities/directory_entity.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
@@ -83,6 +85,7 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
     this._moveMediaUseCase,
     this._copyMediaUseCase,
     this._reconcileUseCase,
+    this._mediaDataSource,
   ) : super(const FileOperationsInitial());
 
   final DeleteFileUseCase _deleteFileUseCase;
@@ -93,6 +96,7 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
   final MoveMediaUseCase _moveMediaUseCase;
   final CopyMediaUseCase _copyMediaUseCase;
   final ReconcileTransferredMediaUseCase _reconcileUseCase;
+  final IsarMediaDataSource _mediaDataSource;
 
   static const String _unsupportedMessage =
       'Deleting files from the device is only supported on macOS.';
@@ -433,9 +437,10 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
   }
 
   /// Removes state that would otherwise be orphaned once the underlying file is
-  /// gone (the favorites collection is keyed by media id and is not touched by
-  /// a directory rescan).
+  /// gone: the cached row itself, and the favorite keyed by its id.
   Future<void> _cleanupAfterDelete(MediaEntity media) async {
+    await _purgeCachedMedia(media);
+
     try {
       if (await _favoritesRepository.isFavorite(media.id)) {
         await _favoritesRepository.removeFavorite(media.id);
@@ -445,6 +450,38 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
         'Failed to clean up favorite for deleted media ${media.id}: $e',
       );
       // Non-fatal: the delete itself succeeded.
+    }
+  }
+
+  /// Drops the cached row(s) for a trashed item.
+  ///
+  /// Nothing rescans the directory afterwards any more, so this is the only
+  /// thing that removes the row. Left behind, it would keep inflating the
+  /// directory count badges, keep matching tag filters, and keep the item listed
+  /// on the tags screen.
+  Future<void> _purgeCachedMedia(MediaEntity media) async {
+    try {
+      final ids = <String>[media.id];
+
+      if (media.type == MediaType.directory) {
+        // A directory's rows are reachable by path, not by the folder's own id:
+        // its children were indexed under whichever directory last scanned them.
+        final descendants = await _mediaDataSource.getMediaUnderPath(media.path);
+        ids.addAll(descendants.map((descendant) => descendant.id));
+      }
+
+      await _mediaDataSource.removeMediaByIds(ids);
+
+      if (media.type == MediaType.directory) {
+        await _mediaDataSource.removeMediaForDirectory(
+          generateDirectoryId(media.path),
+        );
+      }
+    } catch (e) {
+      LoggingService.instance.warning(
+        'Failed to purge the cached row for deleted media ${media.id}: $e',
+      );
+      // Non-fatal: the file is already gone, and Refresh recovers a stale row.
     }
   }
 
@@ -478,5 +515,6 @@ final fileOperationsViewModelProvider =
         ref.watch(moveMediaUseCaseProvider),
         ref.watch(copyMediaUseCaseProvider),
         ref.watch(reconcileTransferredMediaUseCaseProvider),
+        ref.watch(isarMediaDataSourceProvider),
       ),
     );

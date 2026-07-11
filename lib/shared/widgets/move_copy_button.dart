@@ -20,11 +20,9 @@ class MoveCopyButton extends StatelessWidget {
   const MoveCopyButton({
     super.key,
     required this.media,
-    this.onOperationComplete,
   });
 
   final MediaEntity media;
-  final VoidCallback? onOperationComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -74,12 +72,7 @@ class MoveCopyButton extends StatelessWidget {
       return;
     }
 
-    await pickDestinationAndTransferMedia(
-      rootContext,
-      media,
-      mode: mode,
-      onTransferred: onOperationComplete,
-    );
+    await pickDestinationAndTransferMedia(rootContext, media, mode: mode);
   }
 
   /// Anchors the menu to the button.

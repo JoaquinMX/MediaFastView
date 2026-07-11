@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/file_transfer_result.dart';
+import '../providers/media_mutation_bus.dart';
 import '../../features/media_library/domain/entities/media_entity.dart';
 import '../../features/media_library/presentation/view_models/file_operations_view_model.dart';
 import '../../features/media_library/presentation/widgets/destination_picker_dialog.dart';
@@ -82,7 +83,13 @@ Future<MediaEntity?> pickDestinationAndTransferMedia(
     ),
   );
 
-  if (result != null) {
+  final transferred = result;
+  if (transferred != null) {
+    // Announced only once the cache has been reconciled, so listeners that read
+    // the database see the item at its new location.
+    container
+        .read(mediaMutationBusProvider.notifier)
+        .publishTransfer(mode: mode, source: media, result: transferred);
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -92,7 +99,7 @@ Future<MediaEntity?> pickDestinationAndTransferMedia(
     );
     onTransferred?.call();
   }
-  return result;
+  return transferred;
 }
 
 /// Picks one destination and transfers every item in [items] into it.
@@ -148,6 +155,7 @@ Future<TransferSummary?> pickDestinationAndTransferMediaBatch(
   var failed = 0;
   ConflictResolution? applyToAll;
   var cancelled = false;
+  final landed = <({MediaEntity source, MediaEntity result})>[];
 
   try {
     for (var index = 0; index < items.length; index++) {
@@ -177,6 +185,7 @@ Future<TransferSummary?> pickDestinationAndTransferMediaBatch(
           onSuccess: (state) {
             transferred++;
             if (state.transfer.renamed) renamed++;
+            landed.add((source: item, result: state.media));
           },
           onError: (_) => failed++,
           onConflict: (conflict) async {
@@ -224,6 +233,15 @@ Future<TransferSummary?> pickDestinationAndTransferMediaBatch(
     // disposing, which happens after this frame — disposing the notifier now
     // would make that detach throw.
     WidgetsBinding.instance.addPostFrameCallback((_) => progress.dispose());
+  }
+
+  // Published after the loop rather than per item, so a batch cancelled halfway
+  // still announces everything that actually landed. The progress dialog covers
+  // the grid anyway, so there is nothing to gain from updating it item by item.
+  if (landed.isNotEmpty) {
+    container
+        .read(mediaMutationBusProvider.notifier)
+        .publishTransferBatch(mode: mode, transfers: landed);
   }
 
   final summary = TransferSummary(

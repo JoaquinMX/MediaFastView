@@ -7,6 +7,7 @@ import 'package:media_fast_view/core/services/file_transfer_result.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
+import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
@@ -286,6 +287,7 @@ void main() {
   late _RecordingFileOperationsRepository repo;
   late _FakeDirectoryRepository directoryRepo;
   late _FakeFavoritesRepository favoritesRepo;
+  late IsarMediaDataSource mediaDataSource;
 
   FileOperationsViewModel buildViewModel() {
     return FileOperationsViewModel(
@@ -297,11 +299,12 @@ void main() {
       MoveMediaUseCase(repo),
       CopyMediaUseCase(repo),
       ReconcileTransferredMediaUseCase(
-        _inMemoryMediaDataSource(),
+        mediaDataSource,
         favoritesRepo,
         directoryRepo,
         _NoopBookmarkService(),
       ),
+      mediaDataSource,
     );
   }
 
@@ -311,7 +314,25 @@ void main() {
       'dir-1': _directory(bookmarkData: 'BOOKMARK-DATA'),
     });
     favoritesRepo = _FakeFavoritesRepository(favorite: true);
+    mediaDataSource = _inMemoryMediaDataSource();
   });
+
+  Future<void> seed(List<MediaEntity> items) {
+    return mediaDataSource.upsertMedia([
+      for (final item in items)
+        MediaModel(
+          id: item.id,
+          path: item.path,
+          name: item.name,
+          type: item.type,
+          size: item.size,
+          lastModified: item.lastModified,
+          tagIds: item.tagIds,
+          directoryId: item.directoryId,
+        ),
+    ]);
+  }
+
 
   test('does not delete when deleteFromSource is disabled', () async {
     final viewModel = buildViewModel();
@@ -326,6 +347,82 @@ void main() {
   // view model short-circuits with an error, so only assert the routing where
   // it actually runs.
   final macOnly = Platform.isMacOS ? false : 'macOS-only delete path';
+
+  group('purging the cached row', () {
+    test(
+      'a deleted file stops being cached',
+      () async {
+        final media = _media();
+        await seed([media]);
+
+        await buildViewModel().deleteMedia(media, deleteFromSource: true);
+
+        // Nothing rescans the directory any more, so the row would otherwise
+        // linger: still counted in the folder badges, still matched by tag
+        // filters, still listed on the tags screen.
+        expect(await mediaDataSource.getMedia(), isEmpty);
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'deleting a directory also stops caching everything under it',
+      () async {
+        final folder = MediaEntity(
+          id: 'folder',
+          path: '/library/vacation',
+          name: 'vacation',
+          type: MediaType.directory,
+          size: 0,
+          lastModified: DateTime(2020, 1, 1),
+          tagIds: const [],
+          directoryId: 'dir-1',
+        );
+        final child = _file('nested.jpg', path: '/library/vacation/nested.jpg');
+        final bystander = _file('keep.jpg', path: '/library/keep.jpg');
+        await seed([folder, child, bystander]);
+
+        await buildViewModel().deleteMedia(folder, deleteFromSource: true);
+
+        final remaining = await mediaDataSource.getMedia();
+        expect(remaining.map((m) => m.id), ['keep.jpg']);
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'a delete that failed leaves the row alone',
+      () async {
+        final media = _media();
+        await seed([media]);
+        repo.failures[media.path] = 'permission denied';
+
+        await buildViewModel().deleteMedia(media, deleteFromSource: true);
+
+        expect(await mediaDataSource.getMedia(), hasLength(1));
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'a batch delete stops caching every item that made it',
+      () async {
+        final gone = _file('gone.jpg');
+        final stays = _file('stays.jpg');
+        await seed([gone, stays]);
+        repo.failures[stays.path] = 'permission denied';
+
+        await buildViewModel().deleteMediaBatch(
+          [gone, stays],
+          deleteFromSource: true,
+        );
+
+        final remaining = await mediaDataSource.getMedia();
+        expect(remaining.map((m) => m.id), ['stays.jpg']);
+      },
+      skip: macOnly,
+    );
+  });
 
   test(
     'file delete threads the enclosing directory bookmark and moves to Trash',

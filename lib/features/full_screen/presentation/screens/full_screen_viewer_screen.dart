@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/models/directory_navigation_target.dart';
-import '../../../media_library/presentation/view_models/media_grid_view_model.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/presentation/view_models/tags_view_model.dart';
 import '../../domain/entities/viewer_state_entity.dart';
@@ -22,7 +21,6 @@ import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
 import '../../../../shared/providers/settings_providers.dart';
-import '../../../../shared/providers/repository_providers.dart';
 import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/move_copy_media_action.dart';
@@ -435,9 +433,8 @@ class _FullScreenViewerScreenState
       return;
     }
 
-    ref.invalidate(mediaViewModelProvider);
-    ref.invalidate(directoryMediaCountsProvider);
-
+    // The grid behind us updates itself from the mutation the transfer
+    // published; it does not need to be torn down and rescanned.
     if (mode == TransferMode.copy) {
       // The item on screen is untouched by a copy.
       _focusNode.requestFocus();
@@ -459,18 +456,14 @@ class _FullScreenViewerScreenState
   }
 
   /// Moves the current media to the Trash and advances the viewer (closing it
-  /// when nothing is left). Refreshes the grid/counts so the deletion is
-  /// reflected on return.
+  /// when nothing is left). The grid behind us drops the item from the mutation
+  /// the delete published, so it is already correct on return.
   Future<void> _handleDeleteCurrentMedia(MediaEntity media) async {
     _videoPlayerKey.currentState?.stopPlayback();
     final deleted = await confirmAndDeleteMedia(context, media);
     if (!deleted || !mounted) {
       return;
     }
-
-    // Reflect the deletion in the grid and directory counts on return.
-    ref.invalidate(mediaViewModelProvider);
-    ref.invalidate(directoryMediaCountsProvider);
 
     final hasMore = await _viewModel.removeCurrentMedia();
     if (!mounted) {

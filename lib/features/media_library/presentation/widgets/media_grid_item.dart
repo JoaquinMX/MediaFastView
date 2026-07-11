@@ -26,7 +26,6 @@ class MediaGridItem extends StatefulWidget {
     this.onDoubleTap,
     this.onLongPress,
     this.onSecondaryTap,
-    this.onOperationComplete,
     this.onFavoriteToggle,
     required this.onSelectionToggle,
     required this.isSelected,
@@ -38,7 +37,6 @@ class MediaGridItem extends StatefulWidget {
   final VoidCallback? onDoubleTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onSecondaryTap;
-  final VoidCallback? onOperationComplete;
   final ValueChanged<bool>? onFavoriteToggle;
   final VoidCallback onSelectionToggle;
   final bool isSelected;
@@ -259,15 +257,9 @@ class _MediaGridItemState extends State<MediaGridItem> {
               constraints: const BoxConstraints.tightFor(width: 32, height: 32),
             ),
             const SizedBox(width: 4),
-            MoveCopyButton(
-              media: widget.media,
-              onOperationComplete: widget.onOperationComplete,
-            ),
+            MoveCopyButton(media: widget.media),
             const SizedBox(width: 4),
-            FileOperationButton(
-              media: widget.media,
-              onOperationComplete: widget.onOperationComplete,
-            ),
+            FileOperationButton(media: widget.media),
           ],
         ),
       ),
