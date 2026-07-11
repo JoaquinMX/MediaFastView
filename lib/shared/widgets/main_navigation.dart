@@ -5,23 +5,28 @@ import '../../features/media_library/presentation/screens/directory_grid_screen.
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/tagging/presentation/screens/tags_screen.dart';
 import '../../features/tagging/presentation/view_models/tags_view_model.dart';
+import '../providers/navigation_provider.dart';
 
 /// Main navigation widget with bottom navigation bar.
-class MainNavigation extends ConsumerStatefulWidget {
+class MainNavigation extends ConsumerWidget {
   const MainNavigation({super.key});
 
   @override
-  ConsumerState<MainNavigation> createState() => _MainNavigationState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedTab = ref.watch(selectedTabProvider);
 
-class _MainNavigationState extends ConsumerState<MainNavigation> {
-  int _selectedIndex = 0;
+    // Listening rather than reacting inside the tap handler, so the Tags tab
+    // still refreshes when something moves the user here programmatically —
+    // "go to directory" switches tabs without anyone touching the bar.
+    ref.listen<AppTab>(selectedTabProvider, (previous, next) {
+      if (previous != next && next == AppTab.tags) {
+        ref.read(tagsViewModelProvider.notifier).refreshTags();
+      }
+    });
 
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
-        index: _selectedIndex,
+        index: selectedTab.index,
         children: const <Widget>[
           DirectoryGridScreen(),
           TagsScreen(),
@@ -43,21 +48,10 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
             label: 'Settings',
           ),
         ],
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        currentIndex: selectedTab.index,
+        onTap: (index) =>
+            ref.read(selectedTabProvider.notifier).state = AppTab.values[index],
       ),
     );
-  }
-
-  void _onItemTapped(int index) {
-    if (_selectedIndex != index) {
-      setState(() {
-        _selectedIndex = index;
-      });
-    }
-
-    if (index == 1) {
-      ref.read(tagsViewModelProvider.notifier).refreshTags();
-    }
   }
 }

@@ -8,6 +8,7 @@ import '../../../../core/services/file_transfer_result.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/utils/batch_update_result.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/utils/bookmark_resolver.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../../favorites/domain/repositories/favorites_repository.dart';
 import '../../data/isar/isar_media_data_source.dart';
@@ -399,18 +400,7 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
   /// whose bookmark also covers everything beneath it.
   Future<String?> _resolveBookmarkForPath(String path) async {
     final directories = await _directoryRepository.getDirectories();
-
-    DirectoryEntity? enclosing;
-    for (final dir in directories) {
-      if (dir.bookmarkData == null) continue;
-      final coversPath = path == dir.path || p.isWithin(dir.path, path);
-      if (!coversPath) continue;
-      if (enclosing == null || dir.path.length > enclosing.path.length) {
-        enclosing = dir;
-      }
-    }
-
-    return enclosing?.bookmarkData;
+    return resolveBookmarkForPath(path, directories);
   }
 
   /// Same resolution as [_resolveDirectoryBookmark] against an already-loaded
@@ -419,21 +409,14 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
     MediaEntity media,
     List<DirectoryEntity> directories,
   ) {
-    DirectoryEntity? enclosing;
     for (final dir in directories) {
       if (dir.id == media.directoryId && dir.bookmarkData != null) {
         return dir.bookmarkData;
       }
-      if (dir.bookmarkData == null) continue;
-      final coversPath =
-          media.path == dir.path || p.isWithin(dir.path, media.path);
-      if (!coversPath) continue;
-      if (enclosing == null || dir.path.length > enclosing.path.length) {
-        enclosing = dir;
-      }
     }
 
-    return enclosing?.bookmarkData ?? media.bookmarkData;
+    return resolveBookmarkForPath(media.path, directories) ??
+        media.bookmarkData;
   }
 
   /// Removes state that would otherwise be orphaned once the underlying file is

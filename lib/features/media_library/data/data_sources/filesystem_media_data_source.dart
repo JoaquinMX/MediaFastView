@@ -6,6 +6,7 @@ import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/logging_service.dart';
+import '../../../../shared/utils/bookmark_resolver.dart';
 import '../../../../shared/utils/media_id_utils.dart';
 import '../models/media_model.dart';
 import '../../domain/entities/media_entity.dart';
@@ -228,9 +229,10 @@ class FilesystemMediaDataSource {
            final isValid = await _bookmarkService.isBookmarkValid(effectiveBookmarkData);
            LoggingService.instance.debug('Bookmark validity check result: $isValid');
            if (isValid) {
-             resolvedPath = await _bookmarkService.startAccessingBookmark(effectiveBookmarkData);
+             final scopePath = await _bookmarkService.startAccessingBookmark(effectiveBookmarkData);
              startedAccess = true;
-             LoggingService.instance.info('Started accessing bookmark for directory: $directoryPath -> $resolvedPath');
+             resolvedPath = resolveScanTarget(directoryPath, scopePath);
+             LoggingService.instance.info('Started accessing bookmark scope $scopePath for directory: $directoryPath -> scanning $resolvedPath');
            } else {
              LoggingService.instance.error('CRITICAL: Bookmark validation failed during scan for directory: $directoryPath - bookmark has expired. Falling back to stored path: $directoryPath');
              // Don't throw here - let the directory access check below handle it

@@ -30,6 +30,7 @@ class MediaGridItem extends StatefulWidget {
     required this.onSelectionToggle,
     required this.isSelected,
     required this.isSelectionMode,
+    this.isHighlighted = false,
   });
 
   final MediaEntity media;
@@ -41,6 +42,11 @@ class MediaGridItem extends StatefulWidget {
   final VoidCallback onSelectionToggle;
   final bool isSelected;
   final bool isSelectionMode;
+
+  /// Momentarily calls the item out after the user was brought here to find it
+  /// ("go to directory"). Deliberately distinct from [isSelected], which means
+  /// multi-select and is driven by the user rather than by navigation.
+  final bool isHighlighted;
 
   @override
   State<MediaGridItem> createState() => _MediaGridItemState();
@@ -141,14 +147,22 @@ class _MediaGridItemState extends State<MediaGridItem> {
                 widget.onSecondaryTap?.call();
               },
               child: Card(
-                elevation: _isHovering
+                elevation: _isHovering || widget.isHighlighted
                     ? UiSizing.elevationHigh
                     : UiSizing.elevationLow,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(
                     UiSizing.borderRadiusMedium,
                   ),
-                  side: widget.isSelected
+                  // Highlight wins over selection: it is transient, and it is
+                  // the answer to the question the user just asked ("where is
+                  // this file?").
+                  side: widget.isHighlighted
+                      ? BorderSide(
+                          color: Theme.of(context).colorScheme.tertiary,
+                          width: UiSizing.borderWidth * 2,
+                        )
+                      : widget.isSelected
                       ? BorderSide(
                           color: Theme.of(context).colorScheme.primary,
                           width: UiSizing.borderWidth,

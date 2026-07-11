@@ -21,9 +21,11 @@ import '../../../../shared/widgets/media_progress_indicator.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
 import '../../../../shared/providers/settings_providers.dart';
+import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/move_copy_media_action.dart';
+import '../../../../shared/widgets/reveal_media_action.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../../shared/widgets/tag_selection_dialog.dart';
@@ -386,7 +388,7 @@ class _FullScreenViewerScreenState
   void _showContextMenu(MediaEntity media) {
     showMenu(
       context: context,
-      position: const RelativeRect.fromLTRB(100, 100, 0, 0),
+      position: UiPosition.contextMenu,
       items: [
         PopupMenuItem(
           child: const Text('Info'),
@@ -395,6 +397,13 @@ class _FullScreenViewerScreenState
         PopupMenuItem(
           child: const Text('Favorite'),
           onTap: () => _toggleFavoriteAndRefreshTags(),
+        ),
+        PopupMenuItem(
+          // `media` is the item on screen right now, which after paging through
+          // a tag's results may live in a different directory than the one this
+          // viewer was opened with.
+          onTap: () => revealMediaInLibrary(context, media),
+          child: const Text('Go to directory'),
         ),
         if (Platform.isMacOS) ...[
           PopupMenuItem(

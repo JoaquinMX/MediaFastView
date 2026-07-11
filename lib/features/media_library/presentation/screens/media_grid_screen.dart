@@ -16,6 +16,7 @@ import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
+import '../../../../shared/utils/grid_scroll_offset.dart';
 import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/move_copy_media_action.dart';
@@ -35,6 +36,10 @@ import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
 
+/// How long a revealed item stays called out. Long enough for the eye to land on
+/// it after the scroll, short enough not to be mistaken for a selection.
+const Duration _revealHighlightDuration = Duration(milliseconds: 2500);
+
 /// Screen for displaying media in a customizable grid layout.
 class MediaGridScreen extends ConsumerStatefulWidget {
   const MediaGridScreen({
@@ -44,6 +49,7 @@ class MediaGridScreen extends ConsumerStatefulWidget {
     this.bookmarkData,
     this.siblingDirectories,
     this.currentDirectoryIndex,
+    this.initialMediaId,
   });
 
   final String directoryPath;
@@ -51,6 +57,13 @@ class MediaGridScreen extends ConsumerStatefulWidget {
   final String? bookmarkData;
   final List<DirectoryNavigationTarget>? siblingDirectories;
   final int? currentDirectoryIndex;
+
+  /// Media to scroll to and briefly highlight once the grid has loaded.
+  ///
+  /// Set when the user was brought here to find a specific item ("go to
+  /// directory" in the viewer). Mirrors `FullScreenViewerScreen.initialMediaId`,
+  /// and like it, an id that is not in the list is simply ignored.
+  final String? initialMediaId;
 
   @override
   ConsumerState<MediaGridScreen> createState() => _MediaGridScreenState();
@@ -61,7 +74,16 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   MediaViewModel? _viewModel;
   final GlobalKey _mediaGridOverlayKey = GlobalKey();
   final Map<String, GlobalKey> _mediaItemKeys = <String, GlobalKey>{};
+  final ScrollController _gridScrollController = ScrollController();
   List<MediaEntity> _visibleMediaCache = const [];
+
+  /// Item currently called out by the reveal, cleared once the highlight fades.
+  String? _revealedMediaId;
+  Timer? _revealHighlightTimer;
+
+  /// The reveal is a one-shot on arrival — re-running it on every rebuild would
+  /// yank the grid back under a user who has since scrolled away.
+  bool _hasRevealed = false;
   Rect? _mediaSelectionRect;
   Offset? _mediaDragStart;
   bool _isMediaMarqueeActive = false;
@@ -92,6 +114,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
   @override
   void dispose() {
+    _revealHighlightTimer?.cancel();
+    _gridScrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -222,6 +246,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     final selectedMediaCount = ref.watch(selectedMediaCountProvider(_params!));
     if (state case MediaLoaded(:final media)) {
       _visibleMediaCache = media;
+      _scheduleReveal();
     } else {
       _visibleMediaCache = const [];
     }
@@ -1043,6 +1068,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     }
     _pruneMediaItemKeys(media);
     final gridView = GridView.builder(
+      controller: _gridScrollController,
       padding: UiSpacing.gridPadding,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
@@ -1068,10 +1094,74 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           onSelectionToggle: () => viewModel.toggleMediaSelection(mediaItem.id),
           isSelected: isSelected,
           isSelectionMode: isSelectionMode,
+          isHighlighted: mediaItem.id == _revealedMediaId,
         );
       },
     );
     return _buildMediaMarqueeWrapper(viewModel: viewModel, child: gridView);
+  }
+
+  /// Queues the one-shot scroll-to-and-highlight for [MediaGridScreen.initialMediaId].
+  ///
+  /// Called from `build` the first time the media list arrives; the actual work
+  /// waits for the frame, because the grid has no scroll position (and no width)
+  /// until it has been laid out at least once.
+  void _scheduleReveal() {
+    if (_hasRevealed || widget.initialMediaId == null) {
+      return;
+    }
+    _hasRevealed = true;
+
+    final mediaId = widget.initialMediaId!;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealMedia(mediaId));
+  }
+
+  void _revealMedia(String mediaId) {
+    if (!mounted) {
+      return;
+    }
+
+    final index = _visibleMediaCache.indexWhere((item) => item.id == mediaId);
+    if (index < 0) {
+      // The item isn't here — it may have been moved or deleted since. Opening
+      // the folder is still the useful half of the request, so leave it at that.
+      return;
+    }
+
+    _scrollToIndex(index);
+
+    setState(() => _revealedMediaId = mediaId);
+    _revealHighlightTimer?.cancel();
+    _revealHighlightTimer = Timer(_revealHighlightDuration, () {
+      if (mounted) {
+        setState(() => _revealedMediaId = null);
+      }
+    });
+  }
+
+  void _scrollToIndex(int index) {
+    if (!_gridScrollController.hasClients) {
+      return;
+    }
+
+    // The grid's own width, not the screen's: the offset depends on tile size,
+    // which depends on how wide the grid actually is.
+    final gridBox =
+        _mediaGridOverlayKey.currentContext?.findRenderObject() as RenderBox?;
+    if (gridBox == null || !gridBox.hasSize) {
+      return;
+    }
+
+    final offset = gridScrollOffsetForIndex(
+      index: index,
+      columns: ref.read(gridColumnsProvider),
+      viewportWidth: gridBox.size.width,
+    );
+
+    final position = _gridScrollController.position;
+    _gridScrollController.jumpTo(
+      offset.clamp(position.minScrollExtent, position.maxScrollExtent),
+    );
   }
 
   Widget _buildMediaMarqueeWrapper({
