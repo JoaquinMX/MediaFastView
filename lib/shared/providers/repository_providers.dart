@@ -31,6 +31,9 @@ import '../../features/media_library/domain/use_cases/get_directories_use_case.d
 import '../../features/media_library/domain/use_cases/get_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/remove_directory_use_case.dart';
 import '../../features/media_library/domain/use_cases/search_directories_use_case.dart';
+import '../../features/media_library/domain/entities/directory_entity.dart';
+import '../../features/media_library/domain/use_cases/reconcile_transferred_media_use_case.dart';
+import '../../features/media_library/domain/use_cases/transfer_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/validate_path_use_case.dart';
 import '../../features/media_library/domain/use_cases/update_directory_access_use_case.dart';
 import '../../features/tagging/domain/use_cases/get_tags_use_case.dart';
@@ -265,6 +268,84 @@ final deleteDirectoryUseCaseProvider = Provider<DeleteDirectoryUseCase>((ref) {
 final validatePathUseCaseProvider = Provider<ValidatePathUseCase>((ref) {
   return ValidatePathUseCase(ref.watch(fileOperationsRepositoryProvider));
 });
+
+final moveMediaUseCaseProvider = Provider<MoveMediaUseCase>((ref) {
+  return MoveMediaUseCase(ref.watch(fileOperationsRepositoryProvider));
+});
+
+final copyMediaUseCaseProvider = Provider<CopyMediaUseCase>((ref) {
+  return CopyMediaUseCase(ref.watch(fileOperationsRepositoryProvider));
+});
+
+final reconcileTransferredMediaUseCaseProvider =
+    Provider<ReconcileTransferredMediaUseCase>((ref) {
+      return ReconcileTransferredMediaUseCase(
+        ref.watch(isarMediaDataSourceProvider),
+        ref.watch(favoritesRepositoryProvider),
+        ref.watch(directoryRepositoryProvider),
+        ref.watch(bookmarkServiceProvider),
+      );
+    });
+
+/// The tracked library roots.
+///
+/// A plain list, for callers such as the destination picker that only need to
+/// know which folders exist — as opposed to [directoryViewModelProvider], which
+/// drives the library grid and does accessibility scanning along the way.
+final trackedDirectoriesProvider =
+    FutureProvider.autoDispose<List<DirectoryEntity>>((ref) {
+      return ref.watch(directoryRepositoryProvider).getDirectories();
+    });
+
+/// Identifies a directory to list subdirectories for, along with the bookmark
+/// that grants access to it.
+class SubdirectoryQuery {
+  const SubdirectoryQuery({required this.path, this.bookmarkData});
+
+  final String path;
+  final String? bookmarkData;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SubdirectoryQuery &&
+          path == other.path &&
+          bookmarkData == other.bookmarkData;
+
+  @override
+  int get hashCode => Object.hash(path, bookmarkData);
+}
+
+/// Lists the subdirectories of a directory, holding security-scoped access for
+/// the duration of the scan.
+///
+/// The scope matters: [FilesystemMediaDataSource.scanSubdirectories] swallows
+/// access failures and returns an empty list, so without it a sandboxed build
+/// would silently show every folder as having no children.
+final subdirectoriesProvider = FutureProvider.autoDispose
+    .family<List<String>, SubdirectoryQuery>((ref, query) async {
+      final bookmarkService = ref.watch(bookmarkServiceProvider);
+      final dataSource = ref.watch(filesystemMediaDataSourceProvider);
+
+      final bookmarkData = query.bookmarkData;
+      var scoped = false;
+      if (bookmarkData != null) {
+        try {
+          await bookmarkService.startAccessingBookmark(bookmarkData);
+          scoped = true;
+        } catch (e) {
+          debugPrint('Could not open scope for ${query.path}: $e');
+        }
+      }
+
+      try {
+        return await dataSource.scanSubdirectories(query.path);
+      } finally {
+        if (scoped) {
+          await bookmarkService.stopAccessingBookmark(bookmarkData!);
+        }
+      }
+    });
 
 // Settings use case providers
 final getAppSettingsUseCaseProvider = Provider<GetAppSettingsUseCase>((ref) {

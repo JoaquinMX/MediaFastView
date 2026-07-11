@@ -39,6 +39,46 @@ class FileDeleteError extends FileSystemError {
   const FileDeleteError(super.message);
 }
 
+/// Error for file move operations.
+class FileMoveError extends FileSystemError {
+  const FileMoveError(super.message);
+}
+
+/// Error for file copy operations.
+class FileCopyError extends FileSystemError {
+  const FileCopyError(super.message);
+}
+
+/// Error for a transfer whose destination is already taken by another item.
+///
+/// Carries [suggestedPath] — the name the item would take under "keep both" —
+/// so the conflict prompt can show the exact result and retry in one step.
+class DestinationExistsError extends FileSystemError {
+  const DestinationExistsError(
+    super.message, {
+    required this.destinationPath,
+    required this.suggestedPath,
+  });
+
+  final String destinationPath;
+  final String suggestedPath;
+}
+
+/// Error for moving a directory into itself or one of its descendants.
+class DestinationInsideSourceError extends FileSystemError {
+  const DestinationInsideSourceError(super.message);
+}
+
+/// Error for a transfer whose destination is the item's current location.
+class SamePathError extends FileSystemError {
+  const SamePathError(super.message);
+}
+
+/// Error for a transfer that ran out of room on the destination volume.
+class InsufficientSpaceError extends FileSystemError {
+  const InsufficientSpaceError(super.message);
+}
+
 /// Error for directory operations.
 class DirectoryError extends FileSystemError {
   const DirectoryError(super.message);

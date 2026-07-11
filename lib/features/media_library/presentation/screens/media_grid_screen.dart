@@ -16,7 +16,9 @@ import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
+import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
+import '../../../../shared/widgets/move_copy_media_action.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
 
@@ -448,12 +450,65 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         ),
         if (_isMacOS)
           IconButton(
+            icon: const Icon(Icons.drive_file_move_outline),
+            tooltip: 'Move this folder',
+            onPressed: () => unawaited(_moveCurrentDirectory()),
+          ),
+        if (_isMacOS)
+          IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Delete this folder',
             onPressed: () => unawaited(_deleteCurrentDirectory()),
           ),
       ],
     );
+  }
+
+  /// Moves the directory currently being viewed into another folder and follows
+  /// it there, so the user stays with the content they were looking at.
+  ///
+  /// Only a move is offered, not a copy: duplicating a folder would have to give
+  /// every file inside it a fresh identity, which is a lot of cache churn for
+  /// little benefit.
+  Future<void> _moveCurrentDirectory() async {
+    final media = _currentDirectoryAsMedia();
+    final container = ProviderScope.containerOf(context, listen: false);
+
+    // Whether this is a tracked library root decides what has to be refreshed
+    // afterwards, and the folder is easiest to identify before it moves.
+    final trackedRoot = await container
+        .read(directoryRepositoryProvider)
+        .getDirectoryById(media.id);
+    if (!mounted) return;
+
+    final moved = await pickDestinationAndTransferMedia(
+      context,
+      media,
+      mode: TransferMode.move,
+    );
+    if (moved == null || !mounted) return;
+
+    // The cache was reconciled during the transfer, so these can be rebuilt from
+    // it. Neither touches the grid family that owns `_viewModel`.
+    container.invalidate(directoryMediaCountsProvider);
+    if (trackedRoot != null) {
+      container.invalidate(directoryViewModelProvider);
+    }
+    if (!mounted) return;
+
+    // This route is keyed by the old path, which no longer exists. Replace it
+    // with one pointing at where the folder landed — while `_viewModel` is still
+    // alive, since invalidating the grid family below disposes it.
+    _viewModel?.navigateToDirectory(
+      moved.path,
+      moved.name,
+      bookmarkData: trackedRoot?.bookmarkData ?? widget.bookmarkData,
+      replaceCurrentRoute: true,
+    );
+
+    // Refresh the other grids (a parent grid still lists the folder at its old
+    // path) now that we no longer need the current one.
+    container.invalidate(mediaViewModelProvider);
   }
 
   /// Represents the directory currently being viewed as a deletable item.
@@ -612,6 +667,48 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           ),
         ),
         if (_isMacOS) ...[
+          const SizedBox(width: 8),
+          MenuAnchor(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: () => unawaited(
+                  _transferSelectedMedia(
+                    state.media,
+                    selectedMediaIds,
+                    viewModel,
+                    TransferMode.move,
+                  ),
+                ),
+                child: const Text('Move to…'),
+              ),
+              MenuItemButton(
+                onPressed: () => unawaited(
+                  _transferSelectedMedia(
+                    state.media,
+                    selectedMediaIds,
+                    viewModel,
+                    TransferMode.copy,
+                  ),
+                ),
+                child: const Text('Copy to…'),
+              ),
+            ],
+            builder: (context, controller, _) => FilledButton.icon(
+              onPressed: () =>
+                  controller.isOpen ? controller.close() : controller.open(),
+              icon: const Icon(Icons.drive_file_move_outline),
+              label: const Text('Move'),
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
           const SizedBox(width: 8),
           FilledButton.icon(
             onPressed: () => unawaited(
@@ -871,6 +968,38 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     // The rescan drops the trashed items, prunes them from the selection, and
     // refreshes the directory media counts.
     viewModel.clearMediaSelection();
+    await viewModel.loadMedia();
+  }
+
+  /// Moves or copies the current selection into one folder.
+  Future<void> _transferSelectedMedia(
+    List<MediaEntity> media,
+    Set<String> selectedMediaIds,
+    MediaViewModel viewModel,
+    TransferMode mode,
+  ) async {
+    final selected = media
+        .where((item) => selectedMediaIds.contains(item.id))
+        .toList(growable: false);
+    if (selected.isEmpty) {
+      return;
+    }
+
+    final container = ProviderScope.containerOf(context, listen: false);
+    final summary = await pickDestinationAndTransferMediaBatch(
+      context,
+      selected,
+      mode: mode,
+    );
+    if (summary == null || !summary.didAnything || !mounted) {
+      return;
+    }
+
+    // A moved item can come back with a different id (a cross-volume move or a
+    // rename changes it), so the selection is stale either way — drop it before
+    // reloading rather than trying to carry it across.
+    viewModel.clearMediaSelection();
+    container.invalidate(directoryMediaCountsProvider);
     await viewModel.loadMedia();
   }
 
@@ -1551,9 +1680,36 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           child: const Text('Info'),
           onTap: () => _onMediaLongPress(context, media),
         ),
+        if (_isMacOS) ...[
+          PopupMenuItem(
+            child: const Text('Move to…'),
+            // Routed through the State's context, not the menu's: the menu is
+            // gone by the time the destination picker opens.
+            onTap: () => unawaited(_transferMedia(media, TransferMode.move)),
+          ),
+          PopupMenuItem(
+            child: const Text('Copy to…'),
+            onTap: () => unawaited(_transferMedia(media, TransferMode.copy)),
+          ),
+        ],
         // Delete option is handled by FileOperationButton
       ],
     );
+  }
+
+  Future<void> _transferMedia(MediaEntity media, TransferMode mode) async {
+    final transferred = await pickDestinationAndTransferMedia(
+      context,
+      media,
+      mode: mode,
+    );
+    if (transferred == null || !mounted) return;
+
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).invalidate(directoryMediaCountsProvider);
+    await _viewModel?.loadMedia();
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {

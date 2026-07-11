@@ -1,7 +1,10 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/file_service.dart';
+import '../../../../core/services/file_transfer_result.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../domain/repositories/file_operations_repository.dart';
 
@@ -43,6 +46,49 @@ class FileOperationsRepositoryImpl implements FileOperationsRepository {
     }
     throw UnsupportedError(
       'Deleting directories is not supported on this platform',
+    );
+  }
+
+  @override
+  Future<FileTransferResult> moveItem(
+    String sourcePath, {
+    required String destinationDirectoryPath,
+    String? sourceBookmarkData,
+    String? destinationBookmarkData,
+    ConflictStrategy conflictStrategy = ConflictStrategy.fail,
+  }) {
+    if (!Platform.isMacOS) {
+      throw UnsupportedError('Moving files is not supported on this platform');
+    }
+    // The native call owns both security scopes, so as with delete we go
+    // straight to it rather than through FileService: a raw File.rename would
+    // run outside the scope and be denied by the sandbox.
+    return _bookmarkService.moveItem(
+      sourcePath: sourcePath,
+      destinationPath: p.join(destinationDirectoryPath, p.basename(sourcePath)),
+      sourceBookmarkData: sourceBookmarkData,
+      destinationBookmarkData: destinationBookmarkData,
+      conflictStrategy: conflictStrategy,
+    );
+  }
+
+  @override
+  Future<FileTransferResult> copyItem(
+    String sourcePath, {
+    required String destinationDirectoryPath,
+    String? sourceBookmarkData,
+    String? destinationBookmarkData,
+    ConflictStrategy conflictStrategy = ConflictStrategy.fail,
+  }) {
+    if (!Platform.isMacOS) {
+      throw UnsupportedError('Copying files is not supported on this platform');
+    }
+    return _bookmarkService.copyItem(
+      sourcePath: sourcePath,
+      destinationPath: p.join(destinationDirectoryPath, p.basename(sourcePath)),
+      sourceBookmarkData: sourceBookmarkData,
+      destinationBookmarkData: destinationBookmarkData,
+      conflictStrategy: conflictStrategy,
     );
   }
 

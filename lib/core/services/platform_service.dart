@@ -92,6 +92,12 @@ class PlatformService {
   /// the user's original file.
   bool get supportsFileDeletion => Platform.isMacOS;
 
+  /// Whether moving and copying files between directories is supported.
+  ///
+  /// macOS only, for the same reason as [supportsFileDeletion]: iOS has no
+  /// persistent security-scoped write access to the user's original files.
+  bool get supportsFileTransfer => Platform.isMacOS;
+
   /// Gets platform-specific path separator
   String get pathSeparator => Platform.pathSeparator;
 

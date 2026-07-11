@@ -1,16 +1,25 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/error/app_error.dart';
+import 'package:media_fast_view/core/services/bookmark_service.dart';
+import 'package:media_fast_view/core/services/file_transfer_result.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
+import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/file_operations_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/delete_directory_use_case.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/delete_file_use_case.dart';
+import 'package:media_fast_view/features/media_library/domain/use_cases/reconcile_transferred_media_use_case.dart';
+import 'package:media_fast_view/features/media_library/domain/use_cases/transfer_media_use_case.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/validate_path_use_case.dart';
 import 'package:media_fast_view/features/media_library/presentation/view_models/file_operations_view_model.dart';
+import 'package:path/path.dart' as p;
+
+import '../../../../helpers/in_memory_isar_stores.dart';
 
 /// Records the delete calls routed through the repository so we can assert the
 /// enclosing directory bookmark was threaded through.
@@ -48,6 +57,96 @@ class _RecordingFileOperationsRepository implements FileOperationsRepository {
     _record(directoryPath);
   }
 
+  /// Transfers, in call order.
+  final List<
+    ({
+      String source,
+      String destination,
+      String? sourceBookmark,
+      String? destinationBookmark,
+      ConflictStrategy strategy,
+      TransferMode mode,
+    })
+  >
+  transfers = [];
+
+  /// When set, the next transfer reports the destination as already taken.
+  String? conflictOnNextTransfer;
+
+  @override
+  Future<FileTransferResult> moveItem(
+    String sourcePath, {
+    required String destinationDirectoryPath,
+    String? sourceBookmarkData,
+    String? destinationBookmarkData,
+    ConflictStrategy conflictStrategy = ConflictStrategy.fail,
+  }) {
+    return _transfer(
+      sourcePath,
+      destinationDirectoryPath,
+      sourceBookmarkData,
+      destinationBookmarkData,
+      conflictStrategy,
+      TransferMode.move,
+    );
+  }
+
+  @override
+  Future<FileTransferResult> copyItem(
+    String sourcePath, {
+    required String destinationDirectoryPath,
+    String? sourceBookmarkData,
+    String? destinationBookmarkData,
+    ConflictStrategy conflictStrategy = ConflictStrategy.fail,
+  }) {
+    return _transfer(
+      sourcePath,
+      destinationDirectoryPath,
+      sourceBookmarkData,
+      destinationBookmarkData,
+      conflictStrategy,
+      TransferMode.copy,
+    );
+  }
+
+  Future<FileTransferResult> _transfer(
+    String sourcePath,
+    String destinationDirectoryPath,
+    String? sourceBookmark,
+    String? destinationBookmark,
+    ConflictStrategy strategy,
+    TransferMode mode,
+  ) async {
+    transfers.add((
+      source: sourcePath,
+      destination: destinationDirectoryPath,
+      sourceBookmark: sourceBookmark,
+      destinationBookmark: destinationBookmark,
+      strategy: strategy,
+      mode: mode,
+    ));
+
+    final conflict = conflictOnNextTransfer;
+    if (conflict != null && strategy == ConflictStrategy.fail) {
+      throw DestinationExistsError(
+        'already exists',
+        destinationPath: conflict,
+        suggestedPath: conflict.replaceFirst('.jpg', ' 2.jpg'),
+      );
+    }
+
+    final name = p.basename(sourcePath);
+    return FileTransferResult(
+      sourcePath: sourcePath,
+      destinationPath: p.join(destinationDirectoryPath, name),
+      renamed: false,
+      sameVolume: true,
+      size: 1,
+      lastModified: DateTime(2021, 1, 1),
+      isDirectory: false,
+    );
+  }
+
   void _record(String path) {
     final failure = failures[path];
     if (failure != null) {
@@ -59,6 +158,27 @@ class _RecordingFileOperationsRepository implements FileOperationsRepository {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       super.noSuchMethod(invocation);
+}
+
+/// The reconciler is exercised in its own suite; here it only has to exist, so
+/// it is backed by throwaway in-memory stores.
+class _NoopBookmarkService implements BookmarkService {
+  @override
+  Future<String> startAccessingBookmark(String bookmarkData) async => '/scope';
+
+  @override
+  Future<void> stopAccessingBookmark(String bookmarkData) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+IsarMediaDataSource _inMemoryMediaDataSource() {
+  return IsarMediaDataSource(
+    FakeIsarDatabase(),
+    mediaStoreBuilder: (_) => InMemoryMediaCollectionStore(),
+    directoryStoreBuilder: (_) => InMemoryDirectoryCollectionStore(),
+  );
 }
 
 class _FakeDirectoryRepository implements DirectoryRepository {
@@ -174,6 +294,14 @@ void main() {
       ValidatePathUseCase(repo),
       directoryRepo,
       favoritesRepo,
+      MoveMediaUseCase(repo),
+      CopyMediaUseCase(repo),
+      ReconcileTransferredMediaUseCase(
+        _inMemoryMediaDataSource(),
+        favoritesRepo,
+        directoryRepo,
+        _NoopBookmarkService(),
+      ),
     );
   }
 
@@ -435,5 +563,138 @@ void main() {
       },
       skip: macOnly,
     );
+  });
+
+  group('transferMedia', () {
+    test(
+      'threads the enclosing root bookmark for both source and destination',
+      () async {
+        directoryRepo = _FakeDirectoryRepository({
+          'dir-1': _directory(bookmarkData: 'root-bookmark'),
+        });
+        final viewModel = buildViewModel();
+
+        await viewModel.transferMedia(
+          _file('image.jpg'),
+          destinationDirectoryPath: '/library/trips',
+          mode: TransferMode.move,
+        );
+
+        expect(repo.transfers, hasLength(1));
+        final transfer = repo.transfers.single;
+        expect(transfer.source, '/library/image.jpg');
+        expect(transfer.destination, '/library/trips');
+        expect(transfer.sourceBookmark, 'root-bookmark');
+        // The destination is inside the same tracked root, so that root's
+        // bookmark covers it too.
+        expect(transfer.destinationBookmark, 'root-bookmark');
+        expect(transfer.mode, TransferMode.move);
+        expect(viewModel.debugState, isA<FileOperationsTransferSuccess>());
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'prefers the bookmark handed in by the destination picker',
+      () async {
+        final viewModel = buildViewModel();
+
+        await viewModel.transferMedia(
+          _file('image.jpg'),
+          destinationDirectoryPath: '/elsewhere',
+          destinationBookmarkData: 'picked-bookmark',
+          mode: TransferMode.copy,
+        );
+
+        expect(repo.transfers.single.destinationBookmark, 'picked-bookmark');
+        expect(repo.transfers.single.mode, TransferMode.copy);
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'refuses a destination no bookmark covers, without touching the disk',
+      () async {
+        directoryRepo = _FakeDirectoryRepository({
+          'dir-1': _directory(bookmarkData: 'root-bookmark'),
+        });
+        final viewModel = buildViewModel();
+
+        // Outside every tracked root, and no bookmark was supplied — the sandbox
+        // would reject the write, so it must not be attempted.
+        await viewModel.transferMedia(
+          _file('image.jpg'),
+          destinationDirectoryPath: '/somewhere/untracked',
+          mode: TransferMode.move,
+        );
+
+        expect(repo.transfers, isEmpty);
+        expect(viewModel.debugState, isA<FileOperationsError>());
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'surfaces a taken destination as a conflict carrying the suggested name',
+      () async {
+        repo.conflictOnNextTransfer = '/library/trips/image.jpg';
+        final viewModel = buildViewModel();
+
+        await viewModel.transferMedia(
+          _file('image.jpg'),
+          destinationDirectoryPath: '/library/trips',
+          destinationBookmarkData: 'bookmark',
+          mode: TransferMode.move,
+        );
+
+        final state = viewModel.debugState;
+        expect(state, isA<FileOperationsConflict>());
+        expect(
+          (state as FileOperationsConflict).suggestedPath,
+          '/library/trips/image 2.jpg',
+        );
+        expect(repo.transfers.single.strategy, ConflictStrategy.fail);
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'retrying after a conflict asks for the keep-both rename',
+      () async {
+        repo.conflictOnNextTransfer = '/library/trips/image.jpg';
+        final viewModel = buildViewModel();
+
+        await viewModel.transferMedia(
+          _file('image.jpg'),
+          destinationDirectoryPath: '/library/trips',
+          destinationBookmarkData: 'bookmark',
+          mode: TransferMode.move,
+          conflictStrategy: ConflictStrategy.keepBoth,
+        );
+
+        // keepBoth never conflicts: the native side renames instead of failing.
+        expect(repo.transfers.single.strategy, ConflictStrategy.keepBoth);
+        expect(viewModel.debugState, isA<FileOperationsTransferSuccess>());
+      },
+      skip: macOnly,
+    );
+
+    test('is rejected off macOS, without touching the disk', () async {
+      final viewModel = buildViewModel();
+
+      await viewModel.transferMedia(
+        _file('image.jpg'),
+        destinationDirectoryPath: '/library/trips',
+        destinationBookmarkData: 'bookmark',
+        mode: TransferMode.move,
+      );
+
+      if (Platform.isMacOS) {
+        expect(viewModel.debugState, isA<FileOperationsTransferSuccess>());
+      } else {
+        expect(repo.transfers, isEmpty);
+        expect(viewModel.debugState, isA<FileOperationsError>());
+      }
+    });
   });
 }

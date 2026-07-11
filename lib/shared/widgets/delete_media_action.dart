@@ -10,6 +10,7 @@ import '../../features/media_library/domain/entities/media_entity.dart';
 import '../../features/media_library/presentation/view_models/file_operations_view_model.dart';
 import '../providers/settings_providers.dart';
 import 'confirmation_dialog.dart';
+import 'info_dialog.dart';
 
 /// Shows the delete confirmation and moves [media] to the Trash.
 ///
@@ -37,7 +38,7 @@ Future<bool> confirmAndDeleteMedia(
 
   final blocked = _deleteBlockedInfo(container);
   if (blocked != null) {
-    await _showInfoDialog(
+    await showInfoDialog(
       context,
       title: blocked.title,
       message: blocked.message,
@@ -117,7 +118,7 @@ Future<BatchUpdateResult?> confirmAndDeleteMediaBatch(
 
   final blocked = _deleteBlockedInfo(container);
   if (blocked != null) {
-    await _showInfoDialog(
+    await showInfoDialog(
       context,
       title: blocked.title,
       message: blocked.message,
@@ -289,24 +290,4 @@ class _BulkDeleteProgressDialog extends StatelessWidget {
       ),
     );
   }
-}
-
-Future<void> _showInfoDialog(
-  BuildContext context, {
-  required String title,
-  required String message,
-}) {
-  return showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: Text(message),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('OK'),
-        ),
-      ],
-    ),
-  );
 }

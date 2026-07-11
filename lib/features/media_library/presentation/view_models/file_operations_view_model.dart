@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../../core/error/app_error.dart';
+import '../../../../core/services/file_transfer_result.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/utils/batch_update_result.dart';
 import '../../../../shared/providers/repository_providers.dart';
@@ -12,6 +14,8 @@ import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
 import '../../domain/use_cases/delete_directory_use_case.dart';
 import '../../domain/use_cases/delete_file_use_case.dart';
+import '../../domain/use_cases/reconcile_transferred_media_use_case.dart';
+import '../../domain/use_cases/transfer_media_use_case.dart';
 import '../../domain/use_cases/validate_path_use_case.dart';
 
 /// State for file operations
@@ -39,6 +43,35 @@ class FileOperationsError extends FileOperationsState {
   final String message;
 }
 
+/// A transfer stopped because the destination name is already taken.
+///
+/// [suggestedPath] is the name the item would take under "keep both", so the
+/// prompt can show the exact result before the user commits to it.
+class FileOperationsConflict extends FileOperationsState {
+  const FileOperationsConflict({
+    required this.media,
+    required this.destinationPath,
+    required this.suggestedPath,
+  });
+
+  final MediaEntity media;
+  final String destinationPath;
+  final String suggestedPath;
+}
+
+/// A move or copy that landed, carrying the item as it now exists.
+class FileOperationsTransferSuccess extends FileOperationsSuccess {
+  const FileOperationsTransferSuccess(
+    super.message, {
+    required this.media,
+    required this.transfer,
+  });
+
+  /// The item at its destination, after the cache was reconciled.
+  final MediaEntity media;
+  final FileTransferResult transfer;
+}
+
 /// ViewModel for file operations
 class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
   FileOperationsViewModel(
@@ -47,6 +80,9 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
     this._validatePathUseCase,
     this._directoryRepository,
     this._favoritesRepository,
+    this._moveMediaUseCase,
+    this._copyMediaUseCase,
+    this._reconcileUseCase,
   ) : super(const FileOperationsInitial());
 
   final DeleteFileUseCase _deleteFileUseCase;
@@ -54,9 +90,90 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
   final ValidatePathUseCase _validatePathUseCase;
   final DirectoryRepository _directoryRepository;
   final FavoritesRepository _favoritesRepository;
+  final MoveMediaUseCase _moveMediaUseCase;
+  final CopyMediaUseCase _copyMediaUseCase;
+  final ReconcileTransferredMediaUseCase _reconcileUseCase;
 
   static const String _unsupportedMessage =
       'Deleting files from the device is only supported on macOS.';
+
+  static const String _unsupportedTransferMessage =
+      'Moving and copying files is only supported on macOS.';
+
+  /// Moves or copies [media] into [destinationDirectoryPath].
+  ///
+  /// The cache is reconciled before this returns, so callers are free to
+  /// invalidate providers immediately afterwards without losing the item's tags.
+  Future<void> transferMedia(
+    MediaEntity media, {
+    required String destinationDirectoryPath,
+    required TransferMode mode,
+    String? destinationBookmarkData,
+    ConflictStrategy conflictStrategy = ConflictStrategy.fail,
+  }) async {
+    if (!Platform.isMacOS) {
+      state = const FileOperationsError(_unsupportedTransferMessage);
+      return;
+    }
+
+    state = const FileOperationsLoading();
+    try {
+      final sourceBookmark = await _resolveDirectoryBookmark(media);
+      final destinationBookmark =
+          destinationBookmarkData ??
+          await _resolveBookmarkForPath(destinationDirectoryPath);
+
+      // Without a bookmark covering the destination the sandbox will refuse the
+      // write. Say so plainly rather than letting it fail as a permission error.
+      if (destinationBookmark == null) {
+        state = const FileOperationsError(
+          'This app has no access to that folder. Pick it with "Choose Folder…" '
+          'to grant access.',
+        );
+        return;
+      }
+
+      final isMove = mode == TransferMode.move;
+      final transfer = isMove
+          ? await _moveMediaUseCase(
+              media.path,
+              destinationDirectoryPath: destinationDirectoryPath,
+              sourceBookmarkData: sourceBookmark,
+              destinationBookmarkData: destinationBookmark,
+              conflictStrategy: conflictStrategy,
+            )
+          : await _copyMediaUseCase(
+              media.path,
+              destinationDirectoryPath: destinationDirectoryPath,
+              sourceBookmarkData: sourceBookmark,
+              destinationBookmarkData: destinationBookmark,
+              conflictStrategy: conflictStrategy,
+            );
+
+      final reconciled = await _reconcileUseCase(
+        source: media,
+        transfer: transfer,
+        destinationDirectoryPath: destinationDirectoryPath,
+        mode: mode,
+        destinationBookmarkData: destinationBookmark,
+      );
+
+      final destinationName = p.basename(destinationDirectoryPath);
+      state = FileOperationsTransferSuccess(
+        '${isMove ? 'Moved' : 'Copied'} to $destinationName',
+        media: reconciled.media,
+        transfer: transfer,
+      );
+    } on DestinationExistsError catch (e) {
+      state = FileOperationsConflict(
+        media: media,
+        destinationPath: e.destinationPath,
+        suggestedPath: e.suggestedPath,
+      );
+    } catch (e) {
+      state = FileOperationsError(e.toString());
+    }
+  }
 
   /// Moves a media item (file or directory) to the Trash.
   Future<void> deleteMedia(
@@ -271,6 +388,27 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
     return _resolveBookmarkFrom(media, directories);
   }
 
+  /// Finds the bookmark granting sandboxed access to an arbitrary [path].
+  ///
+  /// A transfer's destination has no [MediaEntity] to look up by directory id,
+  /// so this goes straight to the deepest tracked root containing the path —
+  /// whose bookmark also covers everything beneath it.
+  Future<String?> _resolveBookmarkForPath(String path) async {
+    final directories = await _directoryRepository.getDirectories();
+
+    DirectoryEntity? enclosing;
+    for (final dir in directories) {
+      if (dir.bookmarkData == null) continue;
+      final coversPath = path == dir.path || p.isWithin(dir.path, path);
+      if (!coversPath) continue;
+      if (enclosing == null || dir.path.length > enclosing.path.length) {
+        enclosing = dir;
+      }
+    }
+
+    return enclosing?.bookmarkData;
+  }
+
   /// Same resolution as [_resolveDirectoryBookmark] against an already-loaded
   /// directory list, so a batch reads the directories once instead of per item.
   String? _resolveBookmarkFrom(
@@ -337,5 +475,8 @@ final fileOperationsViewModelProvider =
         ref.watch(validatePathUseCaseProvider),
         ref.watch(directoryRepositoryProvider),
         ref.watch(favoritesRepositoryProvider),
+        ref.watch(moveMediaUseCaseProvider),
+        ref.watch(copyMediaUseCaseProvider),
+        ref.watch(reconcileTransferredMediaUseCaseProvider),
       ),
     );

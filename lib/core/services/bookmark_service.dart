@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import '../error/app_error.dart';
+import 'file_transfer_result.dart';
 import 'logging_service.dart';
 
 /// Service for handling macOS security-scoped bookmark operations
@@ -16,6 +18,8 @@ class BookmarkService {
   static const String _startAccessingBookmark = 'startAccessingBookmark';
   static const String _stopAccessingBookmark = 'stopAccessingBookmark';
   static const String _moveToTrash = 'moveToTrash';
+  static const String _moveItem = 'moveItem';
+  static const String _copyItem = 'copyItem';
 
   // Singleton instance
   static final BookmarkService instance = BookmarkService._();
@@ -224,6 +228,119 @@ class BookmarkService {
     } catch (e) {
       _logError('Unexpected error moving item to Trash: $path', e);
       throw Exception('Unexpected error moving item to Trash: $e');
+    }
+  }
+
+  /// Moves an item to [destinationPath] (a full path including the file name).
+  ///
+  /// macOS only. The native call holds security-scoped access to both the source
+  /// and the destination for the duration of the transfer, which is why both
+  /// bookmarks are threaded through.
+  Future<FileTransferResult> moveItem({
+    required String sourcePath,
+    required String destinationPath,
+    String? sourceBookmarkData,
+    String? destinationBookmarkData,
+    ConflictStrategy conflictStrategy = ConflictStrategy.fail,
+  }) {
+    return _transfer(
+      method: _moveItem,
+      label: 'move',
+      sourcePath: sourcePath,
+      destinationPath: destinationPath,
+      sourceBookmarkData: sourceBookmarkData,
+      destinationBookmarkData: destinationBookmarkData,
+      conflictStrategy: conflictStrategy,
+    );
+  }
+
+  /// Copies an item to [destinationPath] (a full path including the file name).
+  ///
+  /// macOS only. The native call stamps a fresh modification time on the copy so
+  /// it takes on an identity of its own rather than colliding with its source.
+  Future<FileTransferResult> copyItem({
+    required String sourcePath,
+    required String destinationPath,
+    String? sourceBookmarkData,
+    String? destinationBookmarkData,
+    ConflictStrategy conflictStrategy = ConflictStrategy.fail,
+  }) {
+    return _transfer(
+      method: _copyItem,
+      label: 'copy',
+      sourcePath: sourcePath,
+      destinationPath: destinationPath,
+      sourceBookmarkData: sourceBookmarkData,
+      destinationBookmarkData: destinationBookmarkData,
+      conflictStrategy: conflictStrategy,
+    );
+  }
+
+  Future<FileTransferResult> _transfer({
+    required String method,
+    required String label,
+    required String sourcePath,
+    required String destinationPath,
+    required String? sourceBookmarkData,
+    required String? destinationBookmarkData,
+    required ConflictStrategy conflictStrategy,
+  }) async {
+    if (!Platform.isMacOS) {
+      throw UnsupportedError(
+        'Moving and copying files is only supported on macOS',
+      );
+    }
+
+    try {
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>(method, {
+        'sourcePath': sourcePath,
+        'destinationPath': destinationPath,
+        if (sourceBookmarkData != null) 'sourceBookmarkData': sourceBookmarkData,
+        if (destinationBookmarkData != null)
+          'destinationBookmarkData': destinationBookmarkData,
+        'conflictStrategy': conflictStrategy.name,
+      });
+
+      if (result == null) {
+        throw FileMoveError('The $label returned no result');
+      }
+      return FileTransferResult.fromMap(result);
+    } on PlatformException catch (e) {
+      _logError('Failed to $label $sourcePath -> $destinationPath', e);
+      throw _transferError(e, label: label);
+    }
+  }
+
+  /// Maps a native failure onto a typed error.
+  ///
+  /// Unlike [moveToTrash], this deliberately preserves the native error code:
+  /// the conflict prompt exists only because `DESTINATION_EXISTS` survives the
+  /// trip back, carrying the name the item would take under "keep both".
+  AppError _transferError(PlatformException e, {required String label}) {
+    final message = e.message ?? 'The $label failed';
+
+    switch (e.code) {
+      case 'DESTINATION_EXISTS':
+        final details = e.details as Map<Object?, Object?>?;
+        return DestinationExistsError(
+          message,
+          destinationPath: details?['destinationPath'] as String? ?? '',
+          suggestedPath: details?['suggestedPath'] as String? ?? '',
+        );
+      case 'DESTINATION_INSIDE_SOURCE':
+        return DestinationInsideSourceError(message);
+      case 'SAME_PATH':
+        return SamePathError(message);
+      case 'INSUFFICIENT_SPACE':
+        return InsufficientSpaceError(message);
+      case 'SOURCE_NOT_FOUND':
+        return FileNotFoundError(message);
+      case 'DESTINATION_PARENT_NOT_FOUND':
+        return DirectoryNotFoundError(message);
+      case 'BOOKMARK_ACCESS':
+        return FileAccessDeniedError(message);
+      default:
+        return label == 'move' ? FileMoveError(message) : FileCopyError(message);
     }
   }
 

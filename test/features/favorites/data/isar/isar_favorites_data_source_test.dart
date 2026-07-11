@@ -1,41 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:isar/isar.dart';
-import 'package:media_fast_view/core/services/isar_database.dart';
 import 'package:media_fast_view/features/favorites/data/isar/favorite_collection.dart';
 import 'package:media_fast_view/features/favorites/data/isar/isar_favorites_data_source.dart';
 import 'package:media_fast_view/features/favorites/data/models/favorite_model.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/media_library/data/isar/directory_collection.dart';
-import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
-import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/media_collection.dart';
 import 'package:media_fast_view/features/media_library/data/models/directory_model.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 
 import '../../../../../test/helpers/isar_id.dart';
-
-class _FakeIsarDatabase extends IsarDatabase {
-  _FakeIsarDatabase()
-      : super(
-          schemas: const [],
-          openIsar: _throwingOpen,
-        );
-
-  static Future<Isar> _throwingOpen(
-    List<CollectionSchema<dynamic>> schemas, {
-    String? directory,
-    String? name,
-  }) async {
-    throw UnimplementedError();
-  }
-
-  @override
-  bool get isOpen => true;
-
-  @override
-  Isar get instance => throw UnimplementedError();
-}
+import '../../../../helpers/in_memory_isar_stores.dart';
 
 class _InMemoryFavoriteCollectionStore implements FavoriteCollectionStore {
   final Map<Id, FavoriteCollection> _data = <Id, FavoriteCollection>{};
@@ -124,135 +100,19 @@ class _InMemoryFavoriteCollectionStore implements FavoriteCollectionStore {
   }
 }
 
-class _InMemoryMediaCollectionStore implements MediaCollectionStore {
-  final Map<Id, MediaCollection> _data = <Id, MediaCollection>{};
-
-  @override
-  Future<void> clear() async {
-    _data.clear();
-  }
-
-  @override
-  Future<void> deleteByIds(List<Id> ids) async {
-    for (final id in ids) {
-      _data.remove(id);
-    }
-  }
-
-  @override
-  Future<List<MediaCollection>> getAll() async {
-    return _data.values.map(_clone).toList(growable: false);
-  }
-
-  @override
-  Future<MediaCollection?> getById(Id id) async {
-    final media = _data[id];
-    return media == null ? null : _clone(media);
-  }
-
-  @override
-  Future<MediaCollection?> getByMediaId(String mediaId) async {
-    try {
-      final media = _data.values.firstWhere(
-        (m) => m.mediaId == mediaId,
-      );
-      return _clone(media);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  @override
-  Future<List<MediaCollection>> getByDirectoryId(String directoryId) async {
-    return _data.values
-        .where((media) => media.directoryId == directoryId)
-        .map(_clone)
-        .toList(growable: false);
-  }
-
-  @override
-  Future<void> put(MediaCollection media) async {
-    _data[isarIdForString(media.mediaId)] = _clone(media);
-  }
-
-  @override
-  Future<void> putAll(List<MediaCollection> media) async {
-    for (final item in media) {
-      await put(item);
-    }
-  }
-
-  @override
-  Future<T> writeTxn<T>(Future<T> Function() action) {
-    return action();
-  }
-
-  MediaCollection _clone(MediaCollection media) {
-    final clone = media.toModel().toCollection();
-    clone.directory.value = media.directory.value;
-    return clone;
-  }
-}
-
-class _InMemoryDirectoryCollectionStore implements DirectoryCollectionStore {
-  final Map<Id, DirectoryCollection> _data = <Id, DirectoryCollection>{};
-
-  @override
-  Future<void> clear() async {
-    _data.clear();
-  }
-
-  @override
-  Future<void> deleteById(Id id) async {
-    _data.remove(id);
-  }
-
-  @override
-  Future<List<DirectoryCollection>> getAll() async {
-    return _data.values.map(_clone).toList(growable: false);
-  }
-
-  @override
-  Future<DirectoryCollection?> getByDirectoryId(String directoryId) async {
-    final directory = _data[isarIdForString(directoryId)];
-    return directory == null ? null : _clone(directory);
-  }
-
-  @override
-  Future<void> put(DirectoryCollection directory) async {
-    _data[isarIdForString(directory.directoryId)] = _clone(directory);
-  }
-
-  @override
-  Future<void> putAll(List<DirectoryCollection> directories) async {
-    for (final directory in directories) {
-      await put(directory);
-    }
-  }
-
-  @override
-  Future<T> writeTxn<T>(Future<T> Function() action) {
-    return action();
-  }
-
-  DirectoryCollection _clone(DirectoryCollection directory) {
-    return directory.toModel().toCollection();
-  }
-}
-
 void main() {
   group('IsarFavoritesDataSource', () {
-    late _FakeIsarDatabase database;
+    late FakeIsarDatabase database;
     late _InMemoryFavoriteCollectionStore favoriteStore;
-    late _InMemoryMediaCollectionStore mediaStore;
-    late _InMemoryDirectoryCollectionStore directoryStore;
+    late InMemoryMediaCollectionStore mediaStore;
+    late InMemoryDirectoryCollectionStore directoryStore;
     late IsarFavoritesDataSource dataSource;
 
     setUp(() {
-      database = _FakeIsarDatabase();
+      database = FakeIsarDatabase();
       favoriteStore = _InMemoryFavoriteCollectionStore();
-      mediaStore = _InMemoryMediaCollectionStore();
-      directoryStore = _InMemoryDirectoryCollectionStore();
+      mediaStore = InMemoryMediaCollectionStore();
+      directoryStore = InMemoryDirectoryCollectionStore();
       dataSource = IsarFavoritesDataSource(
         database,
         favoriteStoreBuilder: (_) => favoriteStore,

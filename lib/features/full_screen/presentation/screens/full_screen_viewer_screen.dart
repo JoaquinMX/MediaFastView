@@ -23,7 +23,9 @@ import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/favorite_toggle_button.dart';
 import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
+import '../../../../shared/widgets/move_copy_media_action.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
 import '../../../../shared/widgets/tag_overlay.dart';
 import '../../../../shared/widgets/tag_selection_dialog.dart';
@@ -176,6 +178,31 @@ class _FullScreenViewerScreenState
                     backgroundColor: colorScheme.primary.withOpacity(0.2),
                   ),
                 ),
+                moveButton: Platform.isMacOS
+                    ? PopupMenuButton<TransferMode>(
+                        icon: Icon(
+                          Icons.drive_file_move_outline,
+                          color: colorScheme.onSurface,
+                        ),
+                        tooltip: 'Move (⌘M) or copy (⌘D)',
+                        onSelected: (mode) => unawaited(
+                          _handleTransferCurrentMedia(
+                            state.currentMedia,
+                            mode,
+                          ),
+                        ),
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: TransferMode.move,
+                            child: Text('Move to…'),
+                          ),
+                          PopupMenuItem(
+                            value: TransferMode.copy,
+                            child: Text('Copy to…'),
+                          ),
+                        ],
+                      )
+                    : null,
                 deleteButton: Platform.isMacOS
                     ? IconButton(
                         onPressed: () =>
@@ -371,13 +398,64 @@ class _FullScreenViewerScreenState
           child: const Text('Favorite'),
           onTap: () => _toggleFavoriteAndRefreshTags(),
         ),
-        if (Platform.isMacOS)
+        if (Platform.isMacOS) ...[
+          PopupMenuItem(
+            onTap: () => _handleTransferCurrentMedia(media, TransferMode.move),
+            child: const Text('Move to…'),
+          ),
+          PopupMenuItem(
+            onTap: () => _handleTransferCurrentMedia(media, TransferMode.copy),
+            child: const Text('Copy to…'),
+          ),
           PopupMenuItem(
             onTap: () => _handleDeleteCurrentMedia(media),
             child: const Text('Delete'),
           ),
+        ],
       ],
     );
+  }
+
+  /// Moves or copies the current media into another folder.
+  ///
+  /// A move takes the item out of this directory, so the viewer advances past
+  /// it; a copy leaves it where it is, so the viewer stays put.
+  Future<void> _handleTransferCurrentMedia(
+    MediaEntity media,
+    TransferMode mode,
+  ) async {
+    // Pick the destination before touching playback: the user may cancel, and
+    // stopping a video they are still watching would be rude.
+    final transferred = await pickDestinationAndTransferMedia(
+      context,
+      media,
+      mode: mode,
+    );
+    if (transferred == null || !mounted) {
+      return;
+    }
+
+    ref.invalidate(mediaViewModelProvider);
+    ref.invalidate(directoryMediaCountsProvider);
+
+    if (mode == TransferMode.copy) {
+      // The item on screen is untouched by a copy.
+      _focusNode.requestFocus();
+      return;
+    }
+
+    // A cross-volume move unlinks the file underneath the player, so let go of
+    // it before advancing.
+    _videoPlayerKey.currentState?.stopPlayback();
+    final hasMore = await _viewModel.removeCurrentMedia();
+    if (!mounted) {
+      return;
+    }
+    if (hasMore) {
+      _focusNode.requestFocus();
+    } else {
+      _popWithResult();
+    }
   }
 
   /// Moves the current media to the Trash and advances the viewer (closing it
@@ -818,6 +896,30 @@ class _FullScreenViewerScreenState
       if (shortcutIndex != null && shortcutIndex < state.shortcutTags.length) {
         unawaited(_handleTagShortcut(state.shortcutTags[shortcutIndex]));
         return KeyEventResult.handled;
+      }
+    }
+
+    // Checked ahead of the switch below, which ignores modifiers: bare M and L
+    // are already mute and loop, so the transfer shortcuts have to be the
+    // command-key variants.
+    if (Platform.isMacOS && _isPrimaryModifierPressed(pressedKeys)) {
+      switch (event.logicalKey) {
+        case LogicalKeyboardKey.keyM:
+          unawaited(
+            _handleTransferCurrentMedia(
+              state.currentMedia,
+              TransferMode.move,
+            ),
+          );
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.keyD:
+          unawaited(
+            _handleTransferCurrentMedia(
+              state.currentMedia,
+              TransferMode.copy,
+            ),
+          );
+          return KeyEventResult.handled;
       }
     }
 

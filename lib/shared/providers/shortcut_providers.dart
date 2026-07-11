@@ -118,6 +118,18 @@ final shortcutCategoriesProvider = Provider<List<ShortcutCategory>>((ref) {
       title: 'File actions',
       actions: <ShortcutAction>[
         ShortcutAction(
+          keys: <String>['⌘', 'M'],
+          description:
+              'Move the current item to another folder (macOS). Plain M is '
+              'mute, so this needs the Command key.',
+          contexts: <String>[_fullScreenContext],
+        ),
+        ShortcutAction(
+          keys: <String>['⌘', 'D'],
+          description: 'Copy the current item to another folder (macOS).',
+          contexts: <String>[_fullScreenContext],
+        ),
+        ShortcutAction(
           keys: <String>['Delete', 'Backspace'],
           description:
               'Move the current item to the Trash (macOS; requires '

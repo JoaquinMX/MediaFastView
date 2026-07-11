@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:isar/isar.dart';
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/isar_database.dart';
@@ -239,6 +240,135 @@ class IsarMediaDataSource {
     }, 'Failed to migrate media directory references');
   }
 
+  /// Moves the record for [mediaId] to a new location, keeping its identity.
+  ///
+  /// Used when a transfer left the media id intact (a same-volume move that
+  /// kept the file name). The tags live on this row, so updating it in place is
+  /// what preserves them — a rescan of the destination would otherwise find no
+  /// row for the arriving file and reset its tags to empty.
+  Future<void> relocateMedia({
+    required String mediaId,
+    required String newPath,
+    required String newName,
+    required String newDirectoryId,
+    int? newSize,
+    DateTime? newLastModified,
+  }) async {
+    await _executeSafely(() async {
+      final existing = await _mediaStore.getByMediaId(mediaId);
+      if (existing == null) {
+        LoggingService.instance.warning(
+          'Cannot relocate media $mediaId: no persisted record',
+        );
+        return;
+      }
+
+      await _warnIfPathTaken(newPath, byMediaId: mediaId);
+
+      final directory = await _directoryStore.getByDirectoryId(newDirectoryId);
+      await _mediaStore.writeTxn(() async {
+        existing.path = newPath;
+        existing.name = newName;
+        existing.directoryId = newDirectoryId;
+        existing.directory.value = directory;
+        if (newSize != null) existing.size = newSize;
+        if (newLastModified != null) existing.lastModified = newLastModified;
+        await _mediaStore.put(existing);
+      });
+    }, 'Failed to relocate media');
+  }
+
+  /// Re-keys the record for [oldMediaId] onto [newMedia].
+  ///
+  /// Used when a transfer changed the media id (a cross-volume move, or one
+  /// renamed to avoid a collision — the file name is part of the id). The Isar
+  /// primary key is derived from the media id, so this is a delete plus an
+  /// insert rather than an update. The caller is responsible for carrying the
+  /// tags over on [newMedia].
+  Future<void> replaceMedia({
+    required String oldMediaId,
+    required MediaModel newMedia,
+  }) async {
+    await replaceMediaBatch([
+      (oldMediaId: oldMediaId, newMedia: newMedia),
+    ]);
+  }
+
+  /// Batch form of [replaceMedia], for re-keying a moved directory's subtree.
+  Future<void> replaceMediaBatch(
+    List<({String oldMediaId, MediaModel newMedia})> entries,
+  ) async {
+    if (entries.isEmpty) {
+      return;
+    }
+
+    await _executeSafely(() async {
+      final collections = <MediaCollection>[];
+      final staleIds = <Id>[];
+
+      for (final entry in entries) {
+        await _warnIfPathTaken(
+          entry.newMedia.path,
+          byMediaId: entry.newMedia.id,
+        );
+
+        final collection = entry.newMedia.toCollection();
+        collection.directory.value = await _directoryStore.getByDirectoryId(
+          entry.newMedia.directoryId,
+        );
+        collections.add(collection);
+
+        // When the id survived the transfer the old and new rows are the same
+        // record, so there is nothing to delete.
+        if (entry.oldMediaId != entry.newMedia.id) {
+          staleIds.add(mediaCollectionIdFromMediaId(entry.oldMediaId));
+        }
+      }
+
+      await _mediaStore.writeTxn(() async {
+        await _mediaStore.deleteByIds(staleIds);
+        for (final collection in collections) {
+          await _mediaStore.put(collection);
+        }
+      });
+    }, 'Failed to replace media');
+  }
+
+  /// Loads every persisted record living under [directoryPath].
+  ///
+  /// Needed after a directory move: its descendants' paths and directory ids are
+  /// all stale, and they are not reachable by directory id alone (an untracked
+  /// subdirectory's children carry the *root's* directory id).
+  Future<List<MediaModel>> getMediaUnderPath(String directoryPath) async {
+    await _ensureReady();
+    try {
+      final all = await _mediaStore.getAll();
+      return all
+          .where((collection) => p.isWithin(directoryPath, collection.path))
+          .map((collection) => collection.toModel())
+          .toList(growable: false);
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        PersistenceError('Failed to load media under path: $error'),
+        stackTrace,
+      );
+    }
+  }
+
+  /// `path` is a unique index with `replace: true`, so writing a row whose path
+  /// already belongs to a *different* record silently deletes that record. A
+  /// miscomputed destination path would therefore destroy data instead of
+  /// failing, which is worth a loud log.
+  Future<void> _warnIfPathTaken(String path, {required String byMediaId}) async {
+    final occupant = await _mediaStore.getByPath(path);
+    if (occupant != null && occupant.mediaId != byMediaId) {
+      LoggingService.instance.warning(
+        'Writing media $byMediaId to $path will replace existing record '
+        '${occupant.mediaId} held at the same path',
+      );
+    }
+  }
+
   /// Removes every persisted media entry.
   Future<void> clearMedia() async {
     await _executeSafely(
@@ -331,6 +461,10 @@ abstract interface class MediaCollectionStore {
 
   Future<MediaCollection?> getByMediaId(String mediaId);
 
+  /// Looks up the record currently occupying [path]. Case-insensitive, matching
+  /// the unique index on `MediaCollection.path`.
+  Future<MediaCollection?> getByPath(String path);
+
   Future<List<MediaCollection>> getByDirectoryId(String directoryId);
 
   Future<void> deleteByIds(List<Id> ids);
@@ -376,6 +510,14 @@ class IsarMediaCollectionStore implements MediaCollectionStore {
   @override
   Future<MediaCollection?> getByMediaId(String mediaId) {
     return _collection.get(mediaCollectionIdFromMediaId(mediaId));
+  }
+
+  @override
+  Future<MediaCollection?> getByPath(String path) {
+    return _collection
+        .filter()
+        .pathEqualTo(path, caseSensitive: false)
+        .findFirst();
   }
 
   @override

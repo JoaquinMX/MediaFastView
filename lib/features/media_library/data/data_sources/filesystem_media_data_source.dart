@@ -1,13 +1,12 @@
 import 'dart:io';
-import 'dart:convert';
 
 import 'package:path/path.dart' as path;
-import 'package:crypto/crypto.dart';
 
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/logging_service.dart';
+import '../../../../shared/utils/media_id_utils.dart';
 import '../models/media_model.dart';
 import '../../domain/entities/media_entity.dart';
 import '../isar/isar_media_data_source.dart';
@@ -497,40 +496,17 @@ class FilesystemMediaDataSource {
 
   /// Generates a unique ID from file metadata for consistency across different access paths.
   String _generateIdFromMetadata(FileStat stat, String filePath) {
-    // Use file size, modification time, and filename for consistent identification
-    // This combination should be unique for each file and consistent across different access paths
-    final fileName = path.basename(filePath);
-    final idString = '${stat.size}_${stat.modified.millisecondsSinceEpoch}_$fileName';
-    final bytes = utf8.encode(idString);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
+    return generateMediaIdFromMetadata(
+      size: stat.size,
+      lastModified: stat.modified,
+      fileName: path.basename(filePath),
+    );
   }
 
   /// Generates a unique ID from file path using SHA-256.
   /// Normalizes the path to ensure consistent IDs regardless of how the path was resolved.
   String _generateId(String filePath) {
-    // Normalize the path by resolving symlinks and getting the canonical path
-    final normalizedPath = _normalizePath(filePath);
-    final bytes = utf8.encode(normalizedPath);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
-  }
-
-  /// Normalizes a file path by resolving symlinks and getting the canonical path.
-  /// This ensures consistent IDs regardless of bookmark resolution or symlink differences.
-  String _normalizePath(String filePath) {
-    try {
-      final file = File(filePath);
-      // Get the canonical path (resolves symlinks and normalizes the path)
-      final canonicalPath = file.absolute.path;
-      // On macOS, we need to handle the case where bookmark resolution gives us
-      // a different path structure. For consistency, we'll use the resolved path
-      // but normalize it to remove any redundant components.
-      return path.normalize(canonicalPath);
-    } catch (e) {
-      // If normalization fails, fall back to the original path normalization
-      return path.normalize(filePath);
-    }
+    return generateMediaIdFromPath(filePath);
   }
 
   /// Gets media file by ID (requires rescanning the directory).

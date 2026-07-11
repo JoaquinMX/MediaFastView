@@ -11,6 +11,7 @@ import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
 import '../../../../shared/widgets/file_operation_button.dart';
+import '../../../../shared/widgets/move_copy_button.dart';
 import '../../../favorites/presentation/widgets/favorite_toggle_button.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/directory_media_counts.dart';
@@ -256,6 +257,11 @@ class _MediaGridItemState extends State<MediaGridItem> {
               iconSize: 20,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            ),
+            const SizedBox(width: 4),
+            MoveCopyButton(
+              media: widget.media,
+              onOperationComplete: widget.onOperationComplete,
             ),
             const SizedBox(width: 4),
             FileOperationButton(
