@@ -234,6 +234,12 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         if (_isMacOS)
           LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA):
               const _SelectAllMediaIntent(),
+        if (_isMacOS)
+          LogicalKeySet(LogicalKeyboardKey.delete):
+              const _DeleteSelectedMediaIntent(),
+        if (_isMacOS)
+          LogicalKeySet(LogicalKeyboardKey.backspace):
+              const _DeleteSelectedMediaIntent(),
         if (hasSiblingNavigation)
           LogicalKeySet(LogicalKeyboardKey.arrowLeft):
               const _NavigateToPreviousDirectoryIntent(),
@@ -269,6 +275,26 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
                 return null;
               },
             ),
+          if (_isMacOS)
+            _DeleteSelectedMediaIntent:
+                CallbackAction<_DeleteSelectedMediaIntent>(
+                  onInvoke: (_) {
+                    final selectionActive = ref.read(
+                      mediaSelectionModeProvider(_params!),
+                    );
+                    if (!selectionActive || _viewModel == null) {
+                      return null;
+                    }
+                    unawaited(
+                      _deleteSelectedMedia(
+                        _visibleMediaCache,
+                        ref.read(selectedMediaIdsProvider(_params!)),
+                        _viewModel!,
+                      ),
+                    );
+                    return null;
+                  },
+                ),
           _NavigateToPreviousDirectoryIntent:
               CallbackAction<_NavigateToPreviousDirectoryIntent>(
                 onInvoke: (_) {
@@ -585,6 +611,22 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
             textStyle: const TextStyle(fontSize: 12),
           ),
         ),
+        if (_isMacOS) ...[
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: () => unawaited(
+              _deleteSelectedMedia(state.media, selectedMediaIds, viewModel),
+            ),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Delete'),
+            style: FilledButton.styleFrom(
+              backgroundColor: colorScheme.error,
+              foregroundColor: colorScheme.onError,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              textStyle: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
         IconButton(
           onPressed: _showShortcutHelp,
           icon: const Icon(Icons.help_outline),
@@ -790,6 +832,81 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Moves every selected file and subfolder to the Trash, then refreshes the
+  /// grid. Subfolders take their contents with them, so a selection that mixes
+  /// a folder with files inside it still results in a single folder delete
+  /// (handled by [FileOperationsViewModel.deleteMediaBatch]).
+  Future<void> _deleteSelectedMedia(
+    List<MediaEntity> media,
+    Set<String> selectedMediaIds,
+    MediaViewModel viewModel,
+  ) async {
+    if (selectedMediaIds.isEmpty) {
+      return;
+    }
+
+    final selected = media
+        .where((item) => selectedMediaIds.contains(item.id))
+        .toList(growable: false);
+    if (selected.isEmpty) {
+      return;
+    }
+
+    final container = ProviderScope.containerOf(context, listen: false);
+    final result = await confirmAndDeleteMediaBatch(context, selected);
+    if (result == null || !result.hasSuccesses || !mounted) {
+      return;
+    }
+
+    final deletedIds = result.successfulIds.toSet();
+    final deletedDirectories = selected.where(
+      (item) =>
+          item.type == MediaType.directory && deletedIds.contains(item.id),
+    );
+    await _dropLibraryEntriesFor(deletedDirectories, container);
+    if (!mounted) return;
+
+    // The rescan drops the trashed items, prunes them from the selection, and
+    // refreshes the directory media counts.
+    viewModel.clearMediaSelection();
+    await viewModel.loadMedia();
+  }
+
+  /// Removes library/cache state for any trashed folder that also happened to
+  /// be a tracked library root (possible when both a parent and a child folder
+  /// were added to the library).
+  Future<void> _dropLibraryEntriesFor(
+    Iterable<MediaEntity> deletedDirectories,
+    ProviderContainer container,
+  ) async {
+    if (deletedDirectories.isEmpty) {
+      return;
+    }
+
+    final directoryRepository = container.read(directoryRepositoryProvider);
+    final mediaRepository = container.read(mediaRepositoryProvider);
+    // Match by path: the scan derives subdirectory ids from a normalized path,
+    // which can differ from the tracked root's id.
+    final trackedDirectories = await directoryRepository.getDirectories();
+    final trackedByPath = {
+      for (final directory in trackedDirectories) directory.path: directory,
+    };
+
+    var removedTrackedRoot = false;
+    for (final deleted in deletedDirectories) {
+      await mediaRepository.removeMediaForDirectory(deleted.id);
+      final trackedRoot = trackedByPath[deleted.path];
+      if (trackedRoot != null) {
+        await directoryRepository.removeDirectory(trackedRoot.id);
+        removedTrackedRoot = true;
+      }
+    }
+
+    if (removedTrackedRoot) {
+      container.invalidate(directoryViewModelProvider);
+    }
   }
 
   Widget _buildGrid(
@@ -1497,6 +1614,10 @@ class _ClearMediaSelectionIntent extends Intent {
 
 class _SelectAllMediaIntent extends Intent {
   const _SelectAllMediaIntent();
+}
+
+class _DeleteSelectedMediaIntent extends Intent {
+  const _DeleteSelectedMediaIntent();
 }
 
 class _NavigateToPreviousDirectoryIntent extends Intent {

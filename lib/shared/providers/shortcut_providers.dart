@@ -124,6 +124,13 @@ final shortcutCategoriesProvider = Provider<List<ShortcutCategory>>((ref) {
               '"Delete From Source" enabled in Settings).',
           contexts: <String>[_fullScreenContext],
         ),
+        ShortcutAction(
+          keys: <String>['Delete', 'Backspace'],
+          description:
+              'Move the selected items to the Trash (macOS; requires '
+              '"Delete From Source" enabled in Settings).',
+          contexts: <String>[_mediaGridContext],
+        ),
       ],
     ),
   ];

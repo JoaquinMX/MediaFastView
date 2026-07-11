@@ -23,11 +23,18 @@ class _RecordingFileOperationsRepository implements FileOperationsRepository {
   String? deletedDirBookmark;
   int deleteDirCalls = 0;
 
+  /// Every path passed to a delete, in call order.
+  final List<String> deletedPaths = <String>[];
+
+  /// Paths that should fail, mapped to the failure message.
+  final Map<String, String> failures = <String, String>{};
+
   @override
   Future<void> deleteFile(String filePath, {String? bookmarkData}) async {
     deleteFileCalls++;
     deletedFilePath = filePath;
     deletedFileBookmark = bookmarkData;
+    _record(filePath);
   }
 
   @override
@@ -38,6 +45,15 @@ class _RecordingFileOperationsRepository implements FileOperationsRepository {
     deleteDirCalls++;
     deletedDirPath = directoryPath;
     deletedDirBookmark = bookmarkData;
+    _record(directoryPath);
+  }
+
+  void _record(String path) {
+    final failure = failures[path];
+    if (failure != null) {
+      throw Exception(failure);
+    }
+    deletedPaths.add(path);
   }
 
   @override
@@ -67,6 +83,9 @@ class _FakeFavoritesRepository implements FavoritesRepository {
   _FakeFavoritesRepository({this.favorite = false});
 
   bool favorite;
+
+  /// When set, overrides [favorite] with per-id answers.
+  Set<String>? favoriteIds;
   final List<String> removedIds = <String>[];
 
   @override
@@ -74,7 +93,7 @@ class _FakeFavoritesRepository implements FavoritesRepository {
     String itemId, {
     FavoriteItemType type = FavoriteItemType.media,
   }) async =>
-      favorite;
+      favoriteIds?.contains(itemId) ?? favorite;
 
   @override
   Future<void> removeFavorite(String itemId) async {
@@ -99,6 +118,35 @@ MediaEntity _media({
     lastModified: DateTime(2020, 1, 1),
     tagIds: const [],
     directoryId: directoryId,
+  );
+}
+
+/// A file in the tracked `/library` root, keyed by [name] for readable ids.
+MediaEntity _file(String name, {String? path}) {
+  return MediaEntity(
+    id: name,
+    path: path ?? '/library/$name',
+    name: name,
+    type: MediaType.image,
+    size: 1024,
+    lastModified: DateTime(2020, 1, 1),
+    tagIds: const [],
+    directoryId: 'dir-1',
+  );
+}
+
+/// A subdirectory of the tracked `/library` root, which the scan does not track
+/// as a directory of its own.
+MediaEntity _directoryMedia(String name, String path) {
+  return MediaEntity(
+    id: name,
+    path: path,
+    name: name,
+    type: MediaType.directory,
+    size: 0,
+    lastModified: DateTime(2020, 1, 1),
+    tagIds: const [],
+    directoryId: 'dir-1',
   );
 }
 
@@ -249,4 +297,143 @@ void main() {
     },
     skip: macOnly,
   );
+
+  group('deleteMediaBatch', () {
+    test('deletes nothing and reports every id when disabled in settings',
+        () async {
+      final viewModel = buildViewModel();
+      final items = [_file('a.jpg'), _file('b.jpg')];
+
+      final result = await viewModel.deleteMediaBatch(
+        items,
+        deleteFromSource: false,
+      );
+
+      expect(repo.deletedPaths, isEmpty);
+      expect(result.hasSuccesses, isFalse);
+      expect(result.failureReasons.keys, {'a.jpg', 'b.jpg'});
+      expect(viewModel.debugState, isA<FileOperationsError>());
+    });
+
+    test(
+      'moves every selected item to Trash with the enclosing bookmark',
+      () async {
+        final viewModel = buildViewModel();
+        final items = [
+          _file('a.jpg'),
+          _file('b.jpg'),
+          _directoryMedia('clips', '/library/clips'),
+        ];
+
+        final progress = <int>[];
+        final result = await viewModel.deleteMediaBatch(
+          items,
+          deleteFromSource: true,
+          onProgress: (completed, _) => progress.add(completed),
+        );
+
+        expect(repo.deleteFileCalls, 2);
+        expect(repo.deleteDirCalls, 1);
+        expect(repo.deletedFileBookmark, 'BOOKMARK-DATA');
+        expect(repo.deletedDirBookmark, 'BOOKMARK-DATA');
+        expect(result.successfulIds, ['a.jpg', 'b.jpg', 'clips']);
+        expect(result.hasFailures, isFalse);
+        expect(progress, [1, 2, 3]);
+        expect(viewModel.debugState, isA<FileOperationsSuccess>());
+        expect(
+          (viewModel.debugState as FileOperationsSuccess).message,
+          'Moved 3 items to Trash',
+        );
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'trashes a selected folder once instead of its selected contents',
+      () async {
+        favoritesRepo.favoriteIds = {'nested.jpg'};
+        final viewModel = buildViewModel();
+        final items = [
+          _directoryMedia('vacation', '/library/vacation'),
+          _file('nested.jpg', path: '/library/vacation/nested.jpg'),
+          _file('sibling.jpg'),
+        ];
+
+        final result = await viewModel.deleteMediaBatch(
+          items,
+          deleteFromSource: true,
+        );
+
+        // The nested file rides along with its parent: one directory delete,
+        // and the only file delete is the one outside it.
+        expect(repo.deleteDirCalls, 1);
+        expect(repo.deleteFileCalls, 1);
+        expect(repo.deletedPaths, [
+          '/library/vacation',
+          '/library/sibling.jpg',
+        ]);
+        // ...but it still counts as deleted and gets its favorite cleaned up.
+        expect(
+          result.successfulIds,
+          containsAll(<String>['vacation', 'nested.jpg', 'sibling.jpg']),
+        );
+        expect(result.hasFailures, isFalse);
+        expect(favoritesRepo.removedIds, ['nested.jpg']);
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'records a mid-batch failure and still deletes the rest',
+      () async {
+        repo.failures['/library/b.jpg'] = 'permission denied';
+        final viewModel = buildViewModel();
+        final items = [_file('a.jpg'), _file('b.jpg'), _file('c.jpg')];
+
+        final result = await viewModel.deleteMediaBatch(
+          items,
+          deleteFromSource: true,
+        );
+
+        expect(repo.deletedPaths, ['/library/a.jpg', '/library/c.jpg']);
+        expect(result.successfulIds, ['a.jpg', 'c.jpg']);
+        expect(result.failureReasons.keys, ['b.jpg']);
+        expect(result.failureReasons['b.jpg'], contains('permission denied'));
+        expect(favoritesRepo.removedIds, isNot(contains('b.jpg')));
+        expect(viewModel.debugState, isA<FileOperationsSuccess>());
+        expect(
+          (viewModel.debugState as FileOperationsSuccess).message,
+          'Moved 2 items to Trash, 1 failed',
+        );
+      },
+      skip: macOnly,
+    );
+
+    test(
+      'nested items fail when the folder that covers them fails',
+      () async {
+        repo.failures['/library/vacation'] = 'permission denied';
+        final viewModel = buildViewModel();
+        final items = [
+          _directoryMedia('vacation', '/library/vacation'),
+          _file('nested.jpg', path: '/library/vacation/nested.jpg'),
+        ];
+
+        final result = await viewModel.deleteMediaBatch(
+          items,
+          deleteFromSource: true,
+        );
+
+        expect(repo.deletedPaths, isEmpty);
+        expect(result.hasSuccesses, isFalse);
+        expect(result.failureReasons.keys, containsAll(<String>[
+          'vacation',
+          'nested.jpg',
+        ]));
+        expect(favoritesRepo.removedIds, isEmpty);
+        expect(viewModel.debugState, isA<FileOperationsError>());
+      },
+      skip: macOnly,
+    );
+  });
 }

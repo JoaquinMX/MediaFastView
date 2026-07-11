@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../../core/services/logging_service.dart';
+import '../../../../core/utils/batch_update_result.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../favorites/domain/repositories/favorites_repository.dart';
 import '../../domain/entities/directory_entity.dart';
@@ -81,21 +82,161 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
     }
   }
 
+  /// Moves several media items (files and/or directories) to the Trash.
+  ///
+  /// Items nested inside another selected directory are not deleted
+  /// individually — they go to the Trash with their parent — but they are still
+  /// reported as successful and still get their orphaned state cleaned up.
+  ///
+  /// [onProgress] reports `(completed, total)` after every item so callers can
+  /// drive a determinate progress indicator. Deletes run sequentially because
+  /// the native Trash call blocks the platform thread.
+  Future<BatchUpdateResult> deleteMediaBatch(
+    List<MediaEntity> items, {
+    required bool deleteFromSource,
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    if (items.isEmpty) {
+      return BatchUpdateResult.empty;
+    }
+
+    final blockedReason = _deleteBlockedReason(deleteFromSource);
+    if (blockedReason != null) {
+      state = FileOperationsError(blockedReason);
+      return BatchUpdateResult(
+        failureReasons: {
+          for (final item in items) item.id: blockedReason,
+        },
+      );
+    }
+
+    state = const FileOperationsLoading();
+
+    final coveredByParent = <MediaEntity>[];
+    final roots = <MediaEntity>[];
+    for (final item in items) {
+      if (_isCoveredBySelectedDirectory(item, items)) {
+        coveredByParent.add(item);
+      } else {
+        roots.add(item);
+      }
+    }
+
+    // Read the tracked directories once for the whole batch instead of per
+    // item. Without them the items can still fall back to their own bookmark,
+    // so a lookup failure degrades rather than aborting the delete.
+    List<DirectoryEntity> directories;
+    try {
+      directories = await _directoryRepository.getDirectories();
+    } catch (e) {
+      LoggingService.instance.warning(
+        'Failed to load directories while resolving delete bookmarks: $e',
+      );
+      directories = const [];
+    }
+
+    final successfulIds = <String>[];
+    final failureReasons = <String, String>{};
+    final deletedItems = <MediaEntity>[];
+    final trashedDirectoryPaths = <String>[];
+
+    var completed = 0;
+    for (final item in roots) {
+      try {
+        final bookmarkData = _resolveBookmarkFrom(item, directories);
+        if (item.type == MediaType.directory) {
+          await _deleteDirectoryUseCase(item.path, bookmarkData: bookmarkData);
+          trashedDirectoryPaths.add(item.path);
+        } else {
+          await _deleteFileUseCase(item.path, bookmarkData: bookmarkData);
+        }
+        successfulIds.add(item.id);
+        deletedItems.add(item);
+      } catch (e) {
+        failureReasons[item.id] = e.toString();
+      }
+      completed++;
+      onProgress?.call(completed, roots.length);
+    }
+
+    // A nested item is only gone if the parent that covers it was actually
+    // trashed; a parent whose delete failed leaves its contents in place.
+    for (final item in coveredByParent) {
+      final parentTrashed = trashedDirectoryPaths.any(
+        (dirPath) => p.isWithin(dirPath, item.path),
+      );
+      if (parentTrashed) {
+        successfulIds.add(item.id);
+        deletedItems.add(item);
+      } else {
+        failureReasons[item.id] =
+            'The enclosing directory could not be moved to Trash.';
+      }
+    }
+
+    for (final item in deletedItems) {
+      await _cleanupAfterDelete(item);
+    }
+
+    final result = BatchUpdateResult(
+      successfulIds: successfulIds,
+      failureReasons: failureReasons,
+    );
+
+    final summary = _batchSummary(result);
+    state = result.hasSuccesses
+        ? FileOperationsSuccess(summary)
+        : FileOperationsError(summary);
+
+    return result;
+  }
+
+  /// Whether [item] lives inside a different directory that is also being
+  /// deleted, in which case trashing the parent already removes it.
+  bool _isCoveredBySelectedDirectory(
+    MediaEntity item,
+    List<MediaEntity> selection,
+  ) {
+    return selection.any(
+      (other) =>
+          other.type == MediaType.directory &&
+          other.path != item.path &&
+          p.isWithin(other.path, item.path),
+    );
+  }
+
+  String _batchSummary(BatchUpdateResult result) {
+    final moved = result.successfulIds.length;
+    final failed = result.failureReasons.length;
+
+    if (moved == 0) {
+      return 'Failed to move $failed item${failed == 1 ? '' : 's'} to Trash';
+    }
+
+    final movedText = 'Moved $moved item${moved == 1 ? '' : 's'} to Trash';
+    return failed == 0 ? movedText : '$movedText, $failed failed';
+  }
+
+  /// Returns the reason deleting is not allowed right now, or `null` when it is.
+  String? _deleteBlockedReason(bool deleteFromSource) {
+    if (!deleteFromSource) {
+      return 'Delete from source is disabled in settings.';
+    }
+    if (!Platform.isMacOS) {
+      return _unsupportedMessage;
+    }
+    return null;
+  }
+
   Future<void> _delete(
     MediaEntity media, {
     required bool deleteFromSource,
     required String successMessage,
     required Future<void> Function(String path, String? bookmarkData) action,
   }) async {
-    if (!deleteFromSource) {
-      state = const FileOperationsError(
-        'Delete from source is disabled in settings.',
-      );
-      return;
-    }
-
-    if (!Platform.isMacOS) {
-      state = const FileOperationsError(_unsupportedMessage);
+    final blockedReason = _deleteBlockedReason(deleteFromSource);
+    if (blockedReason != null) {
+      state = FileOperationsError(blockedReason);
       return;
     }
 
@@ -127,8 +268,20 @@ class FileOperationsViewModel extends StateNotifier<FileOperationsState> {
     }
 
     final directories = await _directoryRepository.getDirectories();
+    return _resolveBookmarkFrom(media, directories);
+  }
+
+  /// Same resolution as [_resolveDirectoryBookmark] against an already-loaded
+  /// directory list, so a batch reads the directories once instead of per item.
+  String? _resolveBookmarkFrom(
+    MediaEntity media,
+    List<DirectoryEntity> directories,
+  ) {
     DirectoryEntity? enclosing;
     for (final dir in directories) {
+      if (dir.id == media.directoryId && dir.bookmarkData != null) {
+        return dir.bookmarkData;
+      }
       if (dir.bookmarkData == null) continue;
       final coversPath =
           media.path == dir.path || p.isWithin(dir.path, media.path);
