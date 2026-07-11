@@ -9,8 +9,13 @@ import 'move_copy_media_action.dart';
 
 /// Moves or copies a media item into another folder.
 ///
-/// Hidden on platforms that can't transfer source files (iOS). A popup rather
-/// than two buttons because the grid item's hover overlay is already crowded.
+/// Hidden on platforms that can't transfer source files (iOS).
+///
+/// Deliberately an [IconButton] that opens the menu itself, rather than a
+/// [PopupMenuButton]: this lives in the grid item's hover overlay, which is torn
+/// down the moment the menu takes the pointer off the tile. `PopupMenuButton`
+/// drops its `onSelected` callback when its own state is unmounted, so the menu
+/// would appear and the choice would go nowhere.
 class MoveCopyButton extends StatelessWidget {
   const MoveCopyButton({
     super.key,
@@ -27,18 +32,25 @@ class MoveCopyButton extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return PopupMenuButton<TransferMode>(
+    return IconButton(
       icon: const Icon(Icons.drive_file_move_outline, color: Colors.white),
+      onPressed: () => unawaited(_showTransferMenu(context)),
       tooltip: 'Move or copy',
-      onSelected: (mode) => unawaited(
-        pickDestinationAndTransferMedia(
-          context,
-          media,
-          mode: mode,
-          onTransferred: onOperationComplete,
-        ),
-      ),
-      itemBuilder: (context) => const [
+      iconSize: 20,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+    );
+  }
+
+  Future<void> _showTransferMenu(BuildContext context) async {
+    // Captured while this button is still mounted: everything after the menu
+    // closes has to run against a context that outlives the hover overlay.
+    final rootContext = Navigator.of(context, rootNavigator: true).context;
+
+    final mode = await showMenu<TransferMode>(
+      context: context,
+      position: _menuPosition(context),
+      items: const [
         PopupMenuItem(
           value: TransferMode.move,
           child: ListTile(
@@ -56,6 +68,35 @@ class MoveCopyButton extends StatelessWidget {
           ),
         ),
       ],
+    );
+
+    if (mode == null || !rootContext.mounted) {
+      return;
+    }
+
+    await pickDestinationAndTransferMedia(
+      rootContext,
+      media,
+      mode: mode,
+      onTransferred: onOperationComplete,
+    );
+  }
+
+  /// Anchors the menu to the button.
+  RelativeRect _menuPosition(BuildContext context) {
+    final button = context.findRenderObject()! as RenderBox;
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+
+    return RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(
+          button.size.bottomRight(Offset.zero),
+          ancestor: overlay,
+        ),
+      ),
+      Offset.zero & overlay.size,
     );
   }
 }
