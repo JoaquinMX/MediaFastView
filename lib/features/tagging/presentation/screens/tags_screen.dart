@@ -5,15 +5,17 @@ import 'package:path/path.dart' as p;
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../full_screen/presentation/screens/full_screen_viewer_screen.dart';
-import '../../../media_library/domain/entities/directory_entity.dart';
+import '../../../media_library/domain/entities/directory_tree_node.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/presentation/widgets/media_grid_item.dart';
 import '../../../media_library/presentation/widgets/column_selector_popup.dart';
 import '../../domain/enums/tag_filter_mode.dart';
 import '../../domain/enums/tag_media_type_filter.dart';
 import '../view_models/tags_view_model.dart';
+import '../widgets/directory_filter_tree.dart';
 import '../widgets/tag_directory_chip.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
+import '../../../../shared/utils/directory_tree_builder.dart';
 
 class TagsScreen extends ConsumerStatefulWidget {
   const TagsScreen({super.key});
@@ -107,33 +109,36 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       excludedTagIds,
       state.mediaById,
     );
-    final mediaMatchingDirectories = _filterMediaByDirectory(
+    // The directory facet is built *before* the directory filter is applied.
+    // Counting the already-narrowed set instead would collapse every other
+    // folder to zero the moment you picked one, leaving no way to widen back.
+    final mediaMatchingType = _filterMediaByType(
       aggregatedMedia,
-      state.selectedDirectoryIds,
-      state.libraryDirectories,
-    );
-    final filteredMedia = _filterMediaByType(
-      mediaMatchingDirectories,
       state.mediaTypeFilter,
     );
-    final sectionsForDirectories = state.selectedDirectoryIds.isEmpty
-        ? _resolveFilterSections(
-            sections,
-            selectedSections,
-            optionalSections,
-            hasSelectedTags,
-            excludedTagIds.isEmpty,
-          )
+    final directoryTree = buildDirectoryTree(
+      roots: state.libraryDirectories,
+      media: mediaMatchingType,
+    );
+
+    final selectedDirectoryPaths = state.selectedDirectoryPaths;
+    final filteredMedia = _filterMediaByDirectory(
+      mediaMatchingType,
+      selectedDirectoryPaths,
+    );
+
+    final resolvedSections = _resolveFilterSections(
+      sections,
+      selectedSections,
+      optionalSections,
+      hasSelectedTags,
+      excludedTagIds.isEmpty,
+    );
+    final sectionsForDirectories = selectedDirectoryPaths.isEmpty
+        ? resolvedSections
         : _filterSectionsByDirectory(
-            _resolveFilterSections(
-              sections,
-              selectedSections,
-              optionalSections,
-              hasSelectedTags,
-              excludedTagIds.isEmpty,
-            ),
-            state.selectedDirectoryIds,
-            state.libraryDirectories,
+            resolvedSections,
+            selectedDirectoryPaths,
             state.mediaById,
           );
     final selectedDirectories = _collectDirectoriesFromSections(
@@ -145,7 +150,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final headerWidgets = <Widget>[
       _buildSearchField(),
       const SizedBox(height: 12),
-      _buildDirectoryFilter(state, viewModel),
+      _buildDirectoryFilter(state, viewModel, directoryTree),
       const SizedBox(height: 12),
       _buildTagSelectionChips(state, viewModel, sections),
       const SizedBox(height: 12),
@@ -161,7 +166,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
     if (selectedSections.isEmpty &&
         excludedTagIds.isEmpty &&
-        state.selectedDirectoryIds.isEmpty) {
+        selectedDirectoryPaths.isEmpty) {
       headerWidgets.add(_buildSelectionPlaceholder());
     } else {
       headerWidgets.addAll([
@@ -199,7 +204,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ),
     ];
 
-    final hasDirectoryFilter = state.selectedDirectoryIds.isNotEmpty;
+    final hasDirectoryFilter = selectedDirectoryPaths.isNotEmpty;
 
     if (filteredMedia.isNotEmpty &&
         (selectedSections.isNotEmpty ||
@@ -236,12 +241,14 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   Widget _buildDirectoryFilter(
     TagsLoaded state,
     TagsViewModel viewModel,
+    List<DirectoryTreeNode> directoryTree,
   ) {
-    if (state.libraryDirectories.isEmpty) {
+    if (directoryTree.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final selected = state.selectedDirectoryIds.toSet();
+    final theme = Theme.of(context);
+    final selected = state.selectedDirectoryPaths;
 
     return Card(
       elevation: 1,
@@ -255,7 +262,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               children: [
                 Text(
                   'Filter by directory',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: theme.textTheme.titleMedium,
                 ),
                 if (selected.isNotEmpty)
                   TextButton(
@@ -264,31 +271,21 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: state.libraryDirectories.map((directory) {
-                final mediaCount =
-                    state.directoryMediaCounts[directory.id] ?? 0;
-                return TagDirectoryChip(
-                  directory: directory,
-                  mediaCount: mediaCount,
-                  isSelected: selected.contains(directory.id),
-                  onTap: () => viewModel.toggleDirectorySelection(directory.id),
-                );
-              }).toList(),
+            const SizedBox(height: 4),
+            DirectoryFilterTree(
+              nodes: directoryTree,
+              selectedPaths: selected,
+              onToggle: viewModel.toggleDirectorySelection,
             ),
             if (selected.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: Text(
-                  'Select directories to limit results. Hover to preview their contents.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
-                      ),
+                  'Select directories to limit results. Expand one to narrow '
+                  'down to a sub-directory. Hover to preview their contents.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
           ],
@@ -599,41 +596,28 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
   List<TagSection> _filterSectionsByDirectory(
     List<TagSection> sections,
-    List<String> selectedDirectoryIds,
-    List<DirectoryEntity> topDirectories,
+    Set<String> selectedDirectoryPaths,
     Map<String, MediaEntity> mediaById,
   ) {
-    if (selectedDirectoryIds.isEmpty) {
+    if (selectedDirectoryPaths.isEmpty) {
       return sections;
     }
 
-    final selectedIds = selectedDirectoryIds.toSet();
+    bool isInSelectedDirectory(String mediaId) {
+      final media = mediaById[mediaId];
+      return media != null &&
+          _isInSelectedDirectory(media, selectedDirectoryPaths);
+    }
+
     final filtered = <TagSection>[];
 
     for (final section in sections) {
       final filteredDirectories = section.directories
-          .where((content) {
-            final directoryId = _findTopDirectoryIdForPath(
-              content.directory.path,
-              topDirectories,
-            );
-            return directoryId != null && selectedIds.contains(directoryId);
-          })
           .map(
             (content) => TagDirectoryContent(
               directory: content.directory,
               mediaIds: content.mediaIds
-                  .where((mediaId) {
-                    final media = mediaById[mediaId];
-                    if (media == null) {
-                      return false;
-                    }
-                    final directoryId = _findTopDirectoryIdForPath(
-                      media.path,
-                      topDirectories,
-                    );
-                    return directoryId != null && selectedIds.contains(directoryId);
-                  })
+                  .where(isInSelectedDirectory)
                   .toList(growable: false),
             ),
           )
@@ -641,17 +625,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           .toList();
 
       final filteredMedia = section.mediaIds
-          .where((mediaId) {
-            final media = mediaById[mediaId];
-            if (media == null) {
-              return false;
-            }
-            final directoryId = _findTopDirectoryIdForPath(
-              media.path,
-              topDirectories,
-            );
-            return directoryId != null && selectedIds.contains(directoryId);
-          })
+          .where(isInSelectedDirectory)
           .toList();
 
       if (filteredDirectories.isEmpty && filteredMedia.isEmpty) {
@@ -680,42 +654,26 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
   List<MediaEntity> _filterMediaByDirectory(
     List<MediaEntity> media,
-    List<String> selectedDirectoryIds,
-    List<DirectoryEntity> topDirectories,
+    Set<String> selectedDirectoryPaths,
   ) {
-    if (selectedDirectoryIds.isEmpty) {
+    if (selectedDirectoryPaths.isEmpty) {
       return media;
     }
 
-    final selectedIds = selectedDirectoryIds.toSet();
     return media
-        .where((item) {
-          final directoryId = _findTopDirectoryIdForPath(
-            item.path,
-            topDirectories,
-          );
-          return directoryId != null && selectedIds.contains(directoryId);
-        })
+        .where((item) => _isInSelectedDirectory(item, selectedDirectoryPaths))
         .toList();
   }
 
-  String? _findTopDirectoryIdForPath(
-    String path,
-    List<DirectoryEntity> topDirectories,
+  /// A media item matches when the directory it sits *directly* in is selected.
+  ///
+  /// Selecting a folder cascades over its subtree in the view model, so this
+  /// stays a single set lookup rather than an ancestor walk per item.
+  bool _isInSelectedDirectory(
+    MediaEntity media,
+    Set<String> selectedDirectoryPaths,
   ) {
-    if (topDirectories.isEmpty) {
-      return null;
-    }
-
-    final normalized = p.normalize(path);
-    for (final directory in topDirectories) {
-      final directoryPath = p.normalize(directory.path);
-      if (normalized == directoryPath ||
-          p.isWithin(directoryPath, normalized)) {
-        return directory.id;
-      }
-    }
-    return null;
+    return selectedDirectoryPaths.contains(p.dirname(p.normalize(media.path)));
   }
 
   List<MediaEntity> _collectMediaFromSections(

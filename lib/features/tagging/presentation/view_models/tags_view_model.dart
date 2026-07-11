@@ -16,6 +16,7 @@ import '../../../tagging/domain/enums/tag_media_type_filter.dart';
 import '../../../tagging/domain/use_cases/filter_by_tags_use_case.dart';
 import '../../../tagging/domain/use_cases/get_tags_use_case.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/utils/directory_tree_builder.dart';
 
 @immutable
 class TagDirectoryContent {
@@ -55,8 +56,6 @@ class TagSection {
   }
 }
 
-typedef _LibraryRoot = ({String id, String normalizedPath});
-
 sealed class TagsState {
   const TagsState();
 }
@@ -92,8 +91,7 @@ class TagsLoaded extends TagsState {
     required this.mediaTypeFilter,
     required this.selectionMode,
     required this.libraryDirectories,
-    required this.selectedDirectoryIds,
-    required this.directoryMediaCounts,
+    required this.selectedDirectoryPaths,
     required this.mediaById,
   });
 
@@ -105,8 +103,13 @@ class TagsLoaded extends TagsState {
   final TagMediaTypeFilter mediaTypeFilter;
   final TagSelectionMode selectionMode;
   final List<DirectoryEntity> libraryDirectories;
-  final List<String> selectedDirectoryIds;
-  final Map<String, int> directoryMediaCounts;
+
+  /// Normalized paths of the directories whose direct media is included.
+  ///
+  /// Empty means no directory filtering at all. Holds paths at any depth, so a
+  /// media item matches when this contains `p.dirname(media.path)`.
+  final Set<String> selectedDirectoryPaths;
+
   final Map<String, MediaEntity> mediaById;
 
   List<String> get orderedSelectedTagIds {
@@ -143,8 +146,7 @@ class TagsLoaded extends TagsState {
     TagMediaTypeFilter? mediaTypeFilter,
     TagSelectionMode? selectionMode,
     List<DirectoryEntity>? libraryDirectories,
-    List<String>? selectedDirectoryIds,
-    Map<String, int>? directoryMediaCounts,
+    Set<String>? selectedDirectoryPaths,
     Map<String, MediaEntity>? mediaById,
   }) {
     return TagsLoaded(
@@ -156,8 +158,8 @@ class TagsLoaded extends TagsState {
       mediaTypeFilter: mediaTypeFilter ?? this.mediaTypeFilter,
       selectionMode: selectionMode ?? this.selectionMode,
       libraryDirectories: libraryDirectories ?? this.libraryDirectories,
-      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
-      directoryMediaCounts: directoryMediaCounts ?? this.directoryMediaCounts,
+      selectedDirectoryPaths:
+          selectedDirectoryPaths ?? this.selectedDirectoryPaths,
       mediaById: mediaById ?? this.mediaById,
     );
   }
@@ -190,13 +192,17 @@ class TagsViewModel extends StateNotifier<TagsState> {
   Set<String> _selectedTagIds = <String>{};
   Set<String> _optionalTagIds = <String>{};
   Set<String> _excludedTagIds = <String>{};
-  List<String> _selectedDirectoryIds = const [];
+  Set<String> _selectedDirectoryPaths = <String>{};
   TagFilterMode _filterMode = TagFilterMode.any;
   TagMediaTypeFilter _mediaTypeFilter = TagMediaTypeFilter.all;
   TagSelectionMode _selectionMode = TagSelectionMode.required;
   List<DirectoryEntity> _libraryDirectories = const [];
-  List<_LibraryRoot> _normalizedLibraryRoots = const [];
-  Map<String, int> _directoryMediaCounts = const {};
+  Map<String, String> _rootIdByNormalizedPath = const {};
+
+  /// Every directory path the library knows about, derived from *all* cached
+  /// media rather than the filtered subset, so that checking a folder includes
+  /// its whole subtree even where the current tag filter hides part of it.
+  Set<String> _knownDirectoryPaths = const <String>{};
 
   Future<void> loadTags() async {
     state = const TagsLoading();
@@ -231,8 +237,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
             mediaTypeFilter: _mediaTypeFilter,
             selectionMode: _selectionMode,
             libraryDirectories: _libraryDirectories,
-            selectedDirectoryIds: List<String>.from(_selectedDirectoryIds),
-            directoryMediaCounts: _directoryMediaCounts,
+            selectedDirectoryPaths: Set<String>.unmodifiable(
+              _selectedDirectoryPaths,
+            ),
             mediaById: currentState.mediaById,
           );
         } else if (otherSections.isEmpty) {
@@ -250,8 +257,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
             mediaTypeFilter: _mediaTypeFilter,
             selectionMode: _selectionMode,
             libraryDirectories: _libraryDirectories,
-            selectedDirectoryIds: List<String>.from(_selectedDirectoryIds),
-            directoryMediaCounts: _directoryMediaCounts,
+            selectedDirectoryPaths: Set<String>.unmodifiable(
+              _selectedDirectoryPaths,
+            ),
             mediaById: currentState.mediaById,
           );
         }
@@ -272,9 +280,10 @@ class TagsViewModel extends StateNotifier<TagsState> {
       final allDirectories =
           await _filterByTagsUseCase.filterDirectories(const []);
       _libraryDirectories = _extractTopLevelDirectories(allDirectories);
-      _normalizedLibraryRoots = _libraryDirectories
-          .map((d) => (id: d.id, normalizedPath: p.normalize(d.path)))
-          .toList(growable: false);
+      _rootIdByNormalizedPath = <String, String>{
+        for (final directory in _libraryDirectories)
+          p.normalize(directory.path): directory.id,
+      };
 
       final cachedMediaModels = await _mediaDataSource.getMedia();
       final mediaCount = cachedMediaModels.length;
@@ -286,7 +295,6 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
       final cachedMediaById = <String, MediaEntity>{};
       final mediaOrderById = <String, int>{};
-      final directoryMediaCounts = <String, int>{};
       final mediaIdsByTagId = <String, Set<String>>{};
       final mediaIdsByTopDirectoryId = <String, Set<String>>{};
 
@@ -301,18 +309,16 @@ class TagsViewModel extends StateNotifier<TagsState> {
 
         final topDirectoryId = _findTopDirectoryIdForPath(media.path);
         if (topDirectoryId != null) {
-          directoryMediaCounts.update(
-            topDirectoryId,
-            (value) => value + 1,
-            ifAbsent: () => 1,
-          );
           mediaIdsByTopDirectoryId
               .putIfAbsent(topDirectoryId, () => <String>{})
               .add(media.id);
         }
       }
 
-      _directoryMediaCounts = directoryMediaCounts;
+      _knownDirectoryPaths = collectDirectoryPaths(
+        roots: _libraryDirectories,
+        media: cachedMediaEntities,
+      );
 
       final favoritesSection = await _buildFavoritesSection(
         cachedMediaById: cachedMediaById,
@@ -346,9 +352,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
         return;
       }
 
-      _selectedDirectoryIds = _selectedDirectoryIds
-          .where((id) => _libraryDirectories.any((dir) => dir.id == id))
-          .toList();
+      _selectedDirectoryPaths = _selectedDirectoryPaths.intersection(
+        _knownDirectoryPaths,
+      );
 
       if (sections.isEmpty) {
         _selectedTagIds = <String>{};
@@ -365,8 +371,9 @@ class TagsViewModel extends StateNotifier<TagsState> {
           mediaTypeFilter: _mediaTypeFilter,
           selectionMode: _selectionMode,
           libraryDirectories: _libraryDirectories,
-          selectedDirectoryIds: List<String>.from(_selectedDirectoryIds),
-          directoryMediaCounts: _directoryMediaCounts,
+          selectedDirectoryPaths: Set<String>.unmodifiable(
+            _selectedDirectoryPaths,
+          ),
           mediaById: cachedMediaById,
         );
       }
@@ -551,32 +558,49 @@ class TagsViewModel extends StateNotifier<TagsState> {
     }
   }
 
-  void toggleDirectorySelection(String directoryId) {
-    final updatedSelection = List<String>.from(_selectedDirectoryIds);
-    if (updatedSelection.contains(directoryId)) {
-      updatedSelection.remove(directoryId);
-    } else {
-      updatedSelection.add(directoryId);
+  /// Includes or excludes [directoryPath] together with everything below it.
+  ///
+  /// The whole subtree moves as one, so a fully-selected folder clears, and a
+  /// partially-selected or unselected one fills. Unchecking a single child
+  /// afterwards is what leaves its parent partially selected.
+  void toggleDirectorySelection(String directoryPath) {
+    final normalized = p.normalize(directoryPath);
+    final subtree = _knownDirectoryPaths
+        .where(
+          (candidate) =>
+              candidate == normalized || p.isWithin(normalized, candidate),
+        )
+        .toSet();
+    if (subtree.isEmpty) {
+      return;
     }
 
-    _selectedDirectoryIds = updatedSelection;
+    final isFullySelected = subtree.every(_selectedDirectoryPaths.contains);
+    _selectedDirectoryPaths = isFullySelected
+        ? _selectedDirectoryPaths.difference(subtree)
+        : <String>{..._selectedDirectoryPaths, ...subtree};
+
     final currentState = state;
     if (currentState is TagsLoaded && mounted) {
       state = currentState.copyWith(
-        selectedDirectoryIds: List<String>.from(_selectedDirectoryIds),
+        selectedDirectoryPaths: Set<String>.unmodifiable(
+          _selectedDirectoryPaths,
+        ),
       );
     }
   }
 
   void clearDirectorySelection() {
-    if (_selectedDirectoryIds.isEmpty) {
+    if (_selectedDirectoryPaths.isEmpty) {
       return;
     }
 
-    _selectedDirectoryIds = const [];
+    _selectedDirectoryPaths = <String>{};
     final currentState = state;
     if (currentState is TagsLoaded && mounted) {
-      state = currentState.copyWith(selectedDirectoryIds: const []);
+      state = currentState.copyWith(
+        selectedDirectoryPaths: const <String>{},
+      );
     }
   }
 
@@ -750,18 +774,11 @@ class TagsViewModel extends StateNotifier<TagsState> {
   }
 
   String? _findTopDirectoryIdForPath(String path) {
-    if (_normalizedLibraryRoots.isEmpty) {
-      return null;
-    }
-
-    final normalized = p.normalize(path);
-    for (final root in _normalizedLibraryRoots) {
-      if (normalized == root.normalizedPath ||
-          p.isWithin(root.normalizedPath, normalized)) {
-        return root.id;
-      }
-    }
-    return null;
+    final rootPath = findContainingRootPath(
+      path,
+      _rootIdByNormalizedPath.keys,
+    );
+    return rootPath == null ? null : _rootIdByNormalizedPath[rootPath];
   }
 
   Future<List<MediaEntity>> _loadMediaByIds(
