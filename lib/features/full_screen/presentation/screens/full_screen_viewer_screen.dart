@@ -171,7 +171,7 @@ class _FullScreenViewerScreenState
                   idleColor: colorScheme.onSurface,
                 ),
                 tagEditorButton: IconButton.filledTonal(
-                  onPressed: () => _openTagEditor(state),
+                  onPressed: () => _openTagEditor(state.currentMedia),
                   icon: const Icon(Icons.add),
                   tooltip: 'Add or edit tags',
                   style: IconButton.styleFrom(
@@ -398,6 +398,12 @@ class _FullScreenViewerScreenState
         PopupMenuItem(
           child: const Text('Favorite'),
           onTap: () => _toggleFavoriteAndRefreshTags(),
+        ),
+        PopupMenuItem(
+          // Tagging was already here by button and by shortcut, but not in the
+          // menu people now reach for.
+          onTap: () => _openTagEditor(media),
+          child: const Text('Tag…'),
         ),
         PopupMenuItem(
           // `media` is the item on screen right now, which after paging through
@@ -820,13 +826,18 @@ class _FullScreenViewerScreenState
     );
   }
 
-  Future<void> _openTagEditor(FullScreenLoaded state) async {
+  /// Opens the tag editor for [media].
+  ///
+  /// Reached from the overlay button, the keyboard shortcut, and the right-click
+  /// menu — takes the media rather than the whole viewer state so all three can
+  /// call it.
+  Future<void> _openTagEditor(MediaEntity media) async {
     final result = await showDialog<TagUpdateResult>(
       context: context,
       builder: (context) => TagSelectionDialog<TagUpdateResult>(
         title: 'Edit Tags',
-        assignmentTargetLabel: 'Assign tags to "${state.currentMedia.name}"',
-        initialSelectedTagIds: state.currentMedia.tagIds,
+        assignmentTargetLabel: 'Assign tags to "${media.name}"',
+        initialSelectedTagIds: media.tagIds,
         onConfirm: (selectedIds) =>
             _viewModel.setTagsForCurrentMedia(selectedIds),
         confirmLabel: 'Save Tags',
