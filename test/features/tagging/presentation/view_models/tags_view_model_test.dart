@@ -347,6 +347,35 @@ void main() {
         expect(selection.single.path, '$year/a.jpg');
       });
 
+      test('a selection change leaves the filter inputs untouched', () async {
+        // The Tags screen caches everything the filters derive from the library —
+        // several passes over every media item, each normalising paths, which at
+        // 20k media costs more than a frame. That cache is keyed on the identity
+        // of these fields, so a selection change must pass them straight through.
+        // If copyWith ever starts copying them, the cache misses on every pointer
+        // move of a marquee drag and the tab crawls again.
+        final before = await loadLibrary();
+
+        viewModel.selectMediaRange([looseId, aId]);
+        final after = loaded();
+
+        expect(identical(before.sections, after.sections), isTrue);
+        expect(identical(before.mediaById, after.mediaById), isTrue);
+        expect(
+          identical(before.libraryDirectories, after.libraryDirectories),
+          isTrue,
+        );
+        expect(before.filterMode, after.filterMode);
+        expect(before.mediaTypeFilter, after.mediaTypeFilter);
+        expect(before.selectedTagIds, after.selectedTagIds);
+        expect(before.optionalTagIds, after.optionalTagIds);
+        expect(before.excludedTagIds, after.excludedTagIds);
+        expect(before.selectedDirectoryPaths, after.selectedDirectoryPaths);
+
+        // And the selection itself did change, or the test proves nothing.
+        expect(after.selectedMediaIds, {looseId, aId});
+      });
+
       test('commonTagIdsForSelection keeps only the tags every item shares',
           () async {
         when(directoryRepository.refreshChangedLibraryRoots())

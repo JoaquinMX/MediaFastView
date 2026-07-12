@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -28,6 +29,24 @@ import '../widgets/tag_management_dialog.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/utils/directory_tree_builder.dart';
 
+/// What the tag, media-type and directory filters derive from the library.
+///
+/// Cached across rebuilds so that selecting tiles — which changes none of it —
+/// does not pay for it again. See `_TagsScreenState._filterView`.
+class _TagsFilterView {
+  const _TagsFilterView({
+    required this.selectedSections,
+    required this.filteredMedia,
+    required this.directoryTree,
+    required this.selectedDirectories,
+  });
+
+  final List<TagSection> selectedSections;
+  final List<MediaEntity> filteredMedia;
+  final List<DirectoryTreeNode> directoryTree;
+  final List<TagDirectoryContent> selectedDirectories;
+}
+
 class TagsScreen extends ConsumerStatefulWidget {
   const TagsScreen({super.key});
 
@@ -41,6 +60,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
   /// Media id to the key on its tile, so the marquee can find it on screen.
   final Map<String, GlobalKey> _mediaItemKeys = <String, GlobalKey>{};
+
+  /// The last derived filter view, and the state it came from. See [_filterView].
+  _TagsFilterView? _filterViewCache;
+  TagsLoaded? _filterViewFrom;
 
   @override
   void initState() {
@@ -114,11 +137,19 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     });
   }
 
-  Widget _buildContent(
-    TagsLoaded state,
-    TagsViewModel viewModel,
-    int gridColumns,
-  ) {
+  /// Everything the filters derive from the library, cached between rebuilds.
+  ///
+  /// This is the expensive part of the screen — several passes over every media
+  /// item, each normalising paths — and **none of it depends on which tiles are
+  /// selected**. Recomputing it per frame made marquee-dragging crawl: at 20k
+  /// media the directory facet and the directory filter alone cost ~21ms, and
+  /// the frame budget is 16.7ms.
+  _TagsFilterView _filterView(TagsLoaded state) {
+    final cached = _filterViewCache;
+    if (cached != null && _sameFilterInputs(_filterViewFrom!, state)) {
+      return cached;
+    }
+
     final sections = state.sections;
     final selectedTagIds = state.selectedTagIds;
     final optionalTagIds = state.optionalTagIds;
@@ -129,9 +160,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final optionalSections = sections
         .where((section) => optionalTagIds.contains(section.id))
         .toList();
-    final hasRequiredTags = selectedSections.isNotEmpty;
-    final hasOptionalTags = optionalSections.isNotEmpty;
-    final hasSelectedTags = hasRequiredTags || hasOptionalTags;
+    final hasSelectedTags =
+        selectedSections.isNotEmpty || optionalSections.isNotEmpty;
+
     final aggregatedMedia = _collectMediaFromSections(
       sections,
       selectedSections,
@@ -177,6 +208,62 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       excludedTagIds,
       state.mediaById,
     );
+
+    // The marquee scans these keys, so they follow the result set — and pruning
+    // them is itself O(media), so it belongs behind the cache too.
+    _pruneMediaItemKeys(filteredMedia);
+
+    final view = _TagsFilterView(
+      selectedSections: selectedSections,
+      filteredMedia: filteredMedia,
+      directoryTree: directoryTree,
+      selectedDirectories: selectedDirectories,
+    );
+    _filterViewFrom = state;
+    _filterViewCache = view;
+    return view;
+  }
+
+  /// Whether [next] would derive the same filter view as [previous].
+  ///
+  /// Only the inputs the pipeline actually reads. `selectedMediaIds` and
+  /// `isSelectionMode` are deliberately absent: they change on every pointer move
+  /// of a marquee drag, and they change nothing here.
+  ///
+  /// `identical` on the collections is enough because `copyWith` passes the same
+  /// references through for fields it does not touch.
+  bool _sameFilterInputs(TagsLoaded previous, TagsLoaded next) {
+    return identical(previous.sections, next.sections) &&
+        identical(previous.mediaById, next.mediaById) &&
+        identical(previous.libraryDirectories, next.libraryDirectories) &&
+        previous.filterMode == next.filterMode &&
+        previous.mediaTypeFilter == next.mediaTypeFilter &&
+        setEquals(previous.selectedTagIds, next.selectedTagIds) &&
+        setEquals(previous.optionalTagIds, next.optionalTagIds) &&
+        setEquals(previous.excludedTagIds, next.excludedTagIds) &&
+        setEquals(
+          previous.selectedDirectoryPaths,
+          next.selectedDirectoryPaths,
+        );
+  }
+
+  Widget _buildContent(
+    TagsLoaded state,
+    TagsViewModel viewModel,
+    int gridColumns,
+  ) {
+    final view = _filterView(state);
+
+    final sections = state.sections;
+    final selectedTagIds = state.selectedTagIds;
+    final optionalTagIds = state.optionalTagIds;
+    final excludedTagIds = state.excludedTagIds;
+    final selectedDirectoryPaths = state.selectedDirectoryPaths;
+
+    final selectedSections = view.selectedSections;
+    final filteredMedia = view.filteredMedia;
+    final directoryTree = view.directoryTree;
+    final selectedDirectories = view.selectedDirectories;
 
     final headerWidgets = <Widget>[
       _buildSearchField(),
@@ -1032,8 +1119,6 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     TagsLoaded state,
     TagsViewModel viewModel,
   ) {
-    _pruneMediaItemKeys(media);
-
     return SliverGrid(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
