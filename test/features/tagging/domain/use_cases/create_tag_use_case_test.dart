@@ -29,8 +29,10 @@ void main() {
       );
 
       expect(tag.name, equals('New Tag'));
-      expect(tag.id, startsWith('tag_'));
-      expect(tag.id.split('_'), hasLength(greaterThanOrEqualTo(3)));
+      // A v4 uuid, matching every tag already in the database. The scheme this
+      // replaced was `tag_<millis>_<micros % 1000>`, whose suffix was not random
+      // and could repeat inside a millisecond.
+      expect(tag.id, matches(RegExp(r'^[0-9a-f-]{36}$')));
 
       verify(tagRepository.getTags()).called(1);
       final captured =

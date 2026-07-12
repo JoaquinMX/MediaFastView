@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../shared/utils/tag_cache_refresher.dart';
+import '../../domain/tag_validation.dart';
 import '../view_models/tag_management_view_model.dart';
 import 'tag_color_picker.dart';
 
@@ -24,6 +26,8 @@ class _TagCreationDialogState extends ConsumerState<TagCreationDialog> {
   final _nameController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   int _selectedColor = 0xFF2196F3; // Default blue color
+  String? _errorMessage;
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -33,9 +37,10 @@ class _TagCreationDialogState extends ConsumerState<TagCreationDialog> {
 
   @override
   Widget build(BuildContext context) {
-    // Keep the provider alive during the dialog lifecycle
+    // Keep the provider alive during the dialog lifecycle.
     ref.watch(tagViewModelProvider);
     final tagViewModel = ref.read(tagViewModelProvider.notifier);
+    final theme = Theme.of(context);
 
     return AlertDialog(
       title: const Text('Create New Tag'),
@@ -52,18 +57,7 @@ class _TagCreationDialogState extends ConsumerState<TagCreationDialog> {
                 hintText: 'Enter tag name',
                 border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Tag name is required';
-                }
-                if (value.trim().length < 2) {
-                  return 'Tag name must be at least 2 characters';
-                }
-                if (tagViewModel.tagNameExists(value.trim())) {
-                  return 'A tag with this name already exists';
-                }
-                return null;
-              },
+              validator: (value) => _validateName(value, tagViewModel),
               autofocus: true,
               textCapitalization: TextCapitalization.words,
             ),
@@ -76,39 +70,96 @@ class _TagCreationDialogState extends ConsumerState<TagCreationDialog> {
                 });
               },
             ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage!,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ],
           ],
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: () => _createTag(context, tagViewModel),
+          onPressed: _isSaving ? null : () => _createTag(tagViewModel),
           child: const Text('Create'),
         ),
       ],
     );
   }
 
-  Future<void> _createTag(BuildContext context, TagViewModel tagViewModel) async {
-    if (_formKey.currentState?.validate() ?? false) {
-      final name = _nameController.text.trim();
-      await tagViewModel.createTag(name, _selectedColor);
+  /// The same rules the domain enforces, run early so the field can show them
+  /// inline. `CreateTagUseCase` remains the authority — this only saves the user
+  /// a round trip.
+  String? _validateName(String? value, TagViewModel tagViewModel) {
+    final name = value?.trim() ?? '';
 
-      // Delay UI operations to avoid device update conflicts
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Tag "$name" created successfully'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-
-        Navigator.of(context).pop();
-      });
+    try {
+      validateTagName(name);
+    } on TagValidationException catch (error) {
+      return error.message;
     }
+
+    if (tagViewModel.tagNameExists(name)) {
+      return 'A tag with this name already exists';
+    }
+
+    return null;
+  }
+
+  Future<void> _createTag(TagViewModel tagViewModel) async {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final refresher = ref.read(tagCacheRefresherProvider);
+    final name = _nameController.text.trim();
+
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await tagViewModel.createTag(name, _selectedColor);
+    } on TagValidationException catch (error) {
+      // The field validator should have caught this, but the use case is the
+      // authority — surface whatever it says rather than failing silently.
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _errorMessage = error.message;
+        });
+      }
+      return;
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _errorMessage = 'Failed to create tag: $error';
+        });
+      }
+      return;
+    }
+
+    // Creation used to refresh nothing at all, so a new tag was invisible to the
+    // usage counts and to TagLookup until something else happened to invalidate
+    // them.
+    await refresher.refresh();
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Tag "$name" created successfully'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    navigator.pop();
   }
 }

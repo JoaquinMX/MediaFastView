@@ -1,10 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/providers/media_mutation_bus.dart';
+import '../../../../shared/widgets/delete_media_action.dart';
+import '../../../../shared/widgets/media_marquee_selector.dart';
+import '../../../../shared/widgets/move_copy_media_action.dart';
+import '../widgets/bulk_tag_assignment_dialog.dart';
 
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
@@ -32,6 +38,9 @@ class TagsScreen extends ConsumerStatefulWidget {
 class _TagsScreenState extends ConsumerState<TagsScreen> {
   late final TextEditingController _searchController;
   String _searchQuery = '';
+
+  /// Media id to the key on its tile, so the marquee can find it on screen.
+  final Map<String, GlobalKey> _mediaItemKeys = <String, GlobalKey>{};
 
   @override
   void initState() {
@@ -65,27 +74,31 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       unawaited(ref.read(tagsViewModelProvider.notifier).refreshTags());
     });
 
+    final isSelecting = state is TagsLoaded && state.isSelectionMode;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tags'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sell_outlined),
-            tooltip: 'Manage tags',
-            onPressed: _showTagManagement,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Reload tags',
-            onPressed: viewModel.loadTags,
-          ),
-          IconButton(
-            icon: const Icon(Icons.view_module),
-            tooltip: 'Change grid columns',
-            onPressed: () => _showColumnSelector(context, gridColumns),
-          ),
-        ],
-      ),
+      appBar: isSelecting
+          ? _buildSelectionAppBar(state, viewModel)
+          : AppBar(
+              title: const Text('Tags'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.sell_outlined),
+                  tooltip: 'Manage tags',
+                  onPressed: _showTagManagement,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Reload tags',
+                  onPressed: viewModel.loadTags,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.view_module),
+                  tooltip: 'Change grid columns',
+                  onPressed: () => _showColumnSelector(context, gridColumns),
+                ),
+              ],
+            ),
       body: switch (state) {
         TagsLoading() => const Center(child: CircularProgressIndicator()),
         TagsLoaded loaded => _buildContent(loaded, viewModel, gridColumns),
@@ -231,16 +244,38 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       slivers.add(
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          sliver: _buildMediaGrid(filteredMedia, filteredMedia, gridColumns),
+          sliver: _buildMediaGrid(
+            filteredMedia,
+            filteredMedia,
+            gridColumns,
+            state,
+            viewModel,
+          ),
         ),
       );
+    } else {
+      // Nothing to select, so let go of any keys the last result set left behind.
+      _pruneMediaItemKeys(const []);
     }
 
     return RefreshIndicator(
       onRefresh: viewModel.loadTags,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: slivers,
+      // The marquee wraps the whole scroll view because the grid is one sliver
+      // among the filter cards. It scopes itself to the grid: a drag that starts
+      // above the first tile — over the tag chips or the directory tree — is not
+      // a rubber-band.
+      child: MediaMarqueeSelector(
+        itemKeys: _mediaItemKeys,
+        selection: state.selectedMediaIds,
+        isSelectionMode: state.isSelectionMode,
+        onSelectionChanged: (ids) =>
+            viewModel.selectMediaRange(ids, append: false),
+        onEnableSelectionMode: viewModel.enableMediaSelectionMode,
+        onClearSelection: viewModel.clearMediaSelection,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: slivers,
+        ),
       ),
     );
   }
@@ -994,7 +1029,11 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     List<MediaEntity> collection,
     List<MediaEntity> media,
     int columns,
+    TagsLoaded state,
+    TagsViewModel viewModel,
   ) {
+    _pruneMediaItemKeys(media);
+
     return SliverGrid(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
@@ -1005,11 +1044,152 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           final mediaItem = media[index];
-          return _buildMediaTile(mediaItem, collection);
+          return _buildMediaTile(mediaItem, collection, state, viewModel);
         },
         childCount: media.length,
       ),
     );
+  }
+
+  /// Drops keys for media the filters no longer show, so the map the marquee
+  /// scans does not grow without bound.
+  void _pruneMediaItemKeys(Iterable<MediaEntity> media) {
+    final visibleIds = media.map((item) => item.id).toSet();
+    _mediaItemKeys.removeWhere((id, _) => !visibleIds.contains(id));
+  }
+
+  /// The app bar shown while media is selected, mirroring the Library grid's.
+  AppBar _buildSelectionAppBar(TagsLoaded state, TagsViewModel viewModel) {
+    final theme = Theme.of(context);
+    final count = state.selectedMediaIds.length;
+    final selection = viewModel.selectedMedia();
+
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        tooltip: 'Clear selection',
+        onPressed: viewModel.clearMediaSelection,
+      ),
+      title: Text('$count selected', style: theme.textTheme.titleLarge),
+      actions: [
+        TextButton.icon(
+          onPressed: count == 0
+              ? null
+              : () => unawaited(_assignTagsToSelection(viewModel)),
+          icon: const Icon(Icons.tag),
+          label: const Text('Assign Tags'),
+        ),
+        TextButton.icon(
+          onPressed: count == 0
+              ? null
+              : () => unawaited(_toggleFavoritesForSelection(selection)),
+          icon: const Icon(Icons.favorite),
+          label: const Text('Favorite'),
+        ),
+        if (Platform.isMacOS) ...[
+          MenuAnchor(
+            menuChildren: [
+              MenuItemButton(
+                onPressed: () => unawaited(
+                  _transferSelection(selection, TransferMode.move),
+                ),
+                child: const Text('Move to…'),
+              ),
+              MenuItemButton(
+                onPressed: () => unawaited(
+                  _transferSelection(selection, TransferMode.copy),
+                ),
+                child: const Text('Copy to…'),
+              ),
+            ],
+            builder: (context, controller, _) => TextButton.icon(
+              onPressed: count == 0
+                  ? null
+                  : () => controller.isOpen
+                      ? controller.close()
+                      : controller.open(),
+              icon: const Icon(Icons.drive_file_move_outline),
+              label: const Text('Move'),
+            ),
+          ),
+          TextButton.icon(
+            onPressed:
+                count == 0 ? null : () => unawaited(_deleteSelection(selection)),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Delete'),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+            ),
+          ),
+        ],
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Future<void> _assignTagsToSelection(TagsViewModel viewModel) async {
+    final count = viewModel.selectedMedia().length;
+
+    final applied = await BulkTagAssignmentDialog.show(
+      context,
+      title: 'Assign Tags ($count selected)',
+      description:
+          'Choose the tags that should be applied to every selected media item. '
+          'Existing tags will be replaced.',
+      initialTagIds: viewModel.commonTagIdsForSelection(),
+      onTagsAssigned: viewModel.applyTagsToSelection,
+    );
+
+    if (!mounted || !applied) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Updated tags for $count media items')),
+    );
+  }
+
+  Future<void> _toggleFavoritesForSelection(List<MediaEntity> selection) async {
+    if (selection.isEmpty) {
+      return;
+    }
+
+    await ref
+        .read(favoritesViewModelProvider.notifier)
+        .toggleFavoritesForMedia(selection);
+
+    if (!mounted) {
+      return;
+    }
+    await ref.read(tagsViewModelProvider.notifier).refreshFavorites();
+  }
+
+  Future<void> _transferSelection(
+    List<MediaEntity> selection,
+    TransferMode mode,
+  ) async {
+    if (selection.isEmpty) {
+      return;
+    }
+
+    // The mutation bus listener in build() rebuilds the sections afterwards, so
+    // the moved items leave the grid on their own.
+    await pickDestinationAndTransferMediaBatch(context, selection, mode: mode);
+  }
+
+  Future<void> _deleteSelection(List<MediaEntity> selection) async {
+    if (selection.isEmpty) {
+      return;
+    }
+
+    await confirmAndDeleteMediaBatch(context, selection);
+
+    if (!mounted) {
+      return;
+    }
+    // Whatever survived is no longer selected — the reload prunes the ids, but
+    // leaving selection mode on with nothing in it would strand the app bar.
+    ref.read(tagsViewModelProvider.notifier).clearMediaSelection();
   }
 
   /// Opens the manage-tags dialog, then reloads so a rename or recolour is
@@ -1035,15 +1215,26 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  Widget _buildMediaTile(MediaEntity media, List<MediaEntity> collection) {
+  Widget _buildMediaTile(
+    MediaEntity media,
+    List<MediaEntity> collection,
+    TagsLoaded state,
+    TagsViewModel viewModel,
+  ) {
+    final isSelected = state.selectedMediaIds.contains(media.id);
+
     return MediaGridItem(
+      key: _mediaItemKeys.putIfAbsent(media.id, GlobalKey.new),
       media: media,
-      onTap: () => _openFullScreen(collection, media),
-      onFavoriteToggle: (_) =>
-          ref.read(tagsViewModelProvider.notifier).refreshFavorites(),
-      onSelectionToggle: () {},
-      isSelected: false,
-      isSelectionMode: false,
+      // While selecting, a tap picks the item rather than opening it — the same
+      // bargain the Library grid makes.
+      onTap: state.isSelectionMode
+          ? () => viewModel.toggleMediaSelection(media.id)
+          : () => _openFullScreen(collection, media),
+      onFavoriteToggle: (_) => viewModel.refreshFavorites(),
+      onSelectionToggle: () => viewModel.toggleMediaSelection(media.id),
+      isSelected: isSelected,
+      isSelectionMode: state.isSelectionMode,
     );
   }
 

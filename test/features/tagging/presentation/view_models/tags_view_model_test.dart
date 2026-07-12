@@ -8,6 +8,7 @@ import 'package:media_fast_view/features/media_library/domain/repositories/direc
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/tag_repository.dart';
 import 'package:media_fast_view/features/tagging/domain/entities/tag_entity.dart';
+import 'package:media_fast_view/features/tagging/domain/use_cases/assign_tag_use_case.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/filter_by_tags_use_case.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/get_tags_use_case.dart';
 import 'package:media_fast_view/features/tagging/presentation/view_models/tags_view_model.dart';
@@ -54,6 +55,10 @@ void main() {
         favoritesRepository,
         isarMediaDataSource,
         directoryRepository,
+        AssignTagUseCase(
+          directoryRepository: directoryRepository,
+          mediaRepository: mediaRepository,
+        ),
       );
     });
 
@@ -213,6 +218,172 @@ void main() {
         expect(state.selectedDirectoryPaths, {photosRoot, year, archive});
       });
     });
+
+    group('media selection', () {
+      const photosRoot = '/Photos';
+      const year = '/Photos/2024';
+
+      late String looseId;
+      late String aId;
+
+      Future<TagsLoaded> loadLibrary() async {
+        when(directoryRepository.refreshChangedLibraryRoots())
+            .thenAnswer((_) async {});
+        when(directoryRepository.getDirectories()).thenAnswer(
+          (_) async => [_directory(photosRoot, 'Photos')],
+        );
+        when(tagRepository.getTags()).thenAnswer((_) async => <TagEntity>[]);
+
+        final loose = _mediaModel('$photosRoot/loose.jpg');
+        final a = _mediaModel('$year/a.jpg');
+        looseId = loose.id;
+        aId = a.id;
+
+        when(isarMediaDataSource.getMedia()).thenAnswer((_) async => [loose, a]);
+
+        await viewModel.loadTags();
+        return viewModel.state as TagsLoaded;
+      }
+
+      TagsLoaded loaded() => viewModel.state as TagsLoaded;
+
+      test('starts with nothing selected and selection mode off', () async {
+        final state = await loadLibrary();
+
+        expect(state.selectedMediaIds, isEmpty);
+        expect(state.isSelectionMode, isFalse);
+      });
+
+      test('toggling an item selects it and turns selection mode on', () async {
+        await loadLibrary();
+
+        viewModel.toggleMediaSelection(looseId);
+
+        expect(loaded().selectedMediaIds, {looseId});
+        expect(loaded().isSelectionMode, isTrue);
+      });
+
+      test('toggling the same item again deselects it', () async {
+        await loadLibrary();
+
+        viewModel.toggleMediaSelection(looseId);
+        viewModel.toggleMediaSelection(looseId);
+
+        expect(loaded().selectedMediaIds, isEmpty);
+        // Still in selection mode with an empty selection — which is what lets a
+        // marquee drag start from nothing.
+        expect(loaded().isSelectionMode, isTrue);
+      });
+
+      test('the marquee replaces the selection with what it covers', () async {
+        await loadLibrary();
+
+        viewModel.selectMediaRange([looseId]);
+        viewModel.selectMediaRange([aId]);
+
+        expect(loaded().selectedMediaIds, {aId});
+      });
+
+      test('a modifier drag adds to the selection instead', () async {
+        await loadLibrary();
+
+        viewModel.selectMediaRange([looseId]);
+        viewModel.selectMediaRange([aId], append: true);
+
+        expect(loaded().selectedMediaIds, {looseId, aId});
+      });
+
+      test('enabling selection mode leaves the selection alone', () async {
+        await loadLibrary();
+        viewModel.toggleMediaSelection(looseId);
+
+        viewModel.enableMediaSelectionMode();
+
+        expect(loaded().selectedMediaIds, {looseId});
+        expect(loaded().isSelectionMode, isTrue);
+      });
+
+      test('clearing empties the selection and exits selection mode', () async {
+        await loadLibrary();
+        viewModel.toggleMediaSelection(looseId);
+
+        viewModel.clearMediaSelection();
+
+        expect(loaded().selectedMediaIds, isEmpty);
+        expect(loaded().isSelectionMode, isFalse);
+      });
+
+      test('a reload drops media the library no longer has', () async {
+        // A bulk delete leaves ids pointing at media that is gone; keeping them
+        // would strand the selection app bar over items nothing can act on.
+        await loadLibrary();
+        viewModel.toggleMediaSelection(looseId);
+        viewModel.toggleMediaSelection(aId);
+
+        when(isarMediaDataSource.getMedia())
+            .thenAnswer((_) async => [_mediaModel('$year/a.jpg')]);
+        await viewModel.loadTags();
+
+        expect(loaded().selectedMediaIds, {aId});
+      });
+
+      test('a reload that removes everything exits selection mode', () async {
+        await loadLibrary();
+        viewModel.toggleMediaSelection(looseId);
+
+        when(isarMediaDataSource.getMedia()).thenAnswer((_) async => []);
+        await viewModel.loadTags();
+
+        expect(viewModel.state, isA<TagsEmpty>());
+      });
+
+      test('selectedMedia resolves the ids to entities', () async {
+        await loadLibrary();
+        viewModel.toggleMediaSelection(aId);
+
+        final selection = viewModel.selectedMedia();
+
+        expect(selection.single.id, aId);
+        expect(selection.single.path, '$year/a.jpg');
+      });
+
+      test('commonTagIdsForSelection keeps only the tags every item shares',
+          () async {
+        when(directoryRepository.refreshChangedLibraryRoots())
+            .thenAnswer((_) async {});
+        when(directoryRepository.getDirectories()).thenAnswer(
+          (_) async => [_directory(photosRoot, 'Photos')],
+        );
+        // A tag has to exist, or no sections are built and the state is
+        // TagsEmpty rather than TagsLoaded.
+        when(tagRepository.getTags()).thenAnswer(
+          (_) async => [
+            TagEntity(
+              id: 'beach',
+              name: 'Beach',
+              color: 0xFF2196F3,
+              createdAt: DateTime(2024),
+            ),
+          ],
+        );
+
+        final shared = _mediaModel(
+          '$photosRoot/one.jpg',
+          tagIds: const ['beach', 'sunset'],
+        );
+        final other = _mediaModel(
+          '$photosRoot/two.jpg',
+          tagIds: const ['beach', 'family'],
+        );
+        when(isarMediaDataSource.getMedia())
+            .thenAnswer((_) async => [shared, other]);
+        await viewModel.loadTags();
+
+        viewModel.selectMediaRange([shared.id, other.id]);
+
+        expect(viewModel.commonTagIdsForSelection(), ['beach']);
+      });
+    });
   });
 }
 
@@ -227,7 +398,7 @@ DirectoryEntity _directory(String path, String name) {
   );
 }
 
-MediaModel _mediaModel(String path) {
+MediaModel _mediaModel(String path, {List<String> tagIds = const []}) {
   return MediaModel(
     id: 'media-$path',
     path: path,
@@ -235,7 +406,7 @@ MediaModel _mediaModel(String path) {
     type: MediaType.image,
     size: 1,
     lastModified: DateTime(2024),
-    tagIds: const [],
+    tagIds: tagIds,
     directoryId: generateDirectoryId('/Photos'),
   );
 }

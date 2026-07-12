@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'dart:developer' as developer;
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +17,7 @@ import '../../../../shared/utils/directory_id_utils.dart';
 import '../../../../shared/utils/grid_scroll_offset.dart';
 import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
+import '../../../../shared/widgets/media_marquee_selector.dart';
 import '../../../../shared/widgets/move_copy_media_action.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
@@ -84,13 +83,6 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   /// The reveal is a one-shot on arrival — re-running it on every rebuild would
   /// yank the grid back under a user who has since scrolled away.
   bool _hasRevealed = false;
-  Rect? _mediaSelectionRect;
-  Offset? _mediaDragStart;
-  bool _isMediaMarqueeActive = false;
-  bool _mediaAppendMode = false;
-  Set<String> _mediaMarqueeBaseSelection = <String>{};
-  Set<String> _mediaLastMarqueeSelection = <String>{};
-  Map<String, Rect> _mediaCachedItemRects = <String, Rect>{};
   List<DirectoryNavigationTarget> _siblingNavigationTargets = const [];
   int _currentDirectoryNavigationIndex = 0;
   late final FocusNode _focusNode;
@@ -1168,44 +1160,16 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     required Widget child,
     required MediaViewModel viewModel,
   }) {
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTapDown: (details) => _handleMediaBackgroundTap(details, viewModel),
-      onLongPressStart: (details) =>
-          _handleMediaLongPressStart(details, viewModel),
-      onLongPressMoveUpdate: (details) =>
-          _handleMediaLongPressMove(details, viewModel),
-      onLongPressEnd: (_) => _endMediaMarquee(),
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (event) => _handleMediaPointerDown(event, viewModel),
-        onPointerMove: (event) => _handleMediaPointerMove(event, viewModel),
-        onPointerUp: (_) => _endMediaMarquee(),
-        onPointerCancel: (_) => _endMediaMarquee(),
-        child: Stack(
-          key: _mediaGridOverlayKey,
-          children: [
-            Positioned.fill(child: child),
-            if (_mediaSelectionRect != null)
-              Positioned.fromRect(
-                rect: _mediaSelectionRect!,
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacity(0.12),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: UiSizing.borderWidth,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
+    return MediaMarqueeSelector(
+      key: _mediaGridOverlayKey,
+      itemKeys: _mediaItemKeys,
+      selection: viewModel.selectedMediaIds,
+      isSelectionMode: viewModel.isSelectionMode,
+      onSelectionChanged: (ids) =>
+          viewModel.selectMediaRange(ids, append: false),
+      onEnableSelectionMode: viewModel.enableSelectionMode,
+      onClearSelection: viewModel.clearMediaSelection,
+      child: child,
     );
   }
 
@@ -1242,279 +1206,23 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     developer.log(message, name: 'MediaGridScreen');
   }
 
-  void _handleMediaPointerDown(
-    PointerDownEvent event,
-    MediaViewModel viewModel,
-  ) {
-    if (event.kind != PointerDeviceKind.mouse ||
-        (event.buttons & kPrimaryMouseButton) == 0) {
-      return;
-    }
 
-    final overlayContext = _mediaGridOverlayKey.currentContext;
-    if (overlayContext == null) {
-      return;
-    }
-    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
-    if (overlayBox == null || !overlayBox.attached) {
-      return;
-    }
 
-    final localPosition = overlayBox.globalToLocal(event.position);
-    _startMediaMarqueeSelection(
-      localPosition,
-      viewModel,
-      appendMode: _isMultiSelectModifierPressed(),
-      ensureSelectionMode: false,
-    );
-  }
 
-  void _handleMediaLongPressStart(
-    LongPressStartDetails details,
-    MediaViewModel viewModel,
-  ) {
-    final localPosition = _localMediaPosition(details.globalPosition);
-    if (localPosition == null) {
-      return;
-    }
 
-    _startMediaMarqueeSelection(
-      localPosition,
-      viewModel,
-      appendMode: false,
-      ensureSelectionMode: true,
-    );
-  }
 
-  void _handleMediaBackgroundTap(
-    TapDownDetails details,
-    MediaViewModel viewModel,
-  ) {
-    if (!viewModel.isSelectionMode) {
-      return;
-    }
-    final localPosition = _localMediaPosition(details.globalPosition);
-    if (localPosition == null) {
-      return;
-    }
 
-    _mediaCachedItemRects = _computeMediaItemRects();
-    if (_isPointInsideAnyRect(localPosition, _mediaCachedItemRects.values)) {
-      return;
-    }
 
-    viewModel.clearMediaSelection();
-  }
 
-  void _handleMediaLongPressMove(
-    LongPressMoveUpdateDetails details,
-    MediaViewModel viewModel,
-  ) {
-    if (!_isMediaMarqueeActive) {
-      return;
-    }
-    final localPosition = _localMediaPosition(details.globalPosition);
-    if (localPosition == null) {
-      return;
-    }
 
-    _updateMediaSelectionRect(localPosition);
-    _mediaCachedItemRects = _computeMediaItemRects();
-    _updateMediaMarqueeSelection(viewModel);
-  }
 
-  void _handleMediaPointerMove(
-    PointerMoveEvent event,
-    MediaViewModel viewModel,
-  ) {
-    if (!_isMediaMarqueeActive || _mediaDragStart == null) {
-      return;
-    }
-
-    if (event.kind == PointerDeviceKind.mouse &&
-        (event.buttons & kPrimaryMouseButton) == 0) {
-      _endMediaMarquee();
-      return;
-    }
-
-    final overlayContext = _mediaGridOverlayKey.currentContext;
-    if (overlayContext == null) {
-      return;
-    }
-    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
-    if (overlayBox == null || !overlayBox.attached) {
-      return;
-    }
-
-    final localPosition = overlayBox.globalToLocal(event.position);
-    _updateMediaSelectionRect(localPosition);
-    _mediaCachedItemRects = _computeMediaItemRects();
-    _updateMediaMarqueeSelection(viewModel);
-  }
-
-  void _startMediaMarqueeSelection(
-    Offset localPosition,
-    MediaViewModel viewModel, {
-    required bool appendMode,
-    required bool ensureSelectionMode,
-  }) {
-    _mediaCachedItemRects = _computeMediaItemRects();
-    if (_isPointInsideAnyRect(localPosition, _mediaCachedItemRects.values)) {
-      return;
-    }
-
-    if (ensureSelectionMode) {
-      viewModel.enableSelectionMode();
-    }
-
-    final baseSelection = viewModel.selectedMediaIds;
-    _mediaMarqueeBaseSelection = Set<String>.from(baseSelection);
-    _mediaLastMarqueeSelection = Set<String>.from(baseSelection);
-    _mediaAppendMode = appendMode;
-    _isMediaMarqueeActive = true;
-    _mediaDragStart = localPosition;
-
-    setState(() {
-      _mediaSelectionRect = Rect.fromPoints(localPosition, localPosition);
-    });
-
-    _updateMediaMarqueeSelection(viewModel);
-  }
-
-  void _updateMediaSelectionRect(Offset localPosition) {
-    if (_mediaDragStart == null) {
-      return;
-    }
-    setState(() {
-      _mediaSelectionRect = Rect.fromPoints(_mediaDragStart!, localPosition);
-    });
-  }
-
-  Offset? _localMediaPosition(Offset globalPosition) {
-    final overlayContext = _mediaGridOverlayKey.currentContext;
-    if (overlayContext == null) {
-      return null;
-    }
-    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
-    if (overlayBox == null || !overlayBox.attached) {
-      return null;
-    }
-    return overlayBox.globalToLocal(globalPosition);
-  }
-
-  void _endMediaMarquee() {
-    if (!_isMediaMarqueeActive && _mediaSelectionRect == null) {
-      return;
-    }
-
-    setState(() {
-      _mediaSelectionRect = null;
-    });
-    _isMediaMarqueeActive = false;
-    _mediaDragStart = null;
-    _mediaAppendMode = false;
-    _mediaMarqueeBaseSelection = <String>{};
-    _mediaLastMarqueeSelection = <String>{};
-    _mediaCachedItemRects = <String, Rect>{};
-  }
-
-  void _updateMediaMarqueeSelection(MediaViewModel viewModel) {
-    if (!_isMediaMarqueeActive) {
-      return;
-    }
-
-    final selectionRect = _mediaSelectionRect;
-    final rects = _mediaCachedItemRects;
-    final intersectingIds = <String>{};
-
-    if (selectionRect != null) {
-      for (final entry in rects.entries) {
-        if (entry.value.overlaps(selectionRect)) {
-          intersectingIds.add(entry.key);
-        }
-      }
-    }
-
-    final desiredSelection = _mediaAppendMode
-        ? {..._mediaMarqueeBaseSelection, ...intersectingIds}
-        : intersectingIds;
-
-    if (setEquals(desiredSelection, _mediaLastMarqueeSelection)) {
-      return;
-    }
-
-    _mediaLastMarqueeSelection = desiredSelection;
-    viewModel.selectMediaRange(desiredSelection, append: false);
-  }
-
-  Map<String, Rect> _computeMediaItemRects() {
-    final overlayContext = _mediaGridOverlayKey.currentContext;
-    if (overlayContext == null) {
-      return <String, Rect>{};
-    }
-
-    final overlayBox = overlayContext.findRenderObject() as RenderBox?;
-    if (overlayBox == null || !overlayBox.attached) {
-      return <String, Rect>{};
-    }
-
-    final rects = <String, Rect>{};
-    final staleKeys = <String>[];
-    _mediaItemKeys.forEach((id, key) {
-      final context = key.currentContext;
-      if (context == null) {
-        staleKeys.add(id);
-        return;
-      }
-      final renderObject = context.findRenderObject();
-      if (renderObject is! RenderBox || !renderObject.attached) {
-        staleKeys.add(id);
-        return;
-      }
-      final topLeft = renderObject.localToGlobal(
-        Offset.zero,
-        ancestor: overlayBox,
-      );
-      rects[id] = Rect.fromLTWH(
-        topLeft.dx,
-        topLeft.dy,
-        renderObject.size.width,
-        renderObject.size.height,
-      );
-    });
-
-    for (final id in staleKeys) {
-      _mediaItemKeys.remove(id);
-    }
-
-    return rects;
-  }
 
   void _pruneMediaItemKeys(Iterable<MediaEntity> media) {
     final validIds = media.map((item) => item.id).toSet();
     _mediaItemKeys.removeWhere((id, _) => !validIds.contains(id));
   }
 
-  bool _isPointInsideAnyRect(Offset point, Iterable<Rect> rects) {
-    for (final rect in rects) {
-      if (rect.contains(point)) {
-        return true;
-      }
-    }
-    return false;
-  }
 
-  bool _isMultiSelectModifierPressed() {
-    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
-    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
-        pressed.contains(LogicalKeyboardKey.shiftRight) ||
-        pressed.contains(LogicalKeyboardKey.controlLeft) ||
-        pressed.contains(LogicalKeyboardKey.controlRight) ||
-        pressed.contains(LogicalKeyboardKey.metaLeft) ||
-        pressed.contains(LogicalKeyboardKey.metaRight) ||
-        pressed.contains(LogicalKeyboardKey.altLeft) ||
-        pressed.contains(LogicalKeyboardKey.altRight);
-  }
 
   Widget _buildError(String message, MediaViewModel viewModel) {
     return Center(

@@ -1,3 +1,5 @@
+import 'package:uuid/uuid.dart';
+
 import '../entities/tag_entity.dart';
 import '../repositories/tag_repository.dart';
 import '../tag_validation.dart';
@@ -6,14 +8,29 @@ import '../tag_validation.dart';
 // with editing. Re-exported so its existing importers keep working.
 export '../tag_validation.dart' show TagValidationException;
 
-/// Use case for creating new tags.
-/// Handles validation and creation logic for tag entities.
+/// Mints the id for a new tag. Injectable so tests can pin it.
+typedef TagIdGenerator = String Function();
+
+String _uuidV4() => const Uuid().v4();
+
+/// Creates a tag, with validation.
+///
+/// The single creation path. `TagViewModel.createTag` used to build the entity
+/// itself and skip every rule, so a duplicate or malformed name was rejected only
+/// by the create dialog's form validator and by nothing else.
 class CreateTagUseCase {
-  const CreateTagUseCase(this._tagRepository);
+  const CreateTagUseCase(
+    this._tagRepository, {
+    TagIdGenerator generateId = _uuidV4,
+  }) : _generateId = generateId;
 
   final TagRepository _tagRepository;
+  final TagIdGenerator _generateId;
 
-  /// Creates a new tag with validation.
+  /// Creates and persists a tag.
+  ///
+  /// Throws [TagValidationException] when the name breaks the rules or is
+  /// already taken (case-insensitively).
   Future<TagEntity> createTag({
     required String name,
     required int color,
@@ -27,8 +44,11 @@ class CreateTagUseCase {
       throw const TagValidationException('A tag with this name already exists');
     }
 
+    // A v4 uuid, matching every tag already in the database — the live creation
+    // path has always used one. The timestamp-plus-`micros % 1000` scheme this
+    // replaced was not random and could repeat within a millisecond.
     final tag = TagEntity(
-      id: _generateTagId(),
+      id: _generateId(),
       name: trimmedName,
       color: color,
       createdAt: DateTime.now(),
@@ -37,16 +57,5 @@ class CreateTagUseCase {
     await _tagRepository.createTag(tag);
 
     return tag;
-  }
-
-  /// Generates a unique ID for the tag.
-  String _generateTagId() {
-    // In a real app, you might use UUID or another ID generation strategy
-    return 'tag_${DateTime.now().millisecondsSinceEpoch}_${_randomSuffix()}';
-  }
-
-  /// Generates a random suffix for ID uniqueness.
-  String _randomSuffix() {
-    return (DateTime.now().microsecondsSinceEpoch % 1000).toString();
   }
 }

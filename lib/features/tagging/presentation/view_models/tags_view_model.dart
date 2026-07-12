@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +15,7 @@ import '../../../media_library/domain/repositories/directory_repository.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/domain/enums/tag_filter_mode.dart';
 import '../../../tagging/domain/enums/tag_media_type_filter.dart';
+import '../../../tagging/domain/use_cases/assign_tag_use_case.dart';
 import '../../../tagging/domain/use_cases/filter_by_tags_use_case.dart';
 import '../../../tagging/domain/use_cases/get_tags_use_case.dart';
 import '../../../../shared/providers/repository_providers.dart';
@@ -93,6 +96,8 @@ class TagsLoaded extends TagsState {
     required this.libraryDirectories,
     required this.selectedDirectoryPaths,
     required this.mediaById,
+    this.selectedMediaIds = const <String>{},
+    this.isSelectionMode = false,
   });
 
   final List<TagSection> sections;
@@ -111,6 +116,18 @@ class TagsLoaded extends TagsState {
   final Set<String> selectedDirectoryPaths;
 
   final Map<String, MediaEntity> mediaById;
+
+  /// Media picked out of the grid for a bulk action.
+  ///
+  /// Unlike the Library grid, whose selection lives in a `MediaViewModel` keyed
+  /// on one directory, this selection spans every directory the tag filter
+  /// matched.
+  final Set<String> selectedMediaIds;
+
+  /// Whether the grid is showing its checkboxes. Kept separate from
+  /// [selectedMediaIds] so an empty selection can still be "in selection mode",
+  /// which is what lets a drag start from nothing.
+  final bool isSelectionMode;
 
   List<String> get orderedSelectedTagIds {
     return _orderedTagIds(selectedTagIds);
@@ -148,6 +165,8 @@ class TagsLoaded extends TagsState {
     List<DirectoryEntity>? libraryDirectories,
     Set<String>? selectedDirectoryPaths,
     Map<String, MediaEntity>? mediaById,
+    Set<String>? selectedMediaIds,
+    bool? isSelectionMode,
   }) {
     return TagsLoaded(
       sections: sections ?? this.sections,
@@ -161,6 +180,8 @@ class TagsLoaded extends TagsState {
       selectedDirectoryPaths:
           selectedDirectoryPaths ?? this.selectedDirectoryPaths,
       mediaById: mediaById ?? this.mediaById,
+      selectedMediaIds: selectedMediaIds ?? this.selectedMediaIds,
+      isSelectionMode: isSelectionMode ?? this.isSelectionMode,
     );
   }
 }
@@ -182,6 +203,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
     this._favoritesRepository,
     this._mediaDataSource,
     this._directoryRepository,
+    this._assignTagUseCase,
   ) : super(const TagsLoading());
 
   final GetTagsUseCase _getTagsUseCase;
@@ -189,10 +211,13 @@ class TagsViewModel extends StateNotifier<TagsState> {
   final FavoritesRepository _favoritesRepository;
   final IsarMediaDataSource _mediaDataSource;
   final DirectoryRepository _directoryRepository;
+  final AssignTagUseCase _assignTagUseCase;
   Set<String> _selectedTagIds = <String>{};
   Set<String> _optionalTagIds = <String>{};
   Set<String> _excludedTagIds = <String>{};
   Set<String> _selectedDirectoryPaths = <String>{};
+  Set<String> _selectedMediaIds = <String>{};
+  bool _isMediaSelectionMode = false;
   TagFilterMode _filterMode = TagFilterMode.any;
   TagMediaTypeFilter _mediaTypeFilter = TagMediaTypeFilter.all;
   TagSelectionMode _selectionMode = TagSelectionMode.required;
@@ -241,6 +266,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
               _selectedDirectoryPaths,
             ),
             mediaById: currentState.mediaById,
+            selectedMediaIds: Set<String>.unmodifiable(_selectedMediaIds),
+            isSelectionMode: _isMediaSelectionMode,
           );
         } else if (otherSections.isEmpty) {
           _selectedTagIds = <String>{};
@@ -261,6 +288,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
               _selectedDirectoryPaths,
             ),
             mediaById: currentState.mediaById,
+            selectedMediaIds: Set<String>.unmodifiable(_selectedMediaIds),
+            isSelectionMode: _isMediaSelectionMode,
           );
         }
       } else {
@@ -355,6 +384,7 @@ class TagsViewModel extends StateNotifier<TagsState> {
       _selectedDirectoryPaths = _selectedDirectoryPaths.intersection(
         _knownDirectoryPaths,
       );
+      _pruneMediaSelection(cachedMediaById.keys.toSet());
 
       if (sections.isEmpty) {
         _selectedTagIds = <String>{};
@@ -375,6 +405,8 @@ class TagsViewModel extends StateNotifier<TagsState> {
             _selectedDirectoryPaths,
           ),
           mediaById: cachedMediaById,
+          selectedMediaIds: Set<String>.unmodifiable(_selectedMediaIds),
+          isSelectionMode: _isMediaSelectionMode,
         );
       }
     } catch (e) {
@@ -604,6 +636,120 @@ class TagsViewModel extends StateNotifier<TagsState> {
     }
   }
 
+  /// Adds or removes [mediaId] from the grid selection.
+  void toggleMediaSelection(String mediaId) {
+    final updated = Set<String>.from(_selectedMediaIds);
+    if (!updated.remove(mediaId)) {
+      updated.add(mediaId);
+    }
+    _applyMediaSelection(updated, isSelectionMode: true);
+  }
+
+  /// Replaces the selection with [mediaIds], or adds to it when [append].
+  ///
+  /// The marquee's entry point: it reports what its rectangle covers on every
+  /// pointer move.
+  void selectMediaRange(Iterable<String> mediaIds, {bool append = false}) {
+    final updated = append
+        ? (Set<String>.from(_selectedMediaIds)..addAll(mediaIds))
+        : Set<String>.from(mediaIds);
+    _applyMediaSelection(updated, isSelectionMode: true);
+  }
+
+  /// Turns on selection mode without changing what is selected.
+  ///
+  /// A long-press drag starts here, before the rectangle has covered anything.
+  void enableMediaSelectionMode() {
+    if (_isMediaSelectionMode) {
+      return;
+    }
+    _applyMediaSelection(_selectedMediaIds, isSelectionMode: true);
+  }
+
+  void clearMediaSelection() {
+    if (_selectedMediaIds.isEmpty && !_isMediaSelectionMode) {
+      return;
+    }
+    _applyMediaSelection(const <String>{}, isSelectionMode: false);
+  }
+
+  void _applyMediaSelection(
+    Set<String> mediaIds, {
+    required bool isSelectionMode,
+  }) {
+    _selectedMediaIds = mediaIds;
+    _isMediaSelectionMode = isSelectionMode;
+
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(
+        selectedMediaIds: Set<String>.unmodifiable(_selectedMediaIds),
+        isSelectionMode: _isMediaSelectionMode,
+      );
+    }
+  }
+
+  /// The media currently selected, as entities.
+  List<MediaEntity> selectedMedia() {
+    final currentState = state;
+    if (currentState is! TagsLoaded) {
+      return const [];
+    }
+    return _selectedMediaIds
+        .map((id) => currentState.mediaById[id])
+        .whereType<MediaEntity>()
+        .toList(growable: false);
+  }
+
+  /// Tags every selected item already shares — what the bulk dialog opens with.
+  List<String> commonTagIdsForSelection() {
+    final selection = selectedMedia();
+    if (selection.isEmpty) {
+      return const [];
+    }
+
+    final common = LinkedHashSet<String>.from(selection.first.tagIds);
+    for (final media in selection.skip(1)) {
+      common.retainAll(media.tagIds);
+    }
+    return List<String>.unmodifiable(common);
+  }
+
+  /// Replaces the tags on every selected item with [tagIds].
+  Future<void> applyTagsToSelection(List<String> tagIds) async {
+    if (_selectedMediaIds.isEmpty) {
+      return;
+    }
+
+    final sanitized = List<String>.unmodifiable(
+      LinkedHashSet<String>.from(tagIds),
+    );
+
+    await _assignTagUseCase.setTagsForMedia(
+      _selectedMediaIds.toList(growable: false),
+      sanitized,
+    );
+
+    // The tag sections are derived from these rows, so they have to be rebuilt —
+    // a media item may have just left or joined the very section it is sitting in.
+    await _reloadSections();
+  }
+
+  /// Drops selected ids that the current filters no longer show.
+  ///
+  /// Called after a reload: a bulk delete, or a tag change that narrows the
+  /// result set, would otherwise leave the selection pointing at media the grid
+  /// is no longer displaying.
+  void _pruneMediaSelection(Set<String> visibleMediaIds) {
+    if (_selectedMediaIds.isEmpty) {
+      return;
+    }
+    _selectedMediaIds = _selectedMediaIds.intersection(visibleMediaIds);
+    if (_selectedMediaIds.isEmpty) {
+      _isMediaSelectionMode = false;
+    }
+  }
+
   Future<TagSection?> _buildFavoritesSection({
     Map<String, MediaEntity>? cachedMediaById,
   }) async {
@@ -828,6 +974,7 @@ final tagsViewModelProvider =
         ref.watch(favoritesRepositoryProvider),
         ref.watch(isarMediaDataSourceProvider),
         ref.watch(directoryRepositoryProvider),
+        ref.watch(assignTagUseCaseProvider),
       );
       return viewModel;
     });

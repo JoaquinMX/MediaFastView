@@ -1,6 +1,6 @@
 import 'package:media_fast_view/features/media_library/domain/entities/tag_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/tag_repository.dart';
-import 'package:media_fast_view/features/tagging/domain/tag_validation.dart';
+import 'package:media_fast_view/features/tagging/domain/use_cases/create_tag_use_case.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/update_tag_use_case.dart';
 import 'package:media_fast_view/features/tagging/presentation/states/tag_state.dart';
 import 'package:media_fast_view/features/tagging/presentation/view_models/tag_management_view_model.dart';
@@ -51,7 +51,11 @@ class FakeTagViewModel extends TagViewModel {
     : this._(initialState, repository ?? FakeTagRepository());
 
   FakeTagViewModel._(TagState initialState, this.repository)
-    : super(repository, UpdateTagUseCase(repository)) {
+    : super(
+        repository,
+        CreateTagUseCase(repository),
+        UpdateTagUseCase(repository),
+      ) {
     state = initialState;
   }
 

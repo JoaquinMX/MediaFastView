@@ -1,25 +1,30 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/entities/tag_entity.dart';
 import '../../domain/repositories/tag_repository.dart';
 import '../../domain/tag_validation.dart';
+import '../../domain/use_cases/create_tag_use_case.dart';
 import '../../domain/use_cases/update_tag_use_case.dart';
 import '../states/tag_state.dart';
 
 /// ViewModel for managing tag operations and state.
 /// Handles CRUD operations, filtering, and tag management.
+///
+/// Every mutation goes through a use case, so the domain rules cannot be
+/// side-stepped by adding another caller.
 class TagViewModel extends StateNotifier<TagState> {
-  TagViewModel(this._tagRepository, this._updateTagUseCase)
-    : super(const TagLoading()) {
+  TagViewModel(
+    this._tagRepository,
+    this._createTagUseCase,
+    this._updateTagUseCase,
+  ) : super(const TagLoading()) {
     loadTags();
   }
 
   final TagRepository _tagRepository;
+  final CreateTagUseCase _createTagUseCase;
   final UpdateTagUseCase _updateTagUseCase;
-  final _uuid = const Uuid();
 
   /// Loads all tags from the repository.
   Future<void> loadTags() async {
@@ -36,32 +41,24 @@ class TagViewModel extends StateNotifier<TagState> {
     }
   }
 
-  /// Creates a new tag with the given name and color.
-  Future<void> createTag(String name, int color) async {
-    try {
-      final tag = TagEntity(
-        id: _uuid.v4(),
-        name: name.trim(),
-        color: color,
-        createdAt: DateTime.now(),
-      );
+  /// Creates a tag named [name] in [color].
+  ///
+  /// Returns the new tag, or throws [TagValidationException] when the name breaks
+  /// the rules or is already taken. Like [updateTag], the exception is left to
+  /// propagate rather than flipping the view model into [TagError]: the caller is
+  /// a dialog that shows it inline, and erroring the view model would blank the
+  /// tag list behind it.
+  Future<TagEntity> createTag(String name, int color) async {
+    final tag = await _createTagUseCase.createTag(name: name, color: color);
 
-      await _tagRepository.createTag(tag);
+    // Optimistic patch, as in updateTag. A fresh TagLoaded is never `identical`
+    // to the previous one, so listeners are notified.
+    state = switch (state) {
+      TagLoaded(:final tags) => TagLoaded([...tags, tag]),
+      _ => TagLoaded([tag]),
+    };
 
-      // Update state optimistically to avoid device update conflicts
-      // Instead of reloading which causes TagLoading -> TagLoaded transition
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        state = switch (state) {
-          TagLoaded(:final tags) => TagLoaded([...tags, tag]),
-          _ => TagLoaded([tag]), // Fallback in case state is not loaded
-        };
-      });
-    } catch (e) {
-      // Delay error state update as well
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        state = TagError('Failed to create tag: $e');
-      });
-    }
+    return tag;
   }
 
   /// Renames [tag] and/or changes its colour.
@@ -161,6 +158,7 @@ final tagViewModelProvider =
     StateNotifierProvider.autoDispose<TagViewModel, TagState>(
       (ref) => TagViewModel(
         ref.watch(tagRepositoryProvider),
+        ref.watch(createTagUseCaseProvider),
         ref.watch(updateTagUseCaseProvider),
       ),
     );
