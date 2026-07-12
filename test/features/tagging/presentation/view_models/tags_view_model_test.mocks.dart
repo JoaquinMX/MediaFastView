@@ -661,6 +661,17 @@ class MockIsarMediaDataSource extends _i1.Mock
       ) as _i4.Future<_i2.BatchUpdateResult>);
 
   @override
+  _i4.Future<void> removeMediaByIds(List<String>? mediaIds) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #removeMediaByIds,
+          [mediaIds],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
   _i4.Future<void> removeMediaForDirectory(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -687,6 +698,73 @@ class MockIsarMediaDataSource extends _i1.Mock
         returnValue: _i4.Future<void>.value(),
         returnValueForMissingStub: _i4.Future<void>.value(),
       ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> relocateMedia({
+    required String? mediaId,
+    required String? newPath,
+    required String? newName,
+    required String? newDirectoryId,
+    int? newSize,
+    DateTime? newLastModified,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #relocateMedia,
+          [],
+          {
+            #mediaId: mediaId,
+            #newPath: newPath,
+            #newName: newName,
+            #newDirectoryId: newDirectoryId,
+            #newSize: newSize,
+            #newLastModified: newLastModified,
+          },
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> replaceMedia({
+    required String? oldMediaId,
+    required _i15.MediaModel? newMedia,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #replaceMedia,
+          [],
+          {
+            #oldMediaId: oldMediaId,
+            #newMedia: newMedia,
+          },
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> replaceMediaBatch(
+          List<({_i15.MediaModel newMedia, String oldMediaId})>? entries) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #replaceMediaBatch,
+          [entries],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<_i15.MediaModel>> getMediaUnderPath(String? directoryPath) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getMediaUnderPath,
+          [directoryPath],
+        ),
+        returnValue:
+            _i4.Future<List<_i15.MediaModel>>.value(<_i15.MediaModel>[]),
+      ) as _i4.Future<List<_i15.MediaModel>>);
 
   @override
   _i4.Future<void> clearMedia() => (super.noSuchMethod(

@@ -17,6 +17,18 @@ class TagCacheRefresher {
     final futures = <Future<void>>[];
     _ref.invalidate(directoryMediaCountsProvider);
 
+    // TagLookup is an app-lifetime cache of tag name + colour, and it is what
+    // the full-screen and slideshow overlays resolve media.tagIds through. Miss
+    // it and a renamed tag keeps its old name and colour there until an
+    // unrelated tag assignment happens or the app restarts.
+    try {
+      futures.add(_ref.read(tagLookupProvider).refresh());
+    } catch (error, stackTrace) {
+      LoggingService.instance.error('Failed to refresh TagLookup cache: $error');
+      LoggingService.instance
+          .debug('TagLookup refresh stack trace: $stackTrace');
+    }
+
     try {
       final tagsViewModel = _ref.read(tagsViewModelProvider.notifier);
       futures.add(tagsViewModel.refreshTags());

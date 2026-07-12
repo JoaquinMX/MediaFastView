@@ -8,6 +8,7 @@ import '../../features/tagging/presentation/widgets/tag_chip.dart';
 
 typedef TagToggleCallback = Future<void> Function(TagEntity tag, bool isSelected);
 typedef TagDeletionCallback = Future<void> Function(BuildContext context, TagEntity tag);
+typedef TagEditCallback = Future<void> Function(BuildContext context, TagEntity tag);
 typedef TagCreationCallback = Future<void> Function(BuildContext context);
 typedef TagSelectionConfirmCallback<T> = Future<T?> Function(List<String> tagIds);
 typedef TagSelectionLoader = Future<List<String>> Function();
@@ -34,9 +35,11 @@ class TagSelectionDialog<T> extends ConsumerStatefulWidget {
     this.onSelectionChanged,
     this.onTagToggle,
     this.onDeleteTag,
+    this.onEditTag,
     this.onCreateTag,
     this.showCreateButton = false,
     this.showDeleteButtons = false,
+    this.showEditButtons = false,
     this.selectionLimit,
     this.selectionLimitMessage,
     this.showAllOption = false,
@@ -72,6 +75,9 @@ class TagSelectionDialog<T> extends ConsumerStatefulWidget {
   /// Callback that is invoked when the delete icon on a tag is pressed.
   final TagDeletionCallback? onDeleteTag;
 
+  /// Callback that is invoked when the edit icon on a tag is pressed.
+  final TagEditCallback? onEditTag;
+
   /// Callback to open a creation experience for tags.
   final TagCreationCallback? onCreateTag;
 
@@ -93,6 +99,13 @@ class TagSelectionDialog<T> extends ConsumerStatefulWidget {
 
   /// Whether destructive actions (delete icons) should be displayed.
   final bool showDeleteButtons;
+
+  /// Whether each tag offers an edit action.
+  ///
+  /// Switches the tag list from chips to rows, since a chip has only one action
+  /// slot and it is already spent on delete. Opt-in, so the assign, filter and
+  /// bulk-assign flows keep their chips.
+  final bool showEditButtons;
 
   /// Whether the "Create tag" button should be shown.
   final bool showCreateButton;
@@ -283,6 +296,17 @@ class _TagSelectionDialogState<T>
         if (tags.isEmpty)
           widget.emptyStateBuilder?.call(context) ??
               _buildDefaultEmptyState(context)
+        else if (widget.showEditButtons)
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final tag in tags) _buildTagRow(context, tag),
+                ],
+              ),
+            ),
+          )
         else
           Flexible(
             child: SingleChildScrollView(
@@ -324,6 +348,44 @@ class _TagSelectionDialogState<T>
           ),
         ],
       ],
+    );
+  }
+
+  /// A manage-mode tag row: colour swatch, name, and the edit/delete actions.
+  ///
+  /// Rows rather than chips because a chip has a single action slot, already
+  /// spent on delete. There is no selection here — in manage mode there is
+  /// nothing to assign the tag to.
+  Widget _buildTagRow(BuildContext context, TagEntity tag) {
+    final theme = Theme.of(context);
+
+    return ListTile(
+      key: ValueKey<String>('tag_row_${tag.id}'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      leading: CircleAvatar(
+        radius: 12,
+        backgroundColor: Color(tag.color),
+      ),
+      title: Text(tag.name, style: theme.textTheme.bodyLarge),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            iconSize: 20,
+            tooltip: 'Edit "${tag.name}"',
+            onPressed: () => widget.onEditTag?.call(context, tag),
+          ),
+          if (widget.showDeleteButtons)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              iconSize: 20,
+              tooltip: 'Delete "${tag.name}"',
+              color: theme.colorScheme.error,
+              onPressed: () => widget.onDeleteTag?.call(context, tag),
+            ),
+        ],
+      ),
     );
   }
 

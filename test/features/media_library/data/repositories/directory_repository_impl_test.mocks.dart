@@ -3,27 +3,28 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i7;
+import 'dart:async' as _i8;
 
 import 'package:media_fast_view/core/services/bookmark_service.dart' as _i2;
-import 'package:media_fast_view/core/services/permission_service.dart' as _i6;
+import 'package:media_fast_view/core/services/file_transfer_result.dart' as _i6;
+import 'package:media_fast_view/core/services/permission_service.dart' as _i7;
 import 'package:media_fast_view/core/utils/batch_update_result.dart' as _i5;
 import 'package:media_fast_view/features/media_library/data/data_sources/filesystem_media_data_source.dart'
     as _i4;
 import 'package:media_fast_view/features/media_library/data/data_sources/local_directory_data_source.dart'
     as _i3;
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart'
-    as _i11;
-import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart'
-    as _i10;
-import 'package:media_fast_view/features/media_library/data/models/directory_model.dart'
     as _i12;
+import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart'
+    as _i11;
+import 'package:media_fast_view/features/media_library/data/models/directory_model.dart'
+    as _i13;
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart'
-    as _i9;
+    as _i10;
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart'
-    as _i8;
+    as _i9;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i13;
+import 'package:mockito/src/dummies.dart' as _i14;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -82,9 +83,9 @@ class _FakeBatchUpdateResult_3 extends _i1.SmartFake
         );
 }
 
-class _FakeBookmarkValidationResult_4 extends _i1.SmartFake
-    implements _i6.BookmarkValidationResult {
-  _FakeBookmarkValidationResult_4(
+class _FakeFileTransferResult_4 extends _i1.SmartFake
+    implements _i6.FileTransferResult {
+  _FakeFileTransferResult_4(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -93,9 +94,20 @@ class _FakeBookmarkValidationResult_4 extends _i1.SmartFake
         );
 }
 
-class _FakePermissionMonitorResult_5 extends _i1.SmartFake
-    implements _i6.PermissionMonitorResult {
-  _FakePermissionMonitorResult_5(
+class _FakeBookmarkValidationResult_5 extends _i1.SmartFake
+    implements _i7.BookmarkValidationResult {
+  _FakeBookmarkValidationResult_5(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakePermissionMonitorResult_6 extends _i1.SmartFake
+    implements _i7.PermissionMonitorResult {
+  _FakePermissionMonitorResult_6(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -123,28 +135,28 @@ class MockLocalDirectoryDataSource extends _i1.Mock
       ) as _i2.BookmarkService);
 
   @override
-  _i7.Future<bool> validateDirectory(_i8.DirectoryEntity? directory) =>
+  _i8.Future<bool> validateDirectory(_i9.DirectoryEntity? directory) =>
       (super.noSuchMethod(
         Invocation.method(
           #validateDirectory,
           [directory],
         ),
-        returnValue: _i7.Future<bool>.value(false),
-      ) as _i7.Future<bool>);
+        returnValue: _i8.Future<bool>.value(false),
+      ) as _i8.Future<bool>);
 
   @override
-  _i7.Future<_i8.DirectoryEntity?> getDirectoryInfo(String? directoryPath) =>
+  _i8.Future<_i9.DirectoryEntity?> getDirectoryInfo(String? directoryPath) =>
       (super.noSuchMethod(
         Invocation.method(
           #getDirectoryInfo,
           [directoryPath],
         ),
-        returnValue: _i7.Future<_i8.DirectoryEntity?>.value(),
-      ) as _i7.Future<_i8.DirectoryEntity?>);
+        returnValue: _i8.Future<_i9.DirectoryEntity?>.value(),
+      ) as _i8.Future<_i9.DirectoryEntity?>);
 
   @override
-  _i7.Future<List<_i8.DirectoryEntity>> scanDirectoriesWithMedia(
-    _i8.DirectoryEntity? rootDirectory, {
+  _i8.Future<List<_i9.DirectoryEntity>> scanDirectoriesWithMedia(
+    _i9.DirectoryEntity? rootDirectory, {
     _i3.DirectoryScanProgressCallback? onProgress,
     _i3.DirectoryScanCancellationToken? cancellationToken,
   }) =>
@@ -157,19 +169,19 @@ class MockLocalDirectoryDataSource extends _i1.Mock
             #cancellationToken: cancellationToken,
           },
         ),
-        returnValue: _i7.Future<List<_i8.DirectoryEntity>>.value(
-            <_i8.DirectoryEntity>[]),
-      ) as _i7.Future<List<_i8.DirectoryEntity>>);
+        returnValue: _i8.Future<List<_i9.DirectoryEntity>>.value(
+            <_i9.DirectoryEntity>[]),
+      ) as _i8.Future<List<_i9.DirectoryEntity>>);
 
   @override
-  _i7.Future<_i3.DirectoryTreeFingerprint> fingerprintDirectoryTree(
-          _i8.DirectoryEntity? rootDirectory) =>
+  _i8.Future<_i3.DirectoryTreeFingerprint> fingerprintDirectoryTree(
+          _i9.DirectoryEntity? rootDirectory) =>
       (super.noSuchMethod(
         Invocation.method(
           #fingerprintDirectoryTree,
           [rootDirectory],
         ),
-        returnValue: _i7.Future<_i3.DirectoryTreeFingerprint>.value(
+        returnValue: _i8.Future<_i3.DirectoryTreeFingerprint>.value(
             _FakeDirectoryTreeFingerprint_1(
           this,
           Invocation.method(
@@ -177,17 +189,17 @@ class MockLocalDirectoryDataSource extends _i1.Mock
             [rootDirectory],
           ),
         )),
-      ) as _i7.Future<_i3.DirectoryTreeFingerprint>);
+      ) as _i8.Future<_i3.DirectoryTreeFingerprint>);
 
   @override
-  _i7.Future<List<String>> scanSubdirectories(String? directoryPath) =>
+  _i8.Future<List<String>> scanSubdirectories(String? directoryPath) =>
       (super.noSuchMethod(
         Invocation.method(
           #scanSubdirectories,
           [directoryPath],
         ),
-        returnValue: _i7.Future<List<String>>.value(<String>[]),
-      ) as _i7.Future<List<String>>);
+        returnValue: _i8.Future<List<String>>.value(<String>[]),
+      ) as _i8.Future<List<String>>);
 }
 
 /// A class which mocks [FilesystemMediaDataSource].
@@ -200,7 +212,7 @@ class MockFilesystemMediaDataSource extends _i1.Mock
   }
 
   @override
-  _i7.Future<_i4.PermissionValidationResult> validateDirectoryAccess(
+  _i8.Future<_i4.PermissionValidationResult> validateDirectoryAccess(
     String? directoryPath, {
     String? bookmarkData,
   }) =>
@@ -210,7 +222,7 @@ class MockFilesystemMediaDataSource extends _i1.Mock
           [directoryPath],
           {#bookmarkData: bookmarkData},
         ),
-        returnValue: _i7.Future<_i4.PermissionValidationResult>.value(
+        returnValue: _i8.Future<_i4.PermissionValidationResult>.value(
             _FakePermissionValidationResult_2(
           this,
           Invocation.method(
@@ -219,10 +231,10 @@ class MockFilesystemMediaDataSource extends _i1.Mock
             {#bookmarkData: bookmarkData},
           ),
         )),
-      ) as _i7.Future<_i4.PermissionValidationResult>);
+      ) as _i8.Future<_i4.PermissionValidationResult>);
 
   @override
-  _i7.Future<List<_i9.MediaModel>> scanMediaForDirectory(
+  _i8.Future<List<_i10.MediaModel>> scanMediaForDirectory(
     String? directoryPath,
     String? directoryId, {
     String? bookmarkData,
@@ -236,21 +248,22 @@ class MockFilesystemMediaDataSource extends _i1.Mock
           ],
           {#bookmarkData: bookmarkData},
         ),
-        returnValue: _i7.Future<List<_i9.MediaModel>>.value(<_i9.MediaModel>[]),
-      ) as _i7.Future<List<_i9.MediaModel>>);
+        returnValue:
+            _i8.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
+      ) as _i8.Future<List<_i10.MediaModel>>);
 
   @override
-  _i7.Future<List<String>> scanSubdirectories(String? directoryPath) =>
+  _i8.Future<List<String>> scanSubdirectories(String? directoryPath) =>
       (super.noSuchMethod(
         Invocation.method(
           #scanSubdirectories,
           [directoryPath],
         ),
-        returnValue: _i7.Future<List<String>>.value(<String>[]),
-      ) as _i7.Future<List<String>>);
+        returnValue: _i8.Future<List<String>>.value(<String>[]),
+      ) as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<_i9.MediaModel?> getMediaById(
+  _i8.Future<_i10.MediaModel?> getMediaById(
     String? mediaId,
     String? directoryPath,
     String? directoryId, {
@@ -266,16 +279,16 @@ class MockFilesystemMediaDataSource extends _i1.Mock
           ],
           {#bookmarkData: bookmarkData},
         ),
-        returnValue: _i7.Future<_i9.MediaModel?>.value(),
-      ) as _i7.Future<_i9.MediaModel?>);
+        returnValue: _i8.Future<_i10.MediaModel?>.value(),
+      ) as _i8.Future<_i10.MediaModel?>);
 
   @override
-  _i7.Future<List<_i9.MediaModel>> filterMediaByTags(
+  _i8.Future<List<_i10.MediaModel>> filterMediaByTags(
     String? directoryPath,
     String? directoryId,
     List<String>? tagIds, {
     String? bookmarkData,
-    _i10.IsarMediaDataSource? mediaPersistence,
+    _i11.IsarMediaDataSource? mediaPersistence,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -290,84 +303,85 @@ class MockFilesystemMediaDataSource extends _i1.Mock
             #mediaPersistence: mediaPersistence,
           },
         ),
-        returnValue: _i7.Future<List<_i9.MediaModel>>.value(<_i9.MediaModel>[]),
-      ) as _i7.Future<List<_i9.MediaModel>>);
+        returnValue:
+            _i8.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
+      ) as _i8.Future<List<_i10.MediaModel>>);
 }
 
 /// A class which mocks [IsarDirectoryDataSource].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockIsarDirectoryDataSource extends _i1.Mock
-    implements _i11.IsarDirectoryDataSource {
+    implements _i12.IsarDirectoryDataSource {
   MockIsarDirectoryDataSource() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i7.Future<List<_i12.DirectoryModel>> getDirectories() => (super.noSuchMethod(
+  _i8.Future<List<_i13.DirectoryModel>> getDirectories() => (super.noSuchMethod(
         Invocation.method(
           #getDirectories,
           [],
         ),
-        returnValue: _i7.Future<List<_i12.DirectoryModel>>.value(
-            <_i12.DirectoryModel>[]),
-      ) as _i7.Future<List<_i12.DirectoryModel>>);
+        returnValue: _i8.Future<List<_i13.DirectoryModel>>.value(
+            <_i13.DirectoryModel>[]),
+      ) as _i8.Future<List<_i13.DirectoryModel>>);
 
   @override
-  _i7.Future<_i12.DirectoryModel?> getDirectoryById(String? directoryId) =>
+  _i8.Future<_i13.DirectoryModel?> getDirectoryById(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getDirectoryById,
           [directoryId],
         ),
-        returnValue: _i7.Future<_i12.DirectoryModel?>.value(),
-      ) as _i7.Future<_i12.DirectoryModel?>);
+        returnValue: _i8.Future<_i13.DirectoryModel?>.value(),
+      ) as _i8.Future<_i13.DirectoryModel?>);
 
   @override
-  _i7.Future<void> saveDirectories(List<_i12.DirectoryModel>? directories) =>
+  _i8.Future<void> saveDirectories(List<_i13.DirectoryModel>? directories) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveDirectories,
           [directories],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> addDirectory(_i12.DirectoryModel? directory) =>
+  _i8.Future<void> addDirectory(_i13.DirectoryModel? directory) =>
       (super.noSuchMethod(
         Invocation.method(
           #addDirectory,
           [directory],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> removeDirectory(String? id) => (super.noSuchMethod(
+  _i8.Future<void> removeDirectory(String? id) => (super.noSuchMethod(
         Invocation.method(
           #removeDirectory,
           [id],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateDirectory(_i12.DirectoryModel? updatedDirectory) =>
+  _i8.Future<void> updateDirectory(_i13.DirectoryModel? updatedDirectory) =>
       (super.noSuchMethod(
         Invocation.method(
           #updateDirectory,
           [updatedDirectory],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<_i5.BatchUpdateResult> updateDirectoryTagsBatch(
+  _i8.Future<_i5.BatchUpdateResult> updateDirectoryTagsBatch(
           Map<String, List<String>>? directoryTags) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -375,89 +389,91 @@ class MockIsarDirectoryDataSource extends _i1.Mock
           [directoryTags],
         ),
         returnValue:
-            _i7.Future<_i5.BatchUpdateResult>.value(_FakeBatchUpdateResult_3(
+            _i8.Future<_i5.BatchUpdateResult>.value(_FakeBatchUpdateResult_3(
           this,
           Invocation.method(
             #updateDirectoryTagsBatch,
             [directoryTags],
           ),
         )),
-      ) as _i7.Future<_i5.BatchUpdateResult>);
+      ) as _i8.Future<_i5.BatchUpdateResult>);
 
   @override
-  _i7.Future<void> clearDirectories() => (super.noSuchMethod(
+  _i8.Future<void> clearDirectories() => (super.noSuchMethod(
         Invocation.method(
           #clearDirectories,
           [],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 }
 
 /// A class which mocks [IsarMediaDataSource].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockIsarMediaDataSource extends _i1.Mock
-    implements _i10.IsarMediaDataSource {
+    implements _i11.IsarMediaDataSource {
   MockIsarMediaDataSource() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i7.Future<List<_i9.MediaModel>> getMedia() => (super.noSuchMethod(
+  _i8.Future<List<_i10.MediaModel>> getMedia() => (super.noSuchMethod(
         Invocation.method(
           #getMedia,
           [],
         ),
-        returnValue: _i7.Future<List<_i9.MediaModel>>.value(<_i9.MediaModel>[]),
-      ) as _i7.Future<List<_i9.MediaModel>>);
+        returnValue:
+            _i8.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
+      ) as _i8.Future<List<_i10.MediaModel>>);
 
   @override
-  _i7.Future<void> saveMedia(List<_i9.MediaModel>? media) =>
+  _i8.Future<void> saveMedia(List<_i10.MediaModel>? media) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveMedia,
           [media],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> upsertMedia(List<_i9.MediaModel>? media) =>
+  _i8.Future<void> upsertMedia(List<_i10.MediaModel>? media) =>
       (super.noSuchMethod(
         Invocation.method(
           #upsertMedia,
           [media],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<List<_i9.MediaModel>> getMediaForDirectory(String? directoryId) =>
+  _i8.Future<List<_i10.MediaModel>> getMediaForDirectory(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getMediaForDirectory,
           [directoryId],
         ),
-        returnValue: _i7.Future<List<_i9.MediaModel>>.value(<_i9.MediaModel>[]),
-      ) as _i7.Future<List<_i9.MediaModel>>);
+        returnValue:
+            _i8.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
+      ) as _i8.Future<List<_i10.MediaModel>>);
 
   @override
-  _i7.Future<void> addMedia(List<_i9.MediaModel>? mediaItems) =>
+  _i8.Future<void> addMedia(List<_i10.MediaModel>? mediaItems) =>
       (super.noSuchMethod(
         Invocation.method(
           #addMedia,
           [mediaItems],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateMediaTags(
+  _i8.Future<void> updateMediaTags(
     String? mediaId,
     List<String>? tagIds,
   ) =>
@@ -469,12 +485,12 @@ class MockIsarMediaDataSource extends _i1.Mock
             tagIds,
           ],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<_i5.BatchUpdateResult> updateMediaTagsBatch(
+  _i8.Future<_i5.BatchUpdateResult> updateMediaTagsBatch(
           Map<String, List<String>>? mediaTags) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -482,28 +498,39 @@ class MockIsarMediaDataSource extends _i1.Mock
           [mediaTags],
         ),
         returnValue:
-            _i7.Future<_i5.BatchUpdateResult>.value(_FakeBatchUpdateResult_3(
+            _i8.Future<_i5.BatchUpdateResult>.value(_FakeBatchUpdateResult_3(
           this,
           Invocation.method(
             #updateMediaTagsBatch,
             [mediaTags],
           ),
         )),
-      ) as _i7.Future<_i5.BatchUpdateResult>);
+      ) as _i8.Future<_i5.BatchUpdateResult>);
 
   @override
-  _i7.Future<void> removeMediaForDirectory(String? directoryId) =>
+  _i8.Future<void> removeMediaByIds(List<String>? mediaIds) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #removeMediaByIds,
+          [mediaIds],
+        ),
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
+
+  @override
+  _i8.Future<void> removeMediaForDirectory(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
           #removeMediaForDirectory,
           [directoryId],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> migrateDirectoryId(
+  _i8.Future<void> migrateDirectoryId(
     String? legacyDirectoryId,
     String? stableDirectoryId,
   ) =>
@@ -515,30 +542,97 @@ class MockIsarMediaDataSource extends _i1.Mock
             stableDirectoryId,
           ],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> clearMedia() => (super.noSuchMethod(
+  _i8.Future<void> relocateMedia({
+    required String? mediaId,
+    required String? newPath,
+    required String? newName,
+    required String? newDirectoryId,
+    int? newSize,
+    DateTime? newLastModified,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #relocateMedia,
+          [],
+          {
+            #mediaId: mediaId,
+            #newPath: newPath,
+            #newName: newName,
+            #newDirectoryId: newDirectoryId,
+            #newSize: newSize,
+            #newLastModified: newLastModified,
+          },
+        ),
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
+
+  @override
+  _i8.Future<void> replaceMedia({
+    required String? oldMediaId,
+    required _i10.MediaModel? newMedia,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #replaceMedia,
+          [],
+          {
+            #oldMediaId: oldMediaId,
+            #newMedia: newMedia,
+          },
+        ),
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
+
+  @override
+  _i8.Future<void> replaceMediaBatch(
+          List<({_i10.MediaModel newMedia, String oldMediaId})>? entries) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #replaceMediaBatch,
+          [entries],
+        ),
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
+
+  @override
+  _i8.Future<List<_i10.MediaModel>> getMediaUnderPath(String? directoryPath) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getMediaUnderPath,
+          [directoryPath],
+        ),
+        returnValue:
+            _i8.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
+      ) as _i8.Future<List<_i10.MediaModel>>);
+
+  @override
+  _i8.Future<void> clearMedia() => (super.noSuchMethod(
         Invocation.method(
           #clearMedia,
           [],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> removeMediaNotInDirectories(List<String>? directoryIds) =>
+  _i8.Future<void> removeMediaNotInDirectories(List<String>? directoryIds) =>
       (super.noSuchMethod(
         Invocation.method(
           #removeMediaNotInDirectories,
           [directoryIds],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 }
 
 /// A class which mocks [BookmarkService].
@@ -550,23 +644,23 @@ class MockBookmarkService extends _i1.Mock implements _i2.BookmarkService {
   }
 
   @override
-  _i7.Future<String> createBookmark(String? directoryPath) =>
+  _i8.Future<String> createBookmark(String? directoryPath) =>
       (super.noSuchMethod(
         Invocation.method(
           #createBookmark,
           [directoryPath],
         ),
-        returnValue: _i7.Future<String>.value(_i13.dummyValue<String>(
+        returnValue: _i8.Future<String>.value(_i14.dummyValue<String>(
           this,
           Invocation.method(
             #createBookmark,
             [directoryPath],
           ),
         )),
-      ) as _i7.Future<String>);
+      ) as _i8.Future<String>);
 
   @override
-  _i7.Future<Map<String, dynamic>> selectDirectoryAndCreateBookmark(
+  _i8.Future<Map<String, dynamic>> selectDirectoryAndCreateBookmark(
           {String? initialDirectoryPath}) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -575,131 +669,219 @@ class MockBookmarkService extends _i1.Mock implements _i2.BookmarkService {
           {#initialDirectoryPath: initialDirectoryPath},
         ),
         returnValue:
-            _i7.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
-      ) as _i7.Future<Map<String, dynamic>>);
+            _i8.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i8.Future<Map<String, dynamic>>);
 
   @override
-  _i7.Future<String> resolveBookmark(String? bookmarkData) =>
+  _i8.Future<String> resolveBookmark(String? bookmarkData) =>
       (super.noSuchMethod(
         Invocation.method(
           #resolveBookmark,
           [bookmarkData],
         ),
-        returnValue: _i7.Future<String>.value(_i13.dummyValue<String>(
+        returnValue: _i8.Future<String>.value(_i14.dummyValue<String>(
           this,
           Invocation.method(
             #resolveBookmark,
             [bookmarkData],
           ),
         )),
-      ) as _i7.Future<String>);
+      ) as _i8.Future<String>);
 
   @override
-  _i7.Future<void> stopAccessingBookmark(String? bookmarkData) =>
+  _i8.Future<void> stopAccessingBookmark(String? bookmarkData) =>
       (super.noSuchMethod(
         Invocation.method(
           #stopAccessingBookmark,
           [bookmarkData],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<bool> isBookmarkValid(String? bookmarkData) => (super.noSuchMethod(
+  _i8.Future<bool> isBookmarkValid(String? bookmarkData) => (super.noSuchMethod(
         Invocation.method(
           #isBookmarkValid,
           [bookmarkData],
         ),
-        returnValue: _i7.Future<bool>.value(false),
-      ) as _i7.Future<bool>);
+        returnValue: _i8.Future<bool>.value(false),
+      ) as _i8.Future<bool>);
 
   @override
-  _i7.Future<String> startAccessingBookmark(String? bookmarkData) =>
+  _i8.Future<String> startAccessingBookmark(String? bookmarkData) =>
       (super.noSuchMethod(
         Invocation.method(
           #startAccessingBookmark,
           [bookmarkData],
         ),
-        returnValue: _i7.Future<String>.value(_i13.dummyValue<String>(
+        returnValue: _i8.Future<String>.value(_i14.dummyValue<String>(
           this,
           Invocation.method(
             #startAccessingBookmark,
             [bookmarkData],
           ),
         )),
-      ) as _i7.Future<String>);
+      ) as _i8.Future<String>);
+
+  @override
+  _i8.Future<String?> moveToTrash(
+    String? path, {
+    String? bookmarkData,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #moveToTrash,
+          [path],
+          {#bookmarkData: bookmarkData},
+        ),
+        returnValue: _i8.Future<String?>.value(),
+      ) as _i8.Future<String?>);
+
+  @override
+  _i8.Future<_i6.FileTransferResult> moveItem({
+    required String? sourcePath,
+    required String? destinationPath,
+    String? sourceBookmarkData,
+    String? destinationBookmarkData,
+    _i6.ConflictStrategy? conflictStrategy = _i6.ConflictStrategy.fail,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #moveItem,
+          [],
+          {
+            #sourcePath: sourcePath,
+            #destinationPath: destinationPath,
+            #sourceBookmarkData: sourceBookmarkData,
+            #destinationBookmarkData: destinationBookmarkData,
+            #conflictStrategy: conflictStrategy,
+          },
+        ),
+        returnValue:
+            _i8.Future<_i6.FileTransferResult>.value(_FakeFileTransferResult_4(
+          this,
+          Invocation.method(
+            #moveItem,
+            [],
+            {
+              #sourcePath: sourcePath,
+              #destinationPath: destinationPath,
+              #sourceBookmarkData: sourceBookmarkData,
+              #destinationBookmarkData: destinationBookmarkData,
+              #conflictStrategy: conflictStrategy,
+            },
+          ),
+        )),
+      ) as _i8.Future<_i6.FileTransferResult>);
+
+  @override
+  _i8.Future<_i6.FileTransferResult> copyItem({
+    required String? sourcePath,
+    required String? destinationPath,
+    String? sourceBookmarkData,
+    String? destinationBookmarkData,
+    _i6.ConflictStrategy? conflictStrategy = _i6.ConflictStrategy.fail,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #copyItem,
+          [],
+          {
+            #sourcePath: sourcePath,
+            #destinationPath: destinationPath,
+            #sourceBookmarkData: sourceBookmarkData,
+            #destinationBookmarkData: destinationBookmarkData,
+            #conflictStrategy: conflictStrategy,
+          },
+        ),
+        returnValue:
+            _i8.Future<_i6.FileTransferResult>.value(_FakeFileTransferResult_4(
+          this,
+          Invocation.method(
+            #copyItem,
+            [],
+            {
+              #sourcePath: sourcePath,
+              #destinationPath: destinationPath,
+              #sourceBookmarkData: sourceBookmarkData,
+              #destinationBookmarkData: destinationBookmarkData,
+              #conflictStrategy: conflictStrategy,
+            },
+          ),
+        )),
+      ) as _i8.Future<_i6.FileTransferResult>);
 }
 
 /// A class which mocks [PermissionService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockPermissionService extends _i1.Mock implements _i6.PermissionService {
+class MockPermissionService extends _i1.Mock implements _i7.PermissionService {
   MockPermissionService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i7.Future<bool> hasStoragePermission() => (super.noSuchMethod(
+  _i8.Future<bool> hasStoragePermission() => (super.noSuchMethod(
         Invocation.method(
           #hasStoragePermission,
           [],
         ),
-        returnValue: _i7.Future<bool>.value(false),
-      ) as _i7.Future<bool>);
+        returnValue: _i8.Future<bool>.value(false),
+      ) as _i8.Future<bool>);
 
   @override
-  _i7.Future<bool> requestStoragePermission() => (super.noSuchMethod(
+  _i8.Future<bool> requestStoragePermission() => (super.noSuchMethod(
         Invocation.method(
           #requestStoragePermission,
           [],
         ),
-        returnValue: _i7.Future<bool>.value(false),
-      ) as _i7.Future<bool>);
+        returnValue: _i8.Future<bool>.value(false),
+      ) as _i8.Future<bool>);
 
   @override
-  _i7.Future<_i6.PermissionStatus> checkDirectoryAccess(
+  _i8.Future<_i7.PermissionStatus> checkDirectoryAccess(
           String? directoryPath) =>
       (super.noSuchMethod(
         Invocation.method(
           #checkDirectoryAccess,
           [directoryPath],
         ),
-        returnValue: _i7.Future<_i6.PermissionStatus>.value(
-            _i6.PermissionStatus.granted),
-      ) as _i7.Future<_i6.PermissionStatus>);
+        returnValue: _i8.Future<_i7.PermissionStatus>.value(
+            _i7.PermissionStatus.granted),
+      ) as _i8.Future<_i7.PermissionStatus>);
 
   @override
-  _i7.Future<_i6.BookmarkValidationResult> validateBookmark(
+  _i8.Future<_i7.BookmarkValidationResult> validateBookmark(
           String? bookmarkData) =>
       (super.noSuchMethod(
         Invocation.method(
           #validateBookmark,
           [bookmarkData],
         ),
-        returnValue: _i7.Future<_i6.BookmarkValidationResult>.value(
-            _FakeBookmarkValidationResult_4(
+        returnValue: _i8.Future<_i7.BookmarkValidationResult>.value(
+            _FakeBookmarkValidationResult_5(
           this,
           Invocation.method(
             #validateBookmark,
             [bookmarkData],
           ),
         )),
-      ) as _i7.Future<_i6.BookmarkValidationResult>);
+      ) as _i8.Future<_i7.BookmarkValidationResult>);
 
   @override
-  _i7.Future<_i6.DirectoryRecoveryResult?> recoverDirectoryAccess(
+  _i8.Future<_i7.DirectoryRecoveryResult?> recoverDirectoryAccess(
           String? directoryPath) =>
       (super.noSuchMethod(
         Invocation.method(
           #recoverDirectoryAccess,
           [directoryPath],
         ),
-        returnValue: _i7.Future<_i6.DirectoryRecoveryResult?>.value(),
-      ) as _i7.Future<_i6.DirectoryRecoveryResult?>);
+        returnValue: _i8.Future<_i7.DirectoryRecoveryResult?>.value(),
+      ) as _i8.Future<_i7.DirectoryRecoveryResult?>);
 
   @override
-  _i7.Future<String?> renewBookmark(
+  _i8.Future<String?> renewBookmark(
     String? expiredBookmarkData,
     String? directoryPath,
   ) =>
@@ -711,11 +893,11 @@ class MockPermissionService extends _i1.Mock implements _i6.PermissionService {
             directoryPath,
           ],
         ),
-        returnValue: _i7.Future<String?>.value(),
-      ) as _i7.Future<String?>);
+        returnValue: _i8.Future<String?>.value(),
+      ) as _i8.Future<String?>);
 
   @override
-  _i7.Future<_i6.BookmarkValidationResult> validateAndRenewBookmark(
+  _i8.Future<_i7.BookmarkValidationResult> validateAndRenewBookmark(
     String? bookmarkData,
     String? directoryPath,
   ) =>
@@ -727,8 +909,8 @@ class MockPermissionService extends _i1.Mock implements _i6.PermissionService {
             directoryPath,
           ],
         ),
-        returnValue: _i7.Future<_i6.BookmarkValidationResult>.value(
-            _FakeBookmarkValidationResult_4(
+        returnValue: _i8.Future<_i7.BookmarkValidationResult>.value(
+            _FakeBookmarkValidationResult_5(
           this,
           Invocation.method(
             #validateAndRenewBookmark,
@@ -738,7 +920,7 @@ class MockPermissionService extends _i1.Mock implements _i6.PermissionService {
             ],
           ),
         )),
-      ) as _i7.Future<_i6.BookmarkValidationResult>);
+      ) as _i8.Future<_i7.BookmarkValidationResult>);
 
   @override
   void logPermissionEvent(
@@ -761,55 +943,55 @@ class MockPermissionService extends _i1.Mock implements _i6.PermissionService {
       );
 
   @override
-  _i7.Future<bool> canAccessPath(String? path) => (super.noSuchMethod(
+  _i8.Future<bool> canAccessPath(String? path) => (super.noSuchMethod(
         Invocation.method(
           #canAccessPath,
           [path],
         ),
-        returnValue: _i7.Future<bool>.value(false),
-      ) as _i7.Future<bool>);
+        returnValue: _i8.Future<bool>.value(false),
+      ) as _i8.Future<bool>);
 
   @override
-  _i7.Future<bool> canWriteToPath(String? path) => (super.noSuchMethod(
+  _i8.Future<bool> canWriteToPath(String? path) => (super.noSuchMethod(
         Invocation.method(
           #canWriteToPath,
           [path],
         ),
-        returnValue: _i7.Future<bool>.value(false),
-      ) as _i7.Future<bool>);
+        returnValue: _i8.Future<bool>.value(false),
+      ) as _i8.Future<bool>);
 
   @override
-  _i7.Future<void> ensureStoragePermission() => (super.noSuchMethod(
+  _i8.Future<void> ensureStoragePermission() => (super.noSuchMethod(
         Invocation.method(
           #ensureStoragePermission,
           [],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> ensurePathAccessible(String? path) => (super.noSuchMethod(
+  _i8.Future<void> ensurePathAccessible(String? path) => (super.noSuchMethod(
         Invocation.method(
           #ensurePathAccessible,
           [path],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<void> ensurePathWritable(String? path) => (super.noSuchMethod(
+  _i8.Future<void> ensurePathWritable(String? path) => (super.noSuchMethod(
         Invocation.method(
           #ensurePathWritable,
           [path],
         ),
-        returnValue: _i7.Future<void>.value(),
-        returnValueForMissingStub: _i7.Future<void>.value(),
-      ) as _i7.Future<void>);
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
 
   @override
-  _i7.Future<_i6.PermissionMonitorResult> monitorDirectoryPermissions(
+  _i8.Future<_i7.PermissionMonitorResult> monitorDirectoryPermissions(
     String? directoryPath, {
     String? bookmarkData,
     Duration? checkInterval = const Duration(minutes: 5),
@@ -823,8 +1005,8 @@ class MockPermissionService extends _i1.Mock implements _i6.PermissionService {
             #checkInterval: checkInterval,
           },
         ),
-        returnValue: _i7.Future<_i6.PermissionMonitorResult>.value(
-            _FakePermissionMonitorResult_5(
+        returnValue: _i8.Future<_i7.PermissionMonitorResult>.value(
+            _FakePermissionMonitorResult_6(
           this,
           Invocation.method(
             #monitorDirectoryPermissions,
@@ -835,10 +1017,10 @@ class MockPermissionService extends _i1.Mock implements _i6.PermissionService {
             },
           ),
         )),
-      ) as _i7.Future<_i6.PermissionMonitorResult>);
+      ) as _i8.Future<_i7.PermissionMonitorResult>);
 
   @override
-  _i7.Future<List<_i6.DirectoryPermissionStatus>> validateMultipleDirectories(
+  _i8.Future<List<_i7.DirectoryPermissionStatus>> validateMultipleDirectories(
     List<String>? directoryPaths, {
     Map<String, String?>? bookmarkDataMap,
   }) =>
@@ -848,7 +1030,7 @@ class MockPermissionService extends _i1.Mock implements _i6.PermissionService {
           [directoryPaths],
           {#bookmarkDataMap: bookmarkDataMap},
         ),
-        returnValue: _i7.Future<List<_i6.DirectoryPermissionStatus>>.value(
-            <_i6.DirectoryPermissionStatus>[]),
-      ) as _i7.Future<List<_i6.DirectoryPermissionStatus>>);
+        returnValue: _i8.Future<List<_i7.DirectoryPermissionStatus>>.value(
+            <_i7.DirectoryPermissionStatus>[]),
+      ) as _i8.Future<List<_i7.DirectoryPermissionStatus>>);
 }

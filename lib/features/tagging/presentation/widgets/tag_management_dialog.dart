@@ -9,6 +9,7 @@ import '../../domain/use_cases/assign_tag_use_case.dart';
 import '../view_models/tag_management_view_model.dart';
 import '../view_models/tags_view_model.dart';
 import 'tag_creation_dialog.dart';
+import 'tag_edit_dialog.dart';
 
 /// A dialog for managing tags - viewing, adding, removing, and assigning.
 class TagManagementDialog extends ConsumerWidget {
@@ -63,6 +64,10 @@ class TagManagementDialog extends ConsumerWidget {
       showDeleteButtons: media == null,
       onDeleteTag: media == null
           ? (context, tag) => _confirmDeleteTag(context, tag, tagViewModel)
+          : null,
+      showEditButtons: media == null,
+      onEditTag: media == null
+          ? (context, tag) => TagEditDialog.show(context, tag)
           : null,
       emptyStateBuilder: (context) => _buildEmptyState(context, media != null),
     );

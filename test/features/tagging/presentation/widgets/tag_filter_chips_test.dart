@@ -3,49 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:media_fast_view/features/media_library/domain/entities/tag_entity.dart';
-import 'package:media_fast_view/features/media_library/domain/repositories/tag_repository.dart';
 import 'package:media_fast_view/features/tagging/presentation/states/tag_state.dart';
 import 'package:media_fast_view/features/tagging/presentation/view_models/tag_management_view_model.dart';
 import 'package:media_fast_view/features/tagging/presentation/widgets/selectable_tag_chip_strip.dart';
 import 'package:media_fast_view/features/tagging/presentation/widgets/tag_filter_chips.dart';
 
-/// A no-op TagRepository used so the TagViewModel super-constructor can
-/// initialise without hitting real storage. The fake's methods are never
-/// invoked because `_FakeTagViewModel` overrides `loadTags()` to a no-op.
-class _FakeTagRepository implements TagRepository {
-  @override
-  Future<List<TagEntity>> getTags() async => const [];
-  @override
-  Future<TagEntity?> getTagById(String id) async => null;
-  @override
-  Future<void> createTag(TagEntity tag) async {}
-  @override
-  Future<void> updateTag(TagEntity tag) async {}
-  @override
-  Future<void> deleteTag(String id) async {}
-  @override
-  Future<void> clearTags() async {}
-}
+import '../tag_view_model_fakes.dart';
 
 /// No-op selection callback for tests that don't care about selection events
 /// (e.g. loading-state assertions).
 void _ignoreSelection(List<String> _) {}
 
-/// Fake `TagViewModel` that lets a test pin the state directly.
-///
-/// `tagViewModelProvider.overrideWith(...)` requires a function returning
-/// `TagViewModel` (the production class), so a plain `StateNotifier<TagState>`
-/// will not type-check. We extend the real class but stub its async loader.
-class _FakeTagViewModel extends TagViewModel {
-  _FakeTagViewModel(TagState initialState) : super(_FakeTagRepository()) {
-    state = initialState;
-  }
-
-  @override
-  Future<void> loadTags() async {
-    // No-op: state is pinned in the constructor.
-  }
-}
+typedef _FakeTagViewModel = FakeTagViewModel;
 
 void main() {
   final tags = [

@@ -18,6 +18,7 @@ import '../../domain/enums/tag_media_type_filter.dart';
 import '../view_models/tags_view_model.dart';
 import '../widgets/directory_filter_tree.dart';
 import '../widgets/tag_directory_chip.dart';
+import '../widgets/tag_management_dialog.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/utils/directory_tree_builder.dart';
 
@@ -68,6 +69,11 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       appBar: AppBar(
         title: const Text('Tags'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.sell_outlined),
+            tooltip: 'Manage tags',
+            onPressed: _showTagManagement,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Reload tags',
@@ -1004,6 +1010,16 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         childCount: media.length,
       ),
     );
+  }
+
+  /// Opens the manage-tags dialog, then reloads so a rename or recolour is
+  /// reflected in the chips and the sections re-sort by the new name.
+  Future<void> _showTagManagement() async {
+    await TagManagementDialog.show(context);
+    if (!mounted) {
+      return;
+    }
+    await ref.read(tagsViewModelProvider.notifier).refreshTags();
   }
 
   void _showColumnSelector(BuildContext context, int currentColumns) {

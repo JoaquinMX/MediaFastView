@@ -39,6 +39,7 @@ import '../../features/media_library/domain/use_cases/update_directory_access_us
 import '../../features/tagging/domain/use_cases/get_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/assign_tag_use_case.dart';
 import '../../features/tagging/domain/use_cases/create_tag_use_case.dart';
+import '../../features/tagging/domain/use_cases/update_tag_use_case.dart';
 import '../../features/tagging/domain/use_cases/filter_by_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/clear_tag_assignments_use_case.dart';
 import '../../features/tagging/domain/use_cases/clear_tags_use_case.dart';
@@ -405,6 +406,10 @@ final getTagsUseCaseProvider = Provider<GetTagsUseCase>((ref) {
 
 final createTagUseCaseProvider = Provider<CreateTagUseCase>((ref) {
   return CreateTagUseCase(ref.watch(tagRepositoryProvider));
+});
+
+final updateTagUseCaseProvider = Provider<UpdateTagUseCase>((ref) {
+  return UpdateTagUseCase(ref.watch(tagRepositoryProvider));
 });
 
 final clearTagAssignmentsUseCaseProvider =

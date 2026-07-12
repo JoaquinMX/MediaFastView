@@ -5,16 +5,20 @@ import 'package:uuid/uuid.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/entities/tag_entity.dart';
 import '../../domain/repositories/tag_repository.dart';
+import '../../domain/tag_validation.dart';
+import '../../domain/use_cases/update_tag_use_case.dart';
 import '../states/tag_state.dart';
 
 /// ViewModel for managing tag operations and state.
 /// Handles CRUD operations, filtering, and tag management.
 class TagViewModel extends StateNotifier<TagState> {
-  TagViewModel(this._tagRepository) : super(const TagLoading()) {
+  TagViewModel(this._tagRepository, this._updateTagUseCase)
+    : super(const TagLoading()) {
     loadTags();
   }
 
   final TagRepository _tagRepository;
+  final UpdateTagUseCase _updateTagUseCase;
   final _uuid = const Uuid();
 
   /// Loads all tags from the repository.
@@ -60,21 +64,35 @@ class TagViewModel extends StateNotifier<TagState> {
     }
   }
 
-  /// Updates an existing tag.
-  Future<void> updateTag(TagEntity tag) async {
-    try {
-      await _tagRepository.updateTag(tag);
+  /// Renames [tag] and/or changes its colour.
+  ///
+  /// Returns the updated tag, or throws [TagValidationException] when the name
+  /// breaks the rules or is taken by another tag. The exception is deliberately
+  /// left to propagate rather than flipping the view model into [TagError]: the
+  /// caller is a dialog that shows it inline, and erroring the view model would
+  /// blank the tag list behind it.
+  Future<TagEntity> updateTag(
+    TagEntity tag, {
+    required String name,
+    required int color,
+  }) async {
+    final updatedTag = await _updateTagUseCase(
+      tag: tag,
+      name: name,
+      color: color,
+    );
 
-      // Update state optimistically
-      state = switch (state) {
-        TagLoaded(:final tags) => TagLoaded(
-          tags.map((t) => t.id == tag.id ? tag : t).toList(),
-        ),
-        _ => state, // Keep current state if not loaded
-      };
-    } catch (e) {
-      state = TagError('Failed to update tag: $e');
-    }
+    // Optimistic patch. A fresh TagLoaded is never `identical` to the previous
+    // one, so listeners are notified even though TagEntity's `==` is id-only and
+    // makes the two lists compare equal.
+    state = switch (state) {
+      TagLoaded(:final tags) => TagLoaded(
+        tags.map((t) => t.id == updatedTag.id ? updatedTag : t).toList(),
+      ),
+      _ => state, // Keep current state if not loaded
+    };
+
+    return updatedTag;
   }
 
   /// Deletes a tag by its ID.
@@ -120,10 +138,12 @@ class TagViewModel extends StateNotifier<TagState> {
     };
   }
 
-  /// Checks if a tag with the given name already exists.
-  bool tagNameExists(String name) {
-    final trimmedName = name.trim().toLowerCase();
-    return getAllTags().any((tag) => tag.name.toLowerCase() == trimmedName);
+  /// Whether a tag named [name] already exists, ignoring [excludingId].
+  ///
+  /// Pass the edited tag's id when validating a rename, or an unchanged name —
+  /// a colour-only save, a case fix — would collide with the tag's own row.
+  bool tagNameExists(String name, {String? excludingId}) {
+    return isTagNameTaken(name, getAllTags(), excludingId: excludingId);
   }
 
   /// Helper method to filter tags by query.
@@ -139,5 +159,8 @@ class TagViewModel extends StateNotifier<TagState> {
 /// Provider for TagViewModel with auto-dispose.
 final tagViewModelProvider =
     StateNotifierProvider.autoDispose<TagViewModel, TagState>(
-      (ref) => TagViewModel(ref.watch(tagRepositoryProvider)),
+      (ref) => TagViewModel(
+        ref.watch(tagRepositoryProvider),
+        ref.watch(updateTagUseCaseProvider),
+      ),
     );
