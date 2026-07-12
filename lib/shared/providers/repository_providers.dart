@@ -10,6 +10,7 @@ import '../../core/services/bookmark_service.dart';
 import '../../core/services/file_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../core/services/isar_database.dart';
+import '../../core/services/isar_key_migration.dart';
 import '../../core/services/isar_schemas.dart';
 import '../../features/media_library/data/data_sources/filesystem_media_data_source.dart';
 import '../../features/media_library/data/data_sources/local_directory_data_source.dart';
@@ -69,7 +70,13 @@ import '../utils/tag_lookup.dart';
 
 // Isar database provider
 final isarDatabaseProvider = Provider<IsarDatabase>((ref) {
-  final database = IsarDatabase(schemas: isarCollectionSchemas);
+  final database = IsarDatabase(
+    schemas: isarCollectionSchemas,
+    // Runs before the instance is published, so no data source can read or write
+    // against rows that are about to be re-keyed.
+    migrate: (isar, backUp) =>
+        const IsarKeyMigration().run(isar, backUp: backUp),
+  );
   ref.onDispose(database.close);
   unawaited(database.open());
   return database;

@@ -1,14 +1,25 @@
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
+import '../../../../core/services/isar_id.dart';
 import '../../../media_library/data/isar/directory_collection.dart';
 import '../../../media_library/data/isar/media_collection.dart';
 import '../../domain/entities/favorite_item_type.dart';
 import '../models/favorite_model.dart';
 
 part 'favorite_collection.g.dart';
+
+/// The natural key of a favorite: an item is favorited per type.
+String favoriteKey(String itemId, FavoriteItemType type) =>
+    '${type.name}::$itemId';
+
+/// The Isar primary key for the favorite of [itemId] with [type].
+///
+/// Shared with the data source's delete and lookup paths, which must address
+/// exactly the key the collection was stored under.
+Id favoriteCollectionId(String itemId, FavoriteItemType type) =>
+    isarIdFromKey(favoriteKey(itemId, type));
 
 /// Isar collection representing a favorite item stored by the user.
 @collection
@@ -21,10 +32,7 @@ class FavoriteCollection {
   });
 
   /// Unique hash-based identifier derived from item type and ID.
-  Id get id {
-    final hash = sha256.convert(utf8.encode('${itemType.name}::$itemId')).bytes;
-    return hash.fold<int>(0, (prev, element) => prev + element);
-  }
+  Id get id => favoriteCollectionId(itemId, itemType);
   set id(Id value) {}
 
   /// Stable identifier for the favorited item.

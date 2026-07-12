@@ -180,5 +180,61 @@ void main() {
       // Assert
       expect(capturedDirectory, customDirectory.path);
     });
+
+    group('migration', () {
+      IsarDatabase databaseWith(IsarMigrationCallback migrate) {
+        return IsarDatabase(
+          schemas: const <CollectionSchema<dynamic>>[],
+          directoryResolver: () async => tempDirectory,
+          openIsar: (schemas, {required String directory, String? name}) async =>
+              mockIsar,
+          migrate: migrate,
+        );
+      }
+
+      test('runs before the instance is published', () async {
+        // The whole safety argument. Data sources open lazily via
+        // `if (!isOpen) await open()`, so if `instance` were reachable during the
+        // migration one of them could read — or write — against rows that are
+        // about to be cleared and re-put.
+        late bool wasOpenDuringMigration;
+        late IsarDatabase database;
+
+        database = databaseWith((isar, backUp) async {
+          wasOpenDuringMigration = database.isOpen;
+        });
+
+        await database.open();
+
+        expect(wasOpenDuringMigration, isFalse);
+        expect(database.isOpen, isTrue);
+      });
+
+      test('runs once even when callers race to open', () async {
+        // The provider fires an unawaited open() while every data source also
+        // opens lazily, so concurrent callers must share one open — otherwise
+        // the migration would be started twice against the same database.
+        var runs = 0;
+        final database = databaseWith((isar, backUp) async => runs += 1);
+
+        await Future.wait([
+          database.open(),
+          database.open(),
+          database.open(),
+        ]);
+
+        expect(runs, 1);
+      });
+
+      test('a failing migration does not publish a half-migrated database',
+          () async {
+        final database = databaseWith(
+          (isar, backUp) async => throw StateError('migration blew up'),
+        );
+
+        await expectLater(database.open(), throwsStateError);
+        expect(database.isOpen, isFalse);
+      });
+    });
   });
 }

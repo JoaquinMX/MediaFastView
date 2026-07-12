@@ -1,13 +1,17 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
+import '../../../../core/services/isar_id.dart';
 import '../../../media_library/data/isar/directory_collection.dart';
 import '../../../media_library/data/isar/media_collection.dart';
 import '../../../media_library/data/models/tag_model.dart';
 
 part 'tag_collection.g.dart';
+
+/// The Isar primary key for the tag identified by [tagId].
+///
+/// Shared with [IsarTagDataSource.removeTag], which must delete by exactly the
+/// key the collection was stored under.
+Id tagCollectionIdFromTagId(String tagId) => isarIdFromKey(tagId);
 
 /// Isar collection representing a tag that can be assigned to media or directories.
 @collection
@@ -20,10 +24,7 @@ class TagCollection {
   });
 
   /// Unique hash-based identifier used by Isar for this record.
-  Id get id {
-    final hash = sha256.convert(utf8.encode(tagId)).bytes;
-    return hash.fold<int>(0, (prev, element) => prev + element);
-  }
+  Id get id => tagCollectionIdFromTagId(tagId);
   set id(Id value) {}
 
   /// Stable tag identifier used throughout the app.

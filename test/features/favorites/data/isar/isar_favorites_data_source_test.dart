@@ -1,6 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:isar/isar.dart';
-import 'package:media_fast_view/features/favorites/data/isar/favorite_collection.dart';
 import 'package:media_fast_view/features/favorites/data/isar/isar_favorites_data_source.dart';
 import 'package:media_fast_view/features/favorites/data/models/favorite_model.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
@@ -10,107 +8,19 @@ import 'package:media_fast_view/features/media_library/data/models/directory_mod
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 
-import '../../../../../test/helpers/isar_id.dart';
 import '../../../../helpers/in_memory_isar_stores.dart';
-
-class _InMemoryFavoriteCollectionStore implements FavoriteCollectionStore {
-  final Map<Id, FavoriteCollection> _data = <Id, FavoriteCollection>{};
-
-  @override
-  Future<void> clear() async {
-    _data.clear();
-  }
-
-  @override
-  Future<void> deleteById(Id id) async {
-    _data.remove(id);
-  }
-
-  @override
-  Future<void> deleteByIds(List<Id> ids) async {
-    for (final id in ids) {
-      _data.remove(id);
-    }
-  }
-
-  @override
-  Future<List<FavoriteCollection>> getAll() async {
-    return _data.values.map(_clone).toList(growable: false);
-  }
-
-  @override
-  Future<List<FavoriteCollection>> getAddedAfter(
-    DateTime threshold, {
-    FavoriteItemType? type,
-  }) async {
-    return _data.values
-        .where((favorite) => favorite.addedAt.isAfter(threshold))
-        .where((favorite) => type == null || favorite.itemType == type)
-        .map(_clone)
-        .toList(growable: false);
-  }
-
-  @override
-  Future<FavoriteCollection?> getByCompositeId(
-    String itemId,
-    FavoriteItemType type,
-  ) async {
-    final favorite = _data[isarIdForString('${type.name}::$itemId')];
-    return favorite == null ? null : _clone(favorite);
-  }
-
-  @override
-  Future<List<FavoriteCollection>> getByItemId(String itemId) async {
-    return _data.values
-        .where((favorite) => favorite.itemId == itemId)
-        .map(_clone)
-        .toList(growable: false);
-  }
-
-  @override
-  Future<List<FavoriteCollection>> getByType(FavoriteItemType type) async {
-    return _data.values
-        .where((favorite) => favorite.itemType == type)
-        .map(_clone)
-        .toList(growable: false);
-  }
-
-  @override
-  Future<void> put(FavoriteCollection favorite) async {
-    _data[favorite.id] = _clone(favorite);
-  }
-
-  @override
-  Future<void> putAll(List<FavoriteCollection> favorites) async {
-    for (final favorite in favorites) {
-      await put(favorite);
-    }
-  }
-
-  @override
-  Future<T> writeTxn<T>(Future<T> Function() action) {
-    return action();
-  }
-
-  FavoriteCollection _clone(FavoriteCollection favorite) {
-    final clone = favorite.toModel().toCollection();
-    clone.media.value = favorite.media.value;
-    clone.directory.value = favorite.directory.value;
-    return clone;
-  }
-}
 
 void main() {
   group('IsarFavoritesDataSource', () {
     late FakeIsarDatabase database;
-    late _InMemoryFavoriteCollectionStore favoriteStore;
+    late InMemoryFavoriteCollectionStore favoriteStore;
     late InMemoryMediaCollectionStore mediaStore;
     late InMemoryDirectoryCollectionStore directoryStore;
     late IsarFavoritesDataSource dataSource;
 
     setUp(() {
       database = FakeIsarDatabase();
-      favoriteStore = _InMemoryFavoriteCollectionStore();
+      favoriteStore = InMemoryFavoriteCollectionStore();
       mediaStore = InMemoryMediaCollectionStore();
       directoryStore = InMemoryDirectoryCollectionStore();
       dataSource = IsarFavoritesDataSource(

@@ -71,6 +71,11 @@ class MediaCollection {
 /// The implementation uses the first 8 bytes of the SHA-256 digest to build a
 /// 64-bit integer, drastically reducing collision risk compared to summing the
 /// digest bytes.
+/// Deliberately NOT switched to the shared [isarIdFromKey]: it is equivalent
+/// apart from the sign bit, so unifying them would change every media row's
+/// primary key and force a re-key of the whole collection — the one that carries
+/// the user's tag assignments — to fix nothing. Media ids are already 64 bits of
+/// hash and collide no more often than the shared helper's 63.
 int mediaCollectionIdFromMediaId(String mediaId) {
   final hash = sha256.convert(utf8.encode(mediaId)).bytes;
   return hash.take(8).fold<int>(0, (value, byte) => (value << 8) | byte);

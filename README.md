@@ -61,15 +61,11 @@ Widget and integration test scaffolds live under `test/`. Add coverage for new v
 
 ## Roadmap & Known Gaps
 
-- Inline tag editing within the full-screen viewer, including keyboard shortcuts for quick tagging.
-- Smart tag suggestions that leverage EXIF/video metadata and existing usage patterns to speed up labeling.
 - Support for hierarchical (parent/child) tags that apply to both directories and individual media.
 - Saved smart collections that remember complex tag filters for one-click access from the library.
-- A timeline/gallery mode that groups tagged media by capture date and tag for storytelling.
 - Tag density heatmaps over directory tiles to spotlight under- or over-tagged locations.
 - Side-by-side compare mode that locks views to selected tags for curation reviews.
 - Video chapter tagging so viewers can jump between tagged segments inside long clips.
-- Tag-driven slideshow presets with custom transitions, durations, and media ordering.
 - A bulk tagging review queue for newly imported directories to streamline first-pass annotation.
 
 

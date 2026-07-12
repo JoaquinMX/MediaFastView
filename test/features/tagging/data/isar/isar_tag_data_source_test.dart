@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:isar/isar.dart';
 import 'package:media_fast_view/features/media_library/data/isar/directory_collection.dart';
 import 'package:media_fast_view/features/media_library/data/isar/media_collection.dart';
 import 'package:media_fast_view/features/media_library/data/models/directory_model.dart';
@@ -9,75 +8,19 @@ import 'package:media_fast_view/features/media_library/domain/entities/media_ent
 import 'package:media_fast_view/features/tagging/data/isar/isar_tag_data_source.dart';
 import 'package:media_fast_view/features/tagging/data/isar/tag_collection.dart';
 
-import '../../../../helpers/isar_id.dart';
 import '../../../../helpers/in_memory_isar_stores.dart';
-
-class _InMemoryTagCollectionStore implements TagCollectionStore {
-  final Map<Id, TagCollection> _data = <Id, TagCollection>{};
-
-  @override
-  Future<void> clear() async {
-    _data.clear();
-  }
-
-  @override
-  Future<void> deleteById(Id id) async {
-    _data.remove(id);
-  }
-
-  @override
-  Future<List<TagCollection>> getAll() async {
-    return _data.values.map(_clone).toList(growable: false);
-  }
-
-  @override
-  Future<TagCollection?> getByTagId(String tagId) async {
-    final tag = _data[isarIdForString(tagId)];
-    return tag == null ? null : _clone(tag);
-  }
-
-  @override
-  Future<List<TagCollection>> getByTagIds(List<String> tagIds) async {
-    return tagIds
-        .map((tagId) => _data[isarIdForString(tagId)])
-        .whereType<TagCollection>()
-        .map(_clone)
-        .toList(growable: false);
-  }
-
-  @override
-  Future<void> put(TagCollection tag) async {
-    _data[tag.id] = _clone(tag);
-  }
-
-  @override
-  Future<void> putAll(List<TagCollection> tags) async {
-    for (final tag in tags) {
-      await put(tag);
-    }
-  }
-
-  @override
-  Future<T> writeTxn<T>(Future<T> Function() action) {
-    return action();
-  }
-
-  TagCollection _clone(TagCollection tag) {
-    return tag.toModel().toCollection();
-  }
-}
 
 void main() {
   group('IsarTagDataSource', () {
     late FakeIsarDatabase database;
-    late _InMemoryTagCollectionStore tagStore;
+    late InMemoryTagCollectionStore tagStore;
     late InMemoryDirectoryCollectionStore directoryStore;
     late InMemoryMediaCollectionStore mediaStore;
     late IsarTagDataSource dataSource;
 
     setUp(() {
       database = FakeIsarDatabase();
-      tagStore = _InMemoryTagCollectionStore();
+      tagStore = InMemoryTagCollectionStore();
       directoryStore = InMemoryDirectoryCollectionStore();
       mediaStore = InMemoryMediaCollectionStore();
       dataSource = IsarTagDataSource(

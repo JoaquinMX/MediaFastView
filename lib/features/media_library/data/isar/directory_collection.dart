@@ -1,30 +1,16 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
+import '../../../../core/services/isar_id.dart';
 import '../models/directory_model.dart';
 
 part 'directory_collection.g.dart';
 
 /// Converts a directory identifier into a deterministic Isar [Id].
 ///
-/// The first 16 hex characters (64 bits) of the SHA-256 hash are parsed and
-/// masked to the maximum signed 64-bit integer value. This avoids
-/// `FormatException` on platforms where `int` cannot represent unsigned 64-bit
-/// values while keeping the high-entropy portion of the hash for collision
-/// resistance.
-Id computeDirectoryCollectionId(String directoryId) {
-  final hash = sha256.convert(utf8.encode(directoryId)).toString();
-  final first64Bits = hash.substring(0, 16);
-
-  // Use BigInt to safely parse large unsigned values, then clamp to the
-  // maximum signed 64-bit integer to stay within Isar's `Id` range.
-  final parsed = BigInt.parse(first64Bits, radix: 16);
-  const maxSignedInt64 = 0x7FFFFFFFFFFFFFFF;
-
-  return (parsed & BigInt.from(maxSignedInt64)).toInt();
-}
+/// Delegates to [isarIdFromKey], which is bit-for-bit identical to the
+/// hand-rolled BigInt version this replaced — so existing directory rows keep
+/// their keys and need no migration.
+Id computeDirectoryCollectionId(String directoryId) => isarIdFromKey(directoryId);
 
 /// Isar collection representing a directory record stored on disk.
 @collection

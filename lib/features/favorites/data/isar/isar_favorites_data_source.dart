@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
 import '../../../../core/error/app_error.dart';
@@ -114,11 +111,7 @@ class IsarFavoritesDataSource {
       await _favoriteStore.writeTxn(() async {
         if (type != null) {
           final ids = itemIds
-              .map((itemId) {
-                final key = _favoriteKey(itemId, type);
-                final hash = sha256.convert(utf8.encode(key)).bytes;
-                return hash.fold<int>(0, (prev, element) => prev + element);
-              })
+              .map((itemId) => favoriteCollectionId(itemId, type))
               .toList(growable: false);
           await _favoriteStore.deleteByIds(ids);
           return;
@@ -306,8 +299,6 @@ class IsarFavoritesDataSource {
     return IsarDirectoryCollectionStore(database);
   }
 
-  String _favoriteKey(String itemId, FavoriteItemType type) =>
-      '${type.name}::$itemId';
 }
 
 /// Contract abstracting access to persisted [FavoriteCollection] records.
@@ -323,6 +314,12 @@ abstract interface class FavoriteCollectionStore {
   Future<void> deleteById(Id id);
 
   Future<void> deleteByIds(List<Id> ids);
+
+  /// Looks a row up by its Isar primary key.
+  ///
+  /// Used by the key migration to tell a row stored under the legacy id from one
+  /// already stored under the current one.
+  Future<FavoriteCollection?> getById(Id id);
 
   Future<FavoriteCollection?> getByCompositeId(
     String itemId,
@@ -342,11 +339,18 @@ abstract interface class FavoriteCollectionStore {
 }
 
 class IsarFavoriteCollectionStore implements FavoriteCollectionStore {
-  IsarFavoriteCollectionStore(this._database);
+  IsarFavoriteCollectionStore(IsarDatabase database)
+    : _resolveIsar = (() => database.instance);
 
-  final IsarDatabase _database;
+  /// Binds to an already-open [Isar] directly.
+  ///
+  /// For the key migration, which runs inside `IsarDatabase.open()` before the
+  /// instance is published — so `database.instance` would still throw.
+  IsarFavoriteCollectionStore.forIsar(Isar isar) : _resolveIsar = (() => isar);
 
-  Isar get _isar => _database.instance;
+  final Isar Function() _resolveIsar;
+
+  Isar get _isar => _resolveIsar();
 
   IsarCollection<FavoriteCollection> get _collection =>
       _isar.collection<FavoriteCollection>();
@@ -385,14 +389,14 @@ class IsarFavoriteCollectionStore implements FavoriteCollectionStore {
   }
 
   @override
+  Future<FavoriteCollection?> getById(Id id) => _collection.get(id);
+
+  @override
   Future<FavoriteCollection?> getByCompositeId(
     String itemId,
     FavoriteItemType type,
   ) {
-    final key = '${type.name}::$itemId';
-    final hash = sha256.convert(utf8.encode(key)).bytes;
-    final id = hash.fold<int>(0, (prev, element) => prev + element);
-    return _collection.get(id);
+    return _collection.get(favoriteCollectionId(itemId, type));
   }
 
   @override

@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:isar/isar.dart';
 
 import '../../../../core/error/app_error.dart';
@@ -92,9 +89,7 @@ class IsarTagDataSource {
   Future<void> removeTag(String id) async {
     await _executeSafely(() async {
       await _tagStore.writeTxn(() async {
-        final hash = sha256.convert(utf8.encode(id)).bytes;
-        final hashedId = hash.fold<int>(0, (prev, element) => prev + element);
-        await _tagStore.deleteById(hashedId);
+        await _tagStore.deleteById(tagCollectionIdFromTagId(id));
       });
     }, 'Failed to remove tag');
   }
@@ -207,6 +202,12 @@ abstract interface class TagCollectionStore {
 
   Future<void> deleteById(Id id);
 
+  /// Looks a row up by its Isar primary key.
+  ///
+  /// Used by the key migration to tell a row stored under the legacy id from one
+  /// already stored under the current one.
+  Future<TagCollection?> getById(Id id);
+
   Future<TagCollection?> getByTagId(String tagId);
 
   Future<List<TagCollection>> getByTagIds(List<String> tagIds);
@@ -215,11 +216,18 @@ abstract interface class TagCollectionStore {
 }
 
 class IsarTagCollectionStore implements TagCollectionStore {
-  IsarTagCollectionStore(this._database);
+  IsarTagCollectionStore(IsarDatabase database)
+    : _resolveIsar = (() => database.instance);
 
-  final IsarDatabase _database;
+  /// Binds to an already-open [Isar] directly.
+  ///
+  /// For the key migration, which runs inside `IsarDatabase.open()` before the
+  /// instance is published — so `database.instance` would still throw.
+  IsarTagCollectionStore.forIsar(Isar isar) : _resolveIsar = (() => isar);
 
-  Isar get _isar => _database.instance;
+  final Isar Function() _resolveIsar;
+
+  Isar get _isar => _resolveIsar();
 
   IsarCollection<TagCollection> get _collection =>
       _isar.collection<TagCollection>();
@@ -248,6 +256,9 @@ class IsarTagCollectionStore implements TagCollectionStore {
   Future<void> deleteById(Id id) async {
     await _collection.delete(id);
   }
+
+  @override
+  Future<TagCollection?> getById(Id id) => _collection.get(id);
 
   @override
   Future<TagCollection?> getByTagId(String tagId) {

@@ -1,9 +1,16 @@
 import 'package:isar/isar.dart';
 import 'package:media_fast_view/core/services/isar_database.dart';
+import 'package:media_fast_view/features/favorites/data/isar/favorite_collection.dart';
+import 'package:media_fast_view/features/favorites/data/isar/isar_favorites_data_source.dart';
+import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/media_library/data/isar/directory_collection.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/media_collection.dart';
+import 'package:media_fast_view/features/tagging/data/isar/isar_tag_data_source.dart';
+import 'package:media_fast_view/features/tagging/data/isar/tag_collection.dart';
+
+import 'isar_id.dart';
 
 
 /// An [IsarDatabase] that reports itself open but is never actually touched —
@@ -164,6 +171,153 @@ class InMemoryMediaCollectionStore implements MediaCollectionStore {
   MediaCollection _clone(MediaCollection media) {
     final clone = media.toModel().toCollection();
     clone.directory.value = media.directory.value;
+    return clone;
+  }
+}
+
+/// In-memory [TagCollectionStore].
+///
+/// Keyed by Isar id exactly as the real collection is, so a test can seed rows
+/// under *legacy* ids (via [seedAt]) and prove the key migration rescues them.
+class InMemoryTagCollectionStore implements TagCollectionStore {
+  final Map<Id, TagCollection> data = <Id, TagCollection>{};
+
+  /// Inserts [tag] at an explicit [id], bypassing the collection's own id
+  /// derivation — the only way to model a row written by an older build.
+  void seedAt(Id id, TagCollection tag) => data[id] = _clone(tag);
+
+  @override
+  Future<void> clear() async => data.clear();
+
+  @override
+  Future<void> deleteById(Id id) async => data.remove(id);
+
+  @override
+  Future<TagCollection?> getById(Id id) async {
+    final tag = data[id];
+    return tag == null ? null : _clone(tag);
+  }
+
+  @override
+  Future<List<TagCollection>> getAll() async =>
+      data.values.map(_clone).toList(growable: false);
+
+  @override
+  Future<TagCollection?> getByTagId(String tagId) async {
+    final tag = data[isarIdForString(tagId)];
+    return tag == null ? null : _clone(tag);
+  }
+
+  @override
+  Future<List<TagCollection>> getByTagIds(List<String> tagIds) async {
+    return tagIds
+        .map((tagId) => data[isarIdForString(tagId)])
+        .whereType<TagCollection>()
+        .map(_clone)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> put(TagCollection tag) async => data[tag.id] = _clone(tag);
+
+  @override
+  Future<void> putAll(List<TagCollection> tags) async {
+    for (final tag in tags) {
+      await put(tag);
+    }
+  }
+
+  @override
+  Future<T> writeTxn<T>(Future<T> Function() action) => action();
+
+  TagCollection _clone(TagCollection tag) => tag.toModel().toCollection();
+}
+
+/// In-memory [FavoriteCollectionStore]. See [InMemoryTagCollectionStore].
+class InMemoryFavoriteCollectionStore implements FavoriteCollectionStore {
+  final Map<Id, FavoriteCollection> data = <Id, FavoriteCollection>{};
+
+  void seedAt(Id id, FavoriteCollection favorite) =>
+      data[id] = _clone(favorite);
+
+  @override
+  Future<void> clear() async => data.clear();
+
+  @override
+  Future<void> deleteById(Id id) async => data.remove(id);
+
+  @override
+  Future<void> deleteByIds(List<Id> ids) async {
+    for (final id in ids) {
+      data.remove(id);
+    }
+  }
+
+  @override
+  Future<FavoriteCollection?> getById(Id id) async {
+    final favorite = data[id];
+    return favorite == null ? null : _clone(favorite);
+  }
+
+  @override
+  Future<List<FavoriteCollection>> getAll() async =>
+      data.values.map(_clone).toList(growable: false);
+
+  @override
+  Future<List<FavoriteCollection>> getAddedAfter(
+    DateTime threshold, {
+    FavoriteItemType? type,
+  }) async {
+    return data.values
+        .where((favorite) => favorite.addedAt.isAfter(threshold))
+        .where((favorite) => type == null || favorite.itemType == type)
+        .map(_clone)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<FavoriteCollection?> getByCompositeId(
+    String itemId,
+    FavoriteItemType type,
+  ) async {
+    final favorite = data[isarIdForString(favoriteKey(itemId, type))];
+    return favorite == null ? null : _clone(favorite);
+  }
+
+  @override
+  Future<List<FavoriteCollection>> getByItemId(String itemId) async {
+    return data.values
+        .where((favorite) => favorite.itemId == itemId)
+        .map(_clone)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<FavoriteCollection>> getByType(FavoriteItemType type) async {
+    return data.values
+        .where((favorite) => favorite.itemType == type)
+        .map(_clone)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> put(FavoriteCollection favorite) async =>
+      data[favorite.id] = _clone(favorite);
+
+  @override
+  Future<void> putAll(List<FavoriteCollection> favorites) async {
+    for (final favorite in favorites) {
+      await put(favorite);
+    }
+  }
+
+  @override
+  Future<T> writeTxn<T>(Future<T> Function() action) => action();
+
+  FavoriteCollection _clone(FavoriteCollection favorite) {
+    final clone = favorite.toModel().toCollection();
+    clone.media.value = favorite.media.value;
+    clone.directory.value = favorite.directory.value;
     return clone;
   }
 }
