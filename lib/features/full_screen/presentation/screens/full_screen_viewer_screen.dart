@@ -24,6 +24,7 @@ import '../../../../shared/providers/settings_providers.dart';
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
+import '../../../../shared/widgets/finder_media_actions.dart';
 import '../../../../shared/widgets/move_copy_media_action.dart';
 import '../../../../shared/widgets/reveal_media_action.dart';
 import '../../../../shared/widgets/shortcut_help_overlay.dart';
@@ -404,6 +405,15 @@ class _FullScreenViewerScreenState
           // viewer was opened with.
           onTap: () => revealMediaInLibrary(context, media),
           child: const Text('Go to directory'),
+        ),
+        if (supportsFinderActions)
+          PopupMenuItem(
+            onTap: () => revealMediaInFinder(context, media),
+            child: const Text('Reveal in Finder'),
+          ),
+        PopupMenuItem(
+          onTap: () => copyMediaPath(context, media),
+          child: const Text('Copy path'),
         ),
         if (Platform.isMacOS) ...[
           PopupMenuItem(

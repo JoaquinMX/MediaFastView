@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/utils/tag_cache_refresher.dart';
 import '../../../../shared/widgets/tag_selection_dialog.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../domain/entities/tag_entity.dart';
+import '../../domain/entities/tag_usage.dart';
 import '../../domain/use_cases/assign_tag_use_case.dart';
 import '../view_models/tag_management_view_model.dart';
 import '../view_models/tags_view_model.dart';
 import 'tag_creation_dialog.dart';
 import 'tag_edit_dialog.dart';
+import 'tag_merge_dialog.dart';
 
 /// A dialog for managing tags - viewing, adding, removing, and assigning.
 class TagManagementDialog extends ConsumerWidget {
@@ -63,11 +66,15 @@ class TagManagementDialog extends ConsumerWidget {
           : null,
       showDeleteButtons: media == null,
       onDeleteTag: media == null
-          ? (context, tag) => _confirmDeleteTag(context, tag, tagViewModel)
+          ? (context, tag) => _confirmDeleteTag(context, ref, tag, tagViewModel)
           : null,
       showEditButtons: media == null,
       onEditTag: media == null
           ? (context, tag) => TagEditDialog.show(context, tag)
+          : null,
+      showMergeButtons: media == null,
+      onMergeTag: media == null
+          ? (context, tag) => TagMergeDialog.show(context, tag)
           : null,
       emptyStateBuilder: (context) => _buildEmptyState(context, media != null),
     );
@@ -75,26 +82,25 @@ class TagManagementDialog extends ConsumerWidget {
 
   static Future<void> _confirmDeleteTag(
     BuildContext context,
+    WidgetRef ref,
     TagEntity tag,
     TagViewModel tagViewModel,
-  ) {
-    return showDialog(
+  ) async {
+    final refresher = ref.read(tagCacheRefresherProvider);
+    final usage = ref.read(tagUsageProvider).valueOrNull?[tag.id];
+
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Tag'),
-        content: Text(
-          'Are you sure you want to delete "${tag.name}"? This action cannot be undone.',
-        ),
+        content: Text(_describeDeletion(tag, usage)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              tagViewModel.deleteTag(tag.id);
-              Navigator.of(context).pop();
-            },
+            onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
@@ -103,6 +109,28 @@ class TagManagementDialog extends ConsumerWidget {
         ],
       ),
     );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    await tagViewModel.deleteTag(tag.id);
+    await refresher.refresh();
+  }
+
+  /// Names the blast radius before the user commits to it.
+  ///
+  /// The old copy said only "this cannot be undone", which left the important
+  /// part ambiguous: deleting a tag untags things, it does not delete them.
+  static String _describeDeletion(TagEntity tag, TagUsage? usage) {
+    if (usage == null || usage.isUnused) {
+      return 'Delete "${tag.name}"? Nothing is using it. '
+          'This cannot be undone.';
+    }
+
+    return 'Delete "${tag.name}"? It is on ${usage.describe()}, which will lose '
+        'this tag but keep their others. The files themselves are not deleted. '
+        'This cannot be undone.';
   }
 
   static Widget _buildEmptyState(BuildContext context, bool forAssignment) {

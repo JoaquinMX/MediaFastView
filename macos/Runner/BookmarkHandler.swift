@@ -95,9 +95,47 @@ class BookmarkHandler: NSObject {
             handleTransfer(call, kind: .move, result: result)
         case "copyItem":
             handleTransfer(call, kind: .copy, result: result)
+        case "revealInFinder":
+            handleRevealInFinder(call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    // MARK: - Reveal
+
+    /// Opens Finder with the item selected, inside security-scoped access to the
+    /// enclosing bookmarked directory.
+    ///
+    /// `NSWorkspace` rather than shelling out to `open -R`: the app is sandboxed,
+    /// so the reveal has to happen within an access session for the user-selected
+    /// root that covers this path.
+    private func handleRevealInFinder(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String else {
+            logError("Invalid arguments for revealInFinder")
+            result(FlutterError(code: "INVALID_ARGUMENTS",
+                               message: "Path is required",
+                               details: nil))
+            return
+        }
+
+        let scopes = ScopedAccess()
+        defer { scopes.endAll() }
+        scopes.begin(args["bookmarkData"] as? String, label: "enclosing directory") { self.logWarning($0) }
+
+        guard FileManager.default.fileExists(atPath: path) else {
+            logError("Cannot reveal a path that does not exist: \(path)")
+            result(FlutterError(code: "NOT_FOUND",
+                               message: "File does not exist: \(path)",
+                               details: nil))
+            return
+        }
+
+        let fileURL = URL(fileURLWithPath: path)
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        logInfo("Revealed item in Finder: \(path)")
+        result(nil)
     }
 
     // MARK: - Transfer (move / copy)

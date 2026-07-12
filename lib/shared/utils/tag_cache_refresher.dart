@@ -17,6 +17,10 @@ class TagCacheRefresher {
     final futures = <Future<void>>[];
     _ref.invalidate(directoryMediaCountsProvider);
 
+    // Usage counts are derived from the media and directory rows a mutation just
+    // changed, so they go stale on every rename, merge, delete and assignment.
+    _ref.invalidate(tagUsageProvider);
+
     // TagLookup is an app-lifetime cache of tag name + colour, and it is what
     // the full-screen and slideshow overlays resolve media.tagIds through. Miss
     // it and a renamed tag keeps its old name and colour there until an

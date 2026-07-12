@@ -20,6 +20,7 @@ class BookmarkService {
   static const String _moveToTrash = 'moveToTrash';
   static const String _moveItem = 'moveItem';
   static const String _copyItem = 'copyItem';
+  static const String _revealInFinder = 'revealInFinder';
 
   // Singleton instance
   static final BookmarkService instance = BookmarkService._();
@@ -228,6 +229,29 @@ class BookmarkService {
     } catch (e) {
       _logError('Unexpected error moving item to Trash: $path', e);
       throw Exception('Unexpected error moving item to Trash: $e');
+    }
+  }
+
+  /// Opens Finder with [path] selected.
+  ///
+  /// macOS only. Runs inside security-scoped access to the enclosing bookmarked
+  /// directory when [bookmarkData] is provided — a sandboxed build cannot reveal
+  /// a user-selected location without it.
+  Future<void> revealInFinder(String path, {String? bookmarkData}) async {
+    if (!Platform.isMacOS) {
+      throw UnsupportedError(
+        'Revealing items in Finder is only supported on macOS',
+      );
+    }
+
+    try {
+      await _channel.invokeMethod<void>(_revealInFinder, {
+        'path': path,
+        if (bookmarkData != null) 'bookmarkData': bookmarkData,
+      });
+    } on PlatformException catch (e) {
+      _logError('Failed to reveal item in Finder: $path', e);
+      throw Exception('Failed to reveal item in Finder: ${e.message}');
     }
   }
 

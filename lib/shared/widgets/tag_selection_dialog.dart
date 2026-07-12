@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/tagging/domain/entities/tag_entity.dart';
 import '../../features/tagging/presentation/states/tag_state.dart';
+import '../providers/repository_providers.dart';
 import '../../features/tagging/presentation/view_models/tag_management_view_model.dart';
 import '../../features/tagging/presentation/widgets/tag_chip.dart';
 
 typedef TagToggleCallback = Future<void> Function(TagEntity tag, bool isSelected);
 typedef TagDeletionCallback = Future<void> Function(BuildContext context, TagEntity tag);
 typedef TagEditCallback = Future<void> Function(BuildContext context, TagEntity tag);
+typedef TagMergeCallback = Future<void> Function(BuildContext context, TagEntity tag);
 typedef TagCreationCallback = Future<void> Function(BuildContext context);
 typedef TagSelectionConfirmCallback<T> = Future<T?> Function(List<String> tagIds);
 typedef TagSelectionLoader = Future<List<String>> Function();
@@ -36,10 +38,12 @@ class TagSelectionDialog<T> extends ConsumerStatefulWidget {
     this.onTagToggle,
     this.onDeleteTag,
     this.onEditTag,
+    this.onMergeTag,
     this.onCreateTag,
     this.showCreateButton = false,
     this.showDeleteButtons = false,
     this.showEditButtons = false,
+    this.showMergeButtons = false,
     this.selectionLimit,
     this.selectionLimitMessage,
     this.showAllOption = false,
@@ -78,6 +82,10 @@ class TagSelectionDialog<T> extends ConsumerStatefulWidget {
   /// Callback that is invoked when the edit icon on a tag is pressed.
   final TagEditCallback? onEditTag;
 
+  /// Callback that is invoked when the merge icon on a tag is pressed. The tag
+  /// passed is the one being merged *away* — the one that will disappear.
+  final TagMergeCallback? onMergeTag;
+
   /// Callback to open a creation experience for tags.
   final TagCreationCallback? onCreateTag;
 
@@ -106,6 +114,10 @@ class TagSelectionDialog<T> extends ConsumerStatefulWidget {
   /// slot and it is already spent on delete. Opt-in, so the assign, filter and
   /// bulk-assign flows keep their chips.
   final bool showEditButtons;
+
+  /// Whether each tag offers a merge action. Requires the row layout, so set it
+  /// alongside [showEditButtons].
+  final bool showMergeButtons;
 
   /// Whether the "Create tag" button should be shown.
   final bool showCreateButton;
@@ -302,7 +314,8 @@ class _TagSelectionDialogState<T>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final tag in tags) _buildTagRow(context, tag),
+                  for (final tag in tags)
+                    _buildTagRow(context, tag, tags.length),
                 ],
               ),
             ),
@@ -351,13 +364,16 @@ class _TagSelectionDialogState<T>
     );
   }
 
-  /// A manage-mode tag row: colour swatch, name, and the edit/delete actions.
+  /// A manage-mode tag row: colour swatch, name, usage, and the actions.
   ///
   /// Rows rather than chips because a chip has a single action slot, already
   /// spent on delete. There is no selection here — in manage mode there is
   /// nothing to assign the tag to.
-  Widget _buildTagRow(BuildContext context, TagEntity tag) {
+  Widget _buildTagRow(BuildContext context, TagEntity tag, int tagCount) {
     final theme = Theme.of(context);
+
+    // A tag with nothing to merge into cannot be merged.
+    final canMerge = widget.showMergeButtons && tagCount > 1;
 
     return ListTile(
       key: ValueKey<String>('tag_row_${tag.id}'),
@@ -367,9 +383,17 @@ class _TagSelectionDialogState<T>
         backgroundColor: Color(tag.color),
       ),
       title: Text(tag.name, style: theme.textTheme.bodyLarge),
+      subtitle: _buildUsageLabel(context, tag),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (canMerge)
+            IconButton(
+              icon: const Icon(Icons.merge_outlined),
+              iconSize: 20,
+              tooltip: 'Merge "${tag.name}" into another tag',
+              onPressed: () => widget.onMergeTag?.call(context, tag),
+            ),
           IconButton(
             icon: const Icon(Icons.edit_outlined),
             iconSize: 20,
@@ -385,6 +409,29 @@ class _TagSelectionDialogState<T>
               onPressed: () => widget.onDeleteTag?.call(context, tag),
             ),
         ],
+      ),
+    );
+  }
+
+  /// "240 files · 3 folders", or "Unused" when nothing carries the tag.
+  ///
+  /// Renders nothing at all while the counts are still loading, rather than a
+  /// spinner or a placeholder — the row is useful without it, and the list must
+  /// not jump around or block on a count.
+  Widget? _buildUsageLabel(BuildContext context, TagEntity tag) {
+    final theme = Theme.of(context);
+    final usage = ref.watch(tagUsageProvider).valueOrNull?[tag.id];
+    if (usage == null) {
+      return null;
+    }
+
+    final isUnused = usage.isUnused;
+    return Text(
+      isUnused ? 'Unused' : usage.describe(),
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: isUnused
+            ? theme.colorScheme.outline
+            : theme.colorScheme.onSurfaceVariant,
       ),
     );
   }

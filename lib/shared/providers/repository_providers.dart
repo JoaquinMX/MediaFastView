@@ -39,7 +39,10 @@ import '../../features/media_library/domain/use_cases/validate_path_use_case.dar
 import '../../features/media_library/domain/use_cases/update_directory_access_use_case.dart';
 import '../../features/tagging/domain/use_cases/get_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/assign_tag_use_case.dart';
+import '../../features/tagging/domain/entities/tag_usage.dart';
 import '../../features/tagging/domain/use_cases/create_tag_use_case.dart';
+import '../../features/tagging/domain/use_cases/get_tag_usage_use_case.dart';
+import '../../features/tagging/domain/use_cases/merge_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/update_tag_use_case.dart';
 import '../../features/tagging/domain/use_cases/filter_by_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/clear_tag_assignments_use_case.dart';
@@ -418,6 +421,29 @@ final createTagUseCaseProvider = Provider<CreateTagUseCase>((ref) {
 final updateTagUseCaseProvider = Provider<UpdateTagUseCase>((ref) {
   return UpdateTagUseCase(ref.watch(tagRepositoryProvider));
 });
+
+final mergeTagsUseCaseProvider = Provider<MergeTagsUseCase>((ref) {
+  return MergeTagsUseCase(
+    tagRepository: ref.watch(tagRepositoryProvider),
+    mediaRepository: ref.watch(mediaRepositoryProvider),
+    directoryRepository: ref.watch(directoryRepositoryProvider),
+  );
+});
+
+final getTagUsageUseCaseProvider = Provider<GetTagUsageUseCase>((ref) {
+  return GetTagUsageUseCase(
+    tagRepository: ref.watch(tagRepositoryProvider),
+    mediaRepository: ref.watch(mediaRepositoryProvider),
+    directoryRepository: ref.watch(directoryRepositoryProvider),
+  );
+});
+
+/// How many files and folders carry each tag, keyed by tag id.
+///
+/// Invalidated by [TagCacheRefresher], so counts follow every tag mutation.
+final tagUsageProvider = FutureProvider.autoDispose<Map<String, TagUsage>>(
+  (ref) => ref.watch(getTagUsageUseCaseProvider)(),
+);
 
 final clearTagAssignmentsUseCaseProvider =
     Provider<ClearTagAssignmentsUseCase>((ref) {
