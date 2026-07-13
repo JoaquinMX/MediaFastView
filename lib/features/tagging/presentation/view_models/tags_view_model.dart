@@ -12,6 +12,7 @@ import '../../../media_library/data/models/media_model.dart';
 import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/domain/repositories/directory_repository.dart';
+import '../../../tagging/domain/entities/saved_filter_entity.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/domain/enums/tag_filter_mode.dart';
 import '../../../tagging/domain/enums/tag_media_type_filter.dart';
@@ -59,6 +60,35 @@ class TagSection {
   }
 }
 
+/// What was lost when a saved filter was applied.
+///
+/// A saved filter outlives the things it names: tags get deleted, library roots
+/// get removed. Rather than apply it blind and show the wrong results, the view
+/// model prunes and reports, so the screen can say so.
+@immutable
+class SavedFilterApplied {
+  const SavedFilterApplied({
+    this.droppedTagCount = 0,
+    this.droppedDirectoryCount = 0,
+  });
+
+  final int droppedTagCount;
+  final int droppedDirectoryCount;
+
+  bool get isIntact => droppedTagCount == 0 && droppedDirectoryCount == 0;
+
+  /// "2 tags and 1 folder", dropping whichever half is zero. Empty when intact.
+  String describeDropped() {
+    final parts = <String>[
+      if (droppedTagCount > 0)
+        '$droppedTagCount tag${droppedTagCount == 1 ? '' : 's'}',
+      if (droppedDirectoryCount > 0)
+        '$droppedDirectoryCount folder${droppedDirectoryCount == 1 ? '' : 's'}',
+    ];
+    return parts.join(' and ');
+  }
+}
+
 sealed class TagsState {
   const TagsState();
 }
@@ -98,6 +128,7 @@ class TagsLoaded extends TagsState {
     required this.mediaById,
     this.selectedMediaIds = const <String>{},
     this.isSelectionMode = false,
+    this.appliedFilterId,
   });
 
   final List<TagSection> sections;
@@ -128,6 +159,9 @@ class TagsLoaded extends TagsState {
   /// [selectedMediaIds] so an empty selection can still be "in selection mode",
   /// which is what lets a drag start from nothing.
   final bool isSelectionMode;
+
+  /// The saved filter currently applied, if any — which chip reads as selected.
+  final String? appliedFilterId;
 
   List<String> get orderedSelectedTagIds {
     return _orderedTagIds(selectedTagIds);
@@ -167,6 +201,10 @@ class TagsLoaded extends TagsState {
     Map<String, MediaEntity>? mediaById,
     Set<String>? selectedMediaIds,
     bool? isSelectionMode,
+    String? appliedFilterId,
+    // `?? this.x` cannot express "set this back to null", and un-applying a
+    // filter is exactly that.
+    bool clearAppliedFilter = false,
   }) {
     return TagsLoaded(
       sections: sections ?? this.sections,
@@ -182,6 +220,9 @@ class TagsLoaded extends TagsState {
       mediaById: mediaById ?? this.mediaById,
       selectedMediaIds: selectedMediaIds ?? this.selectedMediaIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
+      appliedFilterId: clearAppliedFilter
+          ? null
+          : (appliedFilterId ?? this.appliedFilterId),
     );
   }
 }
@@ -218,6 +259,11 @@ class TagsViewModel extends StateNotifier<TagsState> {
   Set<String> _selectedDirectoryPaths = <String>{};
   Set<String> _selectedMediaIds = <String>{};
   bool _isMediaSelectionMode = false;
+  String? _appliedFilterId;
+
+  /// The applied filter as it landed *after pruning* — the baseline the dirty
+  /// check compares against.
+  SavedFilterDefinition? _appliedFilterDefinition;
   TagFilterMode _filterMode = TagFilterMode.any;
   TagMediaTypeFilter _mediaTypeFilter = TagMediaTypeFilter.all;
   TagSelectionMode _selectionMode = TagSelectionMode.required;
@@ -685,6 +731,154 @@ class TagsViewModel extends StateNotifier<TagsState> {
       state = currentState.copyWith(
         selectedMediaIds: Set<String>.unmodifiable(_selectedMediaIds),
         isSelectionMode: _isMediaSelectionMode,
+      );
+    }
+  }
+
+  /// The query the tab is currently expressing.
+  SavedFilterDefinition currentFilter() {
+    return SavedFilterDefinition(
+      requiredTagIds: Set<String>.unmodifiable(_selectedTagIds),
+      optionalTagIds: Set<String>.unmodifiable(_optionalTagIds),
+      excludedTagIds: Set<String>.unmodifiable(_excludedTagIds),
+      filterMode: _filterMode,
+      mediaTypeFilter: _mediaTypeFilter,
+      directoryPaths: Set<String>.unmodifiable(_selectedDirectoryPaths),
+    );
+  }
+
+  /// Restores a saved filter, dropping anything it refers to that is gone.
+  ///
+  /// A saved filter can outlive the things it names: a tag can be deleted, and a
+  /// library root can be removed, taking its directory paths with it. Both are
+  /// pruned here rather than being applied blind, and the [SavedFilterApplied]
+  /// report says what was dropped so the screen can tell the user instead of
+  /// quietly showing the wrong results.
+  SavedFilterApplied applySavedFilter(SavedFilterEntity filter) {
+    final definition = filter.definition;
+
+    final knownTagIds = switch (state) {
+      TagsLoaded(:final sections) =>
+        sections.map((section) => section.id).toSet(),
+      _ => const <String>{},
+    };
+
+    Set<String> keepTags(Set<String> ids) => ids.intersection(knownTagIds);
+
+    final required = keepTags(definition.requiredTagIds);
+    final optional = keepTags(definition.optionalTagIds);
+    final excluded = keepTags(definition.excludedTagIds);
+    final directories =
+        definition.directoryPaths.intersection(_knownDirectoryPaths);
+
+    // Distinct ids that vanished. Counting per bucket would double-count a tag
+    // the filter names in two of them, and comparing a de-duplicated total
+    // against the sum of the bucket sizes would go negative.
+    final droppedTags =
+        definition.allTagIds.toSet().difference(knownTagIds).length;
+    final droppedDirectories =
+        definition.directoryPaths.difference(_knownDirectoryPaths).length;
+
+    _selectedTagIds = required;
+    _optionalTagIds = optional;
+    _excludedTagIds = excluded;
+    _filterMode = definition.filterMode;
+    _mediaTypeFilter = definition.mediaTypeFilter;
+    _selectedDirectoryPaths = directories;
+
+    // A non-hybrid mode has no optional bucket, so the input mode must not be
+    // left pointing at one.
+    if (!_filterMode.isHybrid) {
+      _selectionMode = TagSelectionMode.required;
+    }
+
+    // The baseline for "has this been modified?" is the *pruned* filter, not the
+    // stored one — otherwise a prune would mark the filter dirty the instant it
+    // was applied.
+    final applied = currentFilter();
+    _appliedFilterId = filter.id;
+    _appliedFilterDefinition = applied;
+
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(
+        selectedTagIds: Set<String>.unmodifiable(_selectedTagIds),
+        optionalTagIds: Set<String>.unmodifiable(_optionalTagIds),
+        excludedTagIds: Set<String>.unmodifiable(_excludedTagIds),
+        filterMode: _filterMode,
+        mediaTypeFilter: _mediaTypeFilter,
+        selectionMode: _selectionMode,
+        selectedDirectoryPaths: Set<String>.unmodifiable(
+          _selectedDirectoryPaths,
+        ),
+        appliedFilterId: _appliedFilterId,
+      );
+    }
+
+    return SavedFilterApplied(
+      droppedTagCount: droppedTags,
+      droppedDirectoryCount: droppedDirectories,
+    );
+  }
+
+  /// Whether the applied filter has been edited since it was applied.
+  ///
+  /// Drives the "Update 'X'" option. `null` when no filter is applied.
+  bool get isAppliedFilterModified {
+    final baseline = _appliedFilterDefinition;
+    return baseline != null && baseline != currentFilter();
+  }
+
+  String? get appliedFilterId => _appliedFilterId;
+
+  /// Marks [filterId] as the applied filter, taking the current query as its
+  /// baseline.
+  ///
+  /// Pass `null` to forget the applied filter **without changing the query** —
+  /// which is what deleting a saved filter does: the results you are looking at
+  /// stay, they are just no longer "a saved filter". To actually undo a filter,
+  /// use [clearSavedFilter].
+  void setAppliedFilter(String? filterId) {
+    _appliedFilterId = filterId;
+    _appliedFilterDefinition = filterId == null ? null : currentFilter();
+
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(
+        appliedFilterId: _appliedFilterId,
+        clearAppliedFilter: filterId == null,
+      );
+    }
+  }
+
+  /// Un-applies the saved filter, restoring the unfiltered view.
+  ///
+  /// What tapping the applied chip a second time does. It has to undo the whole
+  /// query — every field [applySavedFilter] set — and not merely deselect the
+  /// chip, or the results would stay filtered by something that no longer looks
+  /// applied.
+  void clearSavedFilter() {
+    _selectedTagIds = <String>{};
+    _optionalTagIds = <String>{};
+    _excludedTagIds = <String>{};
+    _filterMode = TagFilterMode.any;
+    _mediaTypeFilter = TagMediaTypeFilter.all;
+    _selectionMode = TagSelectionMode.required;
+    _selectedDirectoryPaths = <String>{};
+    _appliedFilterId = null;
+    _appliedFilterDefinition = null;
+
+    final currentState = state;
+    if (currentState is TagsLoaded && mounted) {
+      state = currentState.copyWith(
+        selectedTagIds: const <String>{},
+        optionalTagIds: const <String>{},
+        excludedTagIds: const <String>{},
+        filterMode: _filterMode,
+        mediaTypeFilter: _mediaTypeFilter,
+        selectionMode: _selectionMode,
+        selectedDirectoryPaths: const <String>{},
+        clearAppliedFilter: true,
       );
     }
   }

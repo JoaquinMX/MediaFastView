@@ -7,7 +7,9 @@ import 'package:media_fast_view/features/media_library/data/isar/directory_colle
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/media_collection.dart';
+import 'package:media_fast_view/features/tagging/data/isar/isar_saved_filter_data_source.dart';
 import 'package:media_fast_view/features/tagging/data/isar/isar_tag_data_source.dart';
+import 'package:media_fast_view/features/tagging/data/isar/saved_filter_collection.dart';
 import 'package:media_fast_view/features/tagging/data/isar/tag_collection.dart';
 
 import 'isar_id.dart';
@@ -320,4 +322,43 @@ class InMemoryFavoriteCollectionStore implements FavoriteCollectionStore {
     clone.directory.value = favorite.directory.value;
     return clone;
   }
+}
+
+/// In-memory [SavedFilterCollectionStore]. See [InMemoryTagCollectionStore].
+class InMemorySavedFilterCollectionStore
+    implements SavedFilterCollectionStore {
+  final Map<Id, SavedFilterCollection> data = <Id, SavedFilterCollection>{};
+
+  @override
+  Future<void> clear() async => data.clear();
+
+  @override
+  Future<void> deleteById(Id id) async => data.remove(id);
+
+  @override
+  Future<SavedFilterCollection?> getById(Id id) async {
+    final filter = data[id];
+    return filter == null ? null : _clone(filter);
+  }
+
+  @override
+  Future<List<SavedFilterCollection>> getAll() async =>
+      data.values.map(_clone).toList(growable: false);
+
+  @override
+  Future<void> put(SavedFilterCollection filter) async =>
+      data[filter.id] = _clone(filter);
+
+  @override
+  Future<void> putAll(List<SavedFilterCollection> filters) async {
+    for (final filter in filters) {
+      await put(filter);
+    }
+  }
+
+  @override
+  Future<T> writeTxn<T>(Future<T> Function() action) => action();
+
+  SavedFilterCollection _clone(SavedFilterCollection filter) =>
+      filter.toModel().toCollection();
 }

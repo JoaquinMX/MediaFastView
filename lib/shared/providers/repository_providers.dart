@@ -39,8 +39,16 @@ import '../../features/media_library/domain/use_cases/validate_path_use_case.dar
 import '../../features/media_library/domain/use_cases/update_directory_access_use_case.dart';
 import '../../features/tagging/domain/use_cases/get_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/assign_tag_use_case.dart';
+import '../../features/tagging/data/isar/isar_saved_filter_data_source.dart';
+import '../../features/tagging/data/repositories/saved_filter_repository_impl.dart';
+import '../../features/tagging/domain/entities/saved_filter_entity.dart';
 import '../../features/tagging/domain/entities/tag_usage.dart';
+import '../../features/tagging/domain/repositories/saved_filter_repository.dart';
 import '../../features/tagging/domain/use_cases/create_tag_use_case.dart';
+import '../../features/tagging/domain/use_cases/delete_saved_filter_use_case.dart';
+import '../../features/tagging/domain/use_cases/delete_tag_use_case.dart';
+import '../../features/tagging/domain/use_cases/get_saved_filters_use_case.dart';
+import '../../features/tagging/domain/use_cases/save_filter_use_case.dart';
 import '../../features/tagging/domain/use_cases/get_tag_usage_use_case.dart';
 import '../../features/tagging/domain/use_cases/merge_tags_use_case.dart';
 import '../../features/tagging/domain/use_cases/update_tag_use_case.dart';
@@ -112,6 +120,10 @@ final isarTagDataSourceProvider = Provider<IsarTagDataSource>(
   (ref) => IsarTagDataSource(ref.watch(isarDatabaseProvider)),
 );
 
+final isarSavedFilterDataSourceProvider = Provider<IsarSavedFilterDataSource>(
+  (ref) => IsarSavedFilterDataSource(ref.watch(isarDatabaseProvider)),
+);
+
 final isarFavoritesDataSourceProvider = Provider<IsarFavoritesDataSource>(
   (ref) => IsarFavoritesDataSource(ref.watch(isarDatabaseProvider)),
 );
@@ -176,6 +188,13 @@ final tagRepositoryProvider =
       },
     );
 
+final savedFilterRepositoryProvider = StateNotifierProvider.autoDispose<
+    SavedFilterRepositoryNotifier, SavedFilterRepository>((ref) {
+  return SavedFilterRepositoryNotifier(
+    SavedFilterRepositoryImpl(ref.watch(isarSavedFilterDataSourceProvider)),
+  );
+});
+
 final tagLookupProvider = Provider<TagLookup>((ref) {
   return TagLookup(ref.watch(tagRepositoryProvider));
 });
@@ -218,6 +237,12 @@ class MediaRepositoryNotifier extends StateNotifier<MediaRepository> {
 
 class TagRepositoryNotifier extends StateNotifier<TagRepository> {
   TagRepositoryNotifier(TagRepository repository) : super(repository);
+}
+
+class SavedFilterRepositoryNotifier
+    extends StateNotifier<SavedFilterRepository> {
+  SavedFilterRepositoryNotifier(SavedFilterRepository repository)
+    : super(repository);
 }
 
 class FavoritesRepositoryNotifier extends StateNotifier<FavoritesRepository> {
@@ -427,8 +452,36 @@ final mergeTagsUseCaseProvider = Provider<MergeTagsUseCase>((ref) {
     tagRepository: ref.watch(tagRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
     directoryRepository: ref.watch(directoryRepositoryProvider),
+    savedFilterRepository: ref.watch(savedFilterRepositoryProvider),
   );
 });
+
+final deleteTagUseCaseProvider = Provider<DeleteTagUseCase>((ref) {
+  return DeleteTagUseCase(
+    tagRepository: ref.watch(tagRepositoryProvider),
+    savedFilterRepository: ref.watch(savedFilterRepositoryProvider),
+  );
+});
+
+// Saved filter use case providers
+final getSavedFiltersUseCaseProvider = Provider<GetSavedFiltersUseCase>((ref) {
+  return GetSavedFiltersUseCase(ref.watch(savedFilterRepositoryProvider));
+});
+
+final saveFilterUseCaseProvider = Provider<SaveFilterUseCase>((ref) {
+  return SaveFilterUseCase(ref.watch(savedFilterRepositoryProvider));
+});
+
+final deleteSavedFilterUseCaseProvider =
+    Provider<DeleteSavedFilterUseCase>((ref) {
+  return DeleteSavedFilterUseCase(ref.watch(savedFilterRepositoryProvider));
+});
+
+/// Every saved filter, oldest first. Invalidated whenever one is written.
+final savedFiltersProvider =
+    FutureProvider.autoDispose<List<SavedFilterEntity>>(
+  (ref) => ref.watch(getSavedFiltersUseCaseProvider)(),
+);
 
 final getTagUsageUseCaseProvider = Provider<GetTagUsageUseCase>((ref) {
   return GetTagUsageUseCase(

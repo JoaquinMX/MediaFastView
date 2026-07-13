@@ -5,6 +5,7 @@ import '../../domain/entities/tag_entity.dart';
 import '../../domain/repositories/tag_repository.dart';
 import '../../domain/tag_validation.dart';
 import '../../domain/use_cases/create_tag_use_case.dart';
+import '../../domain/use_cases/delete_tag_use_case.dart';
 import '../../domain/use_cases/update_tag_use_case.dart';
 import '../states/tag_state.dart';
 
@@ -18,6 +19,7 @@ class TagViewModel extends StateNotifier<TagState> {
     this._tagRepository,
     this._createTagUseCase,
     this._updateTagUseCase,
+    this._deleteTagUseCase,
   ) : super(const TagLoading()) {
     loadTags();
   }
@@ -25,6 +27,7 @@ class TagViewModel extends StateNotifier<TagState> {
   final TagRepository _tagRepository;
   final CreateTagUseCase _createTagUseCase;
   final UpdateTagUseCase _updateTagUseCase;
+  final DeleteTagUseCase _deleteTagUseCase;
 
   /// Loads all tags from the repository.
   Future<void> loadTags() async {
@@ -93,9 +96,12 @@ class TagViewModel extends StateNotifier<TagState> {
   }
 
   /// Deletes a tag by its ID.
+  ///
+  /// Goes through the domain, which also strips the tag from every saved filter
+  /// — a filter still holding a dead id would silently stop narrowing by it.
   Future<void> deleteTag(String tagId) async {
     try {
-      await _tagRepository.deleteTag(tagId);
+      await _deleteTagUseCase(tagId);
 
       // Update state optimistically
       state = switch (state) {
@@ -160,5 +166,6 @@ final tagViewModelProvider =
         ref.watch(tagRepositoryProvider),
         ref.watch(createTagUseCaseProvider),
         ref.watch(updateTagUseCaseProvider),
+        ref.watch(deleteTagUseCaseProvider),
       ),
     );

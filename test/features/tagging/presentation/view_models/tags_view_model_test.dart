@@ -7,7 +7,10 @@ import 'package:media_fast_view/features/media_library/domain/entities/media_ent
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/tag_repository.dart';
+import 'package:media_fast_view/features/tagging/domain/entities/saved_filter_entity.dart';
 import 'package:media_fast_view/features/tagging/domain/entities/tag_entity.dart';
+import 'package:media_fast_view/features/tagging/domain/enums/tag_filter_mode.dart';
+import 'package:media_fast_view/features/tagging/domain/enums/tag_media_type_filter.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/assign_tag_use_case.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/filter_by_tags_use_case.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/get_tags_use_case.dart';
@@ -412,6 +415,297 @@ void main() {
 
         expect(viewModel.commonTagIdsForSelection(), ['beach']);
       });
+    });
+
+    group('saved filters', () {
+      const photosRoot = '/Photos';
+      const year = '/Photos/2024';
+
+      SavedFilterEntity filter(SavedFilterDefinition definition) {
+        return SavedFilterEntity(
+          id: 'filter-1',
+          name: 'Trips',
+          definition: definition,
+          createdAt: DateTime(2024),
+          updatedAt: DateTime(2024),
+        );
+      }
+
+      TagEntity tag(String id) => TagEntity(
+            id: id,
+            name: id,
+            color: 0xFF2196F3,
+            createdAt: DateTime(2024),
+          );
+
+      /// A library with tags `beach` and `family`, and the /Photos/2024 subtree.
+      Future<void> loadLibrary({List<String> tagIds = const []}) async {
+        when(directoryRepository.refreshChangedLibraryRoots())
+            .thenAnswer((_) async {});
+        when(directoryRepository.getDirectories()).thenAnswer(
+          (_) async => [_directory(photosRoot, 'Photos')],
+        );
+        when(tagRepository.getTags())
+            .thenAnswer((_) async => [for (final id in tagIds) tag(id)]);
+        when(isarMediaDataSource.getMedia()).thenAnswer(
+          (_) async => [
+            _mediaModel('$year/a.jpg', tagIds: const ['beach']),
+            _mediaModel('$year/b.jpg', tagIds: const ['family']),
+          ],
+        );
+
+        await viewModel.loadTags();
+      }
+
+      TagsLoaded loaded() => viewModel.state as TagsLoaded;
+
+      test('restores every part of the query', () async {
+        await loadLibrary(tagIds: ['beach', 'family', 'blurry']);
+
+        final result = viewModel.applySavedFilter(
+          filter(
+            const SavedFilterDefinition(
+              requiredTagIds: {'beach'},
+              optionalTagIds: {'family'},
+              excludedTagIds: {'blurry'},
+              filterMode: TagFilterMode.hybrid,
+              mediaTypeFilter: TagMediaTypeFilter.images,
+              directoryPaths: {year},
+            ),
+          ),
+        );
+
+        final state = loaded();
+        expect(state.selectedTagIds, {'beach'});
+        expect(state.optionalTagIds, {'family'});
+        expect(state.excludedTagIds, {'blurry'});
+        expect(state.filterMode, TagFilterMode.hybrid);
+        expect(state.mediaTypeFilter, TagMediaTypeFilter.images);
+        expect(state.selectedDirectoryPaths, {year});
+        expect(state.appliedFilterId, 'filter-1');
+        expect(result.isIntact, isTrue);
+      });
+
+      test('counts a tag named in two buckets once', () async {
+        // Counting per bucket would report two tags dropped; comparing a
+        // de-duplicated total against the sum of bucket sizes would go negative
+        // and make an intact filter look damaged.
+        await loadLibrary(tagIds: ['beach']);
+
+        final result = viewModel.applySavedFilter(
+          filter(
+            const SavedFilterDefinition(
+              requiredTagIds: {'beach'},
+              optionalTagIds: {'gone'},
+              excludedTagIds: {'gone'},
+            ),
+          ),
+        );
+
+        expect(result.droppedTagCount, 1);
+      });
+
+      test('currentFilter round-trips through applySavedFilter', () async {
+        await loadLibrary(tagIds: ['beach', 'family']);
+        const definition = SavedFilterDefinition(
+          requiredTagIds: {'beach'},
+          excludedTagIds: {'family'},
+          filterMode: TagFilterMode.all,
+          mediaTypeFilter: TagMediaTypeFilter.videos,
+          directoryPaths: {year},
+        );
+
+        viewModel.applySavedFilter(filter(definition));
+
+        expect(viewModel.currentFilter(), definition);
+      });
+
+      // A saved filter outlives the things it names. Applying it blind would show
+      // the wrong results and say nothing.
+      group('pruning', () {
+        test('drops a tag that no longer exists, and reports it', () async {
+          await loadLibrary(tagIds: ['beach']); // 'family' has been deleted
+
+          final result = viewModel.applySavedFilter(
+            filter(
+              const SavedFilterDefinition(
+                requiredTagIds: {'beach', 'family'},
+              ),
+            ),
+          );
+
+          expect(loaded().selectedTagIds, {'beach'});
+          expect(result.droppedTagCount, 1);
+          expect(result.isIntact, isFalse);
+          expect(result.describeDropped(), '1 tag');
+        });
+
+        test('drops a directory path whose root is gone, and reports it',
+            () async {
+          await loadLibrary(tagIds: ['beach']);
+
+          final result = viewModel.applySavedFilter(
+            filter(
+              const SavedFilterDefinition(
+                requiredTagIds: {'beach'},
+                directoryPaths: {year, '/Elsewhere/gone'},
+              ),
+            ),
+          );
+
+          expect(loaded().selectedDirectoryPaths, {year});
+          expect(result.droppedDirectoryCount, 1);
+          expect(result.describeDropped(), '1 folder');
+        });
+
+        test('reports both halves together', () async {
+          await loadLibrary(tagIds: ['beach']);
+
+          final result = viewModel.applySavedFilter(
+            filter(
+              const SavedFilterDefinition(
+                requiredTagIds: {'beach', 'family'},
+                directoryPaths: {'/Elsewhere/gone'},
+              ),
+            ),
+          );
+
+          expect(result.describeDropped(), '1 tag and 1 folder');
+        });
+      });
+
+      group('the dirty check', () {
+        test('a freshly applied filter is not modified', () async {
+          await loadLibrary(tagIds: ['beach', 'family']);
+
+          viewModel.applySavedFilter(
+            filter(const SavedFilterDefinition(requiredTagIds: {'beach'})),
+          );
+
+          expect(viewModel.isAppliedFilterModified, isFalse);
+        });
+
+        test('a filter that had to be pruned is still not modified', () async {
+          // The baseline is the *pruned* filter. Comparing against the stored one
+          // would mark it dirty the instant it was applied, and "Update" would
+          // light up for a change the user never made.
+          await loadLibrary(tagIds: ['beach']);
+
+          viewModel.applySavedFilter(
+            filter(
+              const SavedFilterDefinition(
+                requiredTagIds: {'beach', 'family'},
+              ),
+            ),
+          );
+
+          expect(viewModel.isAppliedFilterModified, isFalse);
+        });
+
+        test('changing the query marks it modified', () async {
+          await loadLibrary(tagIds: ['beach', 'family']);
+          viewModel.applySavedFilter(
+            filter(const SavedFilterDefinition(requiredTagIds: {'beach'})),
+          );
+
+          viewModel.setMediaTypeFilter(TagMediaTypeFilter.videos);
+
+          expect(viewModel.isAppliedFilterModified, isTrue);
+        });
+
+        test('selecting media does not mark it modified', () async {
+          // The media selection is not part of the query.
+          await loadLibrary(tagIds: ['beach', 'family']);
+          viewModel.applySavedFilter(
+            filter(const SavedFilterDefinition(requiredTagIds: {'beach'})),
+          );
+
+          viewModel.selectMediaRange(loaded().mediaById.keys.take(1));
+
+          expect(viewModel.isAppliedFilterModified, isFalse);
+        });
+
+        test('nothing applied means nothing modified', () async {
+          await loadLibrary(tagIds: ['beach']);
+
+          expect(viewModel.isAppliedFilterModified, isFalse);
+          expect(viewModel.appliedFilterId, isNull);
+        });
+      });
+
+      test('setAppliedFilter(null) forgets the filter without changing it',
+          () async {
+        // What deleting a saved filter does: the results you are looking at stay
+        // put, they are just no longer "a saved filter".
+        await loadLibrary(tagIds: ['beach']);
+        viewModel.applySavedFilter(
+          filter(const SavedFilterDefinition(requiredTagIds: {'beach'})),
+        );
+
+        viewModel.setAppliedFilter(null);
+
+        expect(viewModel.appliedFilterId, isNull);
+        expect(loaded().appliedFilterId, isNull);
+        expect(loaded().selectedTagIds, {'beach'});
+      });
+
+    group('clearSavedFilter', () {
+      test('undoes the whole query, not just the chip', () async {
+        // Tapping the applied chip a second time. Deselecting the chip while
+        // leaving the results filtered by an invisible query is the bug this
+        // exists to prevent.
+        await loadLibrary(tagIds: ['beach', 'family']);
+        viewModel.applySavedFilter(
+          filter(
+            const SavedFilterDefinition(
+              requiredTagIds: {'beach'},
+              optionalTagIds: {'family'},
+              excludedTagIds: {'family'},
+              filterMode: TagFilterMode.hybrid,
+              mediaTypeFilter: TagMediaTypeFilter.images,
+              directoryPaths: {year},
+            ),
+          ),
+        );
+
+        viewModel.clearSavedFilter();
+
+        final state = loaded();
+        expect(state.appliedFilterId, isNull);
+        expect(state.selectedTagIds, isEmpty);
+        expect(state.optionalTagIds, isEmpty);
+        expect(state.excludedTagIds, isEmpty);
+        expect(state.selectedDirectoryPaths, isEmpty);
+        expect(state.filterMode, TagFilterMode.any);
+        expect(state.mediaTypeFilter, TagMediaTypeFilter.all);
+        expect(viewModel.currentFilter().isEmpty, isTrue);
+      });
+
+      test('leaves nothing behind for the dirty check to report', () async {
+        await loadLibrary(tagIds: ['beach']);
+        viewModel.applySavedFilter(
+          filter(const SavedFilterDefinition(requiredTagIds: {'beach'})),
+        );
+
+        viewModel.clearSavedFilter();
+
+        expect(viewModel.appliedFilterId, isNull);
+        expect(viewModel.isAppliedFilterModified, isFalse);
+      });
+
+      test('does not disturb the media selection', () async {
+        await loadLibrary(tagIds: ['beach']);
+        viewModel.applySavedFilter(
+          filter(const SavedFilterDefinition(requiredTagIds: {'beach'})),
+        );
+        final mediaId = loaded().mediaById.keys.first;
+        viewModel.toggleMediaSelection(mediaId);
+
+        viewModel.clearSavedFilter();
+
+        expect(loaded().selectedMediaIds, {mediaId});
+      });
+    });
     });
   });
 }

@@ -6,11 +6,13 @@ import 'package:media_fast_view/features/media_library/domain/entities/tag_entit
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/tag_repository.dart';
+import 'package:media_fast_view/features/tagging/domain/entities/saved_filter_entity.dart';
 import 'package:media_fast_view/features/tagging/domain/tag_validation.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/merge_tags_use_case.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 
+import '../../presentation/tag_view_model_fakes.dart';
 import 'merge_tags_use_case_test.mocks.dart';
 
 @GenerateMocks([TagRepository, MediaRepository, DirectoryRepository])
@@ -18,7 +20,26 @@ void main() {
   late MockTagRepository tagRepository;
   late MockMediaRepository mediaRepository;
   late MockDirectoryRepository directoryRepository;
+  late FakeSavedFilterRepository savedFilters;
   late MergeTagsUseCase useCase;
+
+  SavedFilterEntity savedFilter({
+    Set<String> required = const {},
+    Set<String> optional = const {},
+    Set<String> excluded = const {},
+  }) {
+    return SavedFilterEntity(
+      id: 'filter-1',
+      name: 'Trips',
+      definition: SavedFilterDefinition(
+        requiredTagIds: required,
+        optionalTagIds: optional,
+        excludedTagIds: excluded,
+      ),
+      createdAt: DateTime(2024),
+      updatedAt: DateTime(2024),
+    );
+  }
 
   final beach = TagEntity(
     id: 'tag-beach',
@@ -100,10 +121,14 @@ void main() {
     tagRepository = MockTagRepository();
     mediaRepository = MockMediaRepository();
     directoryRepository = MockDirectoryRepository();
+    // A real in-memory implementation, not a mock: the point is to assert the
+    // filters actually come out rewritten, not that a method got called.
+    savedFilters = FakeSavedFilterRepository();
     useCase = MergeTagsUseCase(
       tagRepository: tagRepository,
       mediaRepository: mediaRepository,
       directoryRepository: directoryRepository,
+      savedFilterRepository: savedFilters,
     );
 
     when(tagRepository.deleteTag(any)).thenAnswer((_) async {});
@@ -210,6 +235,101 @@ void main() {
       expect(result.hasFailures, isTrue);
       // Left alive on purpose: the merge can simply be run again.
       verifyNever(tagRepository.deleteTag(any));
+    });
+
+    // Saved filters are the THIRD holder of tag ids, after media and directories.
+    // If a merge does not rewrite them, a filter that *required* the source keeps
+    // an id that resolves to nothing — which the Tags tab silently drops on
+    // apply. The filter then quietly stops requiring anything and broadens its
+    // results, with no error anywhere. These are the guard for that.
+    group('saved filters follow the merge', () {
+      test('a required tag is repointed at the survivor', () async {
+        await savedFilters.saveFilter(
+          savedFilter(required: {'tag-beach', 'tag-sunset'}),
+        );
+
+        await useCase(source: beach, target: seaside);
+
+        final definition = savedFilters.filters.single.definition;
+        expect(definition.requiredTagIds, {'tag-seaside', 'tag-sunset'});
+        expect(definition.requiredTagIds, isNot(contains('tag-beach')));
+      });
+
+      test('optional and excluded lists are repointed too', () async {
+        await savedFilters.saveFilter(
+          savedFilter(
+            optional: {'tag-beach'},
+            excluded: {'tag-beach'},
+          ),
+        );
+
+        await useCase(source: beach, target: seaside);
+
+        final definition = savedFilters.filters.single.definition;
+        expect(definition.optionalTagIds, {'tag-seaside'});
+        expect(definition.excludedTagIds, {'tag-seaside'});
+      });
+
+      test('a filter already naming the target keeps it exactly once', () async {
+        await savedFilters.saveFilter(
+          savedFilter(required: {'tag-beach', 'tag-seaside'}),
+        );
+
+        await useCase(source: beach, target: seaside);
+
+        expect(
+          savedFilters.filters.single.definition.requiredTagIds,
+          {'tag-seaside'},
+        );
+      });
+
+      test('the source id survives nowhere', () async {
+        await savedFilters.saveFilter(
+          savedFilter(
+            required: {'tag-beach'},
+            optional: {'tag-beach'},
+            excluded: {'tag-beach'},
+          ),
+        );
+
+        await useCase(source: beach, target: seaside);
+
+        expect(
+          savedFilters.filters.single.definition.allTagIds,
+          isNot(contains('tag-beach')),
+        );
+      });
+
+      test('a filter that never mentioned the source is untouched', () async {
+        await savedFilters.saveFilter(savedFilter(required: {'tag-family'}));
+
+        await useCase(source: beach, target: seaside);
+
+        expect(
+          savedFilters.filters.single.definition.requiredTagIds,
+          {'tag-family'},
+        );
+      });
+
+      test('filters are left alone when the merge fails', () async {
+        await savedFilters.saveFilter(savedFilter(required: {'tag-beach'}));
+        when(mediaRepository.filterMediaByTags(any))
+            .thenAnswer((_) async => [media('m1', ['tag-beach'])]);
+        when(mediaRepository.updateMediaTagsBatch(any)).thenAnswer(
+          (_) async => const BatchUpdateResult(
+            failureReasons: {'m1': 'disk on fire'},
+          ),
+        );
+
+        await useCase(source: beach, target: seaside);
+
+        // The source tag is still alive, so the filter must still point at it —
+        // the merge can simply be run again.
+        expect(
+          savedFilters.filters.single.definition.requiredTagIds,
+          {'tag-beach'},
+        );
+      });
     });
 
     test('merging a tag into itself is rejected', () async {

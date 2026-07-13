@@ -739,6 +739,21 @@ class MockBookmarkService extends _i1.Mock implements _i2.BookmarkService {
       ) as _i8.Future<String?>);
 
   @override
+  _i8.Future<void> revealInFinder(
+    String? path, {
+    String? bookmarkData,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #revealInFinder,
+          [path],
+          {#bookmarkData: bookmarkData},
+        ),
+        returnValue: _i8.Future<void>.value(),
+        returnValueForMissingStub: _i8.Future<void>.value(),
+      ) as _i8.Future<void>);
+
+  @override
   _i8.Future<_i6.FileTransferResult> moveItem({
     required String? sourcePath,
     required String? destinationPath,

@@ -4,6 +4,7 @@ import '../../../../core/utils/batch_update_result.dart';
 import '../../../media_library/domain/repositories/directory_repository.dart';
 import '../../../media_library/domain/repositories/media_repository.dart';
 import '../entities/tag_entity.dart';
+import '../repositories/saved_filter_repository.dart';
 import '../repositories/tag_repository.dart';
 import '../tag_validation.dart';
 
@@ -42,13 +43,16 @@ class MergeTagsUseCase {
     required TagRepository tagRepository,
     required MediaRepository mediaRepository,
     required DirectoryRepository directoryRepository,
+    required SavedFilterRepository savedFilterRepository,
   })  : _tagRepository = tagRepository,
         _mediaRepository = mediaRepository,
-        _directoryRepository = directoryRepository;
+        _directoryRepository = directoryRepository,
+        _savedFilterRepository = savedFilterRepository;
 
   final TagRepository _tagRepository;
   final MediaRepository _mediaRepository;
   final DirectoryRepository _directoryRepository;
+  final SavedFilterRepository _savedFilterRepository;
 
   Future<TagMergeResult> call({
     required TagEntity source,
@@ -92,6 +96,15 @@ class MergeTagsUseCase {
     // at a tag that no longer exists. Leaving it alive means the merge can
     // simply be run again.
     if (failureReasons.isEmpty) {
+      // Saved filters are the third holder of tag ids, after media and
+      // directories. Miss them and a filter that *required* the source keeps an
+      // id that resolves to nothing — which the Tags tab silently drops on
+      // apply, so the filter quietly stops requiring anything and broadens its
+      // results with no error.
+      await _savedFilterRepository.rewriteTagId(
+        sourceTagId: source.id,
+        targetTagId: target.id,
+      );
       await _tagRepository.deleteTag(source.id);
     }
 

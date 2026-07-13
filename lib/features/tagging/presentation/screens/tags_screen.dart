@@ -6,12 +6,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/providers/media_mutation_bus.dart';
+import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/widgets/confirmation_dialog.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/media_marquee_selector.dart';
 import '../../../../shared/widgets/move_copy_media_action.dart';
+import '../../domain/entities/saved_filter_entity.dart';
 import '../widgets/bulk_tag_assignment_dialog.dart';
+import '../widgets/save_filter_dialog.dart';
+import '../widgets/saved_filter_chip_strip.dart';
 
 import '../../../favorites/presentation/screens/slideshow_screen.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
@@ -105,6 +111,11 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           : AppBar(
               title: const Text('Tags'),
               actions: [
+                IconButton(
+                  icon: const Icon(Icons.bookmark_outline),
+                  tooltip: 'Saved filters',
+                  onPressed: () => _showSavedFilterMenu(state, viewModel),
+                ),
                 IconButton(
                   icon: const Icon(Icons.sell_outlined),
                   tooltip: 'Manage tags',
@@ -265,7 +276,20 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final directoryTree = view.directoryTree;
     final selectedDirectories = view.selectedDirectories;
 
+    final savedFilters = ref.watch(savedFiltersProvider).valueOrNull ?? const [];
+
     final headerWidgets = <Widget>[
+      if (savedFilters.isNotEmpty) ...[
+        SavedFilterChipStrip(
+          filters: savedFilters,
+          appliedFilterId: state.appliedFilterId,
+          onApply: (filter) => _applySavedFilter(viewModel, filter),
+          onClear: viewModel.clearSavedFilter,
+          onAction: (filter, action) =>
+              _handleSavedFilterAction(viewModel, filter, action),
+        ),
+        const SizedBox(height: 12),
+      ],
       _buildSearchField(),
       const SizedBox(height: 12),
       _buildDirectoryFilter(state, viewModel, directoryTree),
@@ -1275,6 +1299,195 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     // Whatever survived is no longer selected — the reload prunes the ids, but
     // leaving selection mode on with nothing in it would strand the app bar.
     ref.read(tagsViewModelProvider.notifier).clearMediaSelection();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Saved filters
+  // ---------------------------------------------------------------------------
+
+  /// The bookmark menu: save the current query, or update the one applied.
+  Future<void> _showSavedFilterMenu(
+    TagsState state,
+    TagsViewModel viewModel,
+  ) async {
+    final applied = _appliedFilter(state);
+    final isModified = viewModel.isAppliedFilterModified;
+
+    final action = await showMenu<String>(
+      context: context,
+      position: UiPosition.contextMenu,
+      items: [
+        const PopupMenuItem(
+          value: 'save',
+          child: Text('Save current filter…'),
+        ),
+        if (applied != null && isModified)
+          PopupMenuItem(
+            value: 'update',
+            child: Text('Update "${applied.name}"'),
+          ),
+      ],
+    );
+
+    if (action == null || !mounted) {
+      return;
+    }
+
+    if (action == 'save') {
+      await _saveCurrentFilter(viewModel);
+    } else {
+      await _updateFilterFromCurrent(viewModel, applied!);
+    }
+  }
+
+  SavedFilterEntity? _appliedFilter(TagsState state) {
+    if (state is! TagsLoaded || state.appliedFilterId == null) {
+      return null;
+    }
+    final filters = ref.read(savedFiltersProvider).valueOrNull ?? const [];
+    return filters
+        .where((filter) => filter.id == state.appliedFilterId)
+        .firstOrNull;
+  }
+
+  Future<void> _saveCurrentFilter(TagsViewModel viewModel) async {
+    final definition = viewModel.currentFilter();
+
+    // A filter that selects nothing is the unfiltered view with a name on it.
+    if (definition.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Select at least one tag or directory before saving a filter',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final saved = await SaveFilterDialog.show(context, definition: definition);
+    if (saved == null || !mounted) {
+      return;
+    }
+
+    // The filter we just saved becomes the applied one, and is not "modified".
+    viewModel.setAppliedFilter(saved.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Saved filter "${saved.name}"')),
+    );
+  }
+
+  /// Overwrites [filter]'s query with whatever the tab is showing now.
+  Future<void> _updateFilterFromCurrent(
+    TagsViewModel viewModel,
+    SavedFilterEntity filter,
+  ) async {
+    final definition = viewModel.currentFilter();
+    if (definition.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select at least one tag or directory first'),
+        ),
+      );
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(saveFilterUseCaseProvider)(
+        name: filter.name,
+        definition: definition,
+        existingId: filter.id,
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to update filter: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    ref.invalidate(savedFiltersProvider);
+    // Re-baseline: the applied filter now matches what is on screen.
+    viewModel.setAppliedFilter(filter.id);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Updated "${filter.name}"')),
+    );
+  }
+
+  void _applySavedFilter(TagsViewModel viewModel, SavedFilterEntity filter) {
+    final result = viewModel.applySavedFilter(filter);
+
+    if (result.isIntact) {
+      return;
+    }
+
+    // A saved filter outlives the things it names. Say what was dropped rather
+    // than quietly showing the wrong results.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${result.describeDropped()} in "${filter.name}" no longer exist '
+          'and were skipped',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleSavedFilterAction(
+    TagsViewModel viewModel,
+    SavedFilterEntity filter,
+    SavedFilterAction action,
+  ) async {
+    switch (action) {
+      case SavedFilterAction.update:
+        await _updateFilterFromCurrent(viewModel, filter);
+      case SavedFilterAction.rename:
+        final renamed = await SaveFilterDialog.show(
+          context,
+          definition: filter.definition,
+          existing: filter,
+        );
+        if (renamed != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Renamed to "${renamed.name}"')),
+          );
+        }
+      case SavedFilterAction.delete:
+        await _deleteSavedFilter(viewModel, filter);
+    }
+  }
+
+  Future<void> _deleteSavedFilter(
+    TagsViewModel viewModel,
+    SavedFilterEntity filter,
+  ) async {
+    final confirmed = await ConfirmationDialog.show(
+      context: context,
+      title: 'Delete filter',
+      content: 'Delete "${filter.name}"? The tags and media it selects are not '
+          'affected — only the saved query is removed.',
+      confirmText: 'Delete',
+      confirmColor: Colors.red,
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    await ref.read(deleteSavedFilterUseCaseProvider)(filter.id);
+    ref.invalidate(savedFiltersProvider);
+
+    if (!mounted) {
+      return;
+    }
+    // The applied filter is gone; the query stays on screen, it is just no
+    // longer "a saved filter".
+    if (viewModel.appliedFilterId == filter.id) {
+      viewModel.setAppliedFilter(null);
+    }
   }
 
   /// Opens the manage-tags dialog, then reloads so a rename or recolour is

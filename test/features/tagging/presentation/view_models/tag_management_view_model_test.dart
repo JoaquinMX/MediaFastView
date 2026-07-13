@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/tag_entity.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/create_tag_use_case.dart';
+import 'package:media_fast_view/features/tagging/domain/use_cases/delete_tag_use_case.dart';
 import 'package:media_fast_view/features/tagging/domain/use_cases/update_tag_use_case.dart';
 import 'package:media_fast_view/features/tagging/presentation/states/tag_state.dart';
 import 'package:media_fast_view/features/tagging/presentation/view_models/tag_management_view_model.dart';
@@ -16,14 +17,20 @@ TagEntity _tag(String id, String name) => TagEntity(
 
 void main() {
   late FakeTagRepository repository;
+  late FakeSavedFilterRepository savedFilters;
   late TagViewModel viewModel;
 
   TagViewModel build([List<TagEntity> tags = const []]) {
     repository = FakeTagRepository(tags);
+    savedFilters = FakeSavedFilterRepository();
     return TagViewModel(
       repository,
       CreateTagUseCase(repository),
       UpdateTagUseCase(repository),
+      DeleteTagUseCase(
+        tagRepository: repository,
+        savedFilterRepository: savedFilters,
+      ),
     );
   }
 
