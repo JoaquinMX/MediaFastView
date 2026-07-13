@@ -14,6 +14,7 @@ import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/directory_picker_service.dart';
 
 import '../../../../shared/providers/grid_columns_provider.dart';
+import '../../../../shared/providers/navigation_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/widgets/permission_issue_panel.dart';
@@ -60,11 +61,28 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     _focusNode.dispose();
     super.dispose();
   }
+
   List<String> _lastLoggedSelectedTagIds = const [];
   List<String> _lastLoggedAvailableTags = const [];
 
   @override
   Widget build(BuildContext context) {
+    // The tabs share an `IndexedStack`, which hides the backgrounded ones behind
+    // `ExcludeFocus`: leaving this tab drops the focus this screen was autofocused
+    // with, and coming back does not re-run `autofocus`, which fires once. So take
+    // the focus back — at the end of the frame, since until this tab is the one
+    // being shown, `ExcludeFocus` refuses the request.
+    ref.listen<AppTab>(selectedTabProvider, (previous, next) {
+      if (next != AppTab.library) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _focusNode.requestFocus();
+        }
+      });
+    });
+
     final state = ref.watch(directoryViewModelProvider);
     final viewModel = ref.read(directoryViewModelProvider.notifier);
     final selectedDirectoryIds = ref.watch(selectedDirectoryIdsProvider);
@@ -111,7 +129,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                     state,
                     selectedDirectoryIds,
                   )
-                : _buildDirectoryNormalAppBar(currentSortOption, viewModel, ref),
+                : _buildDirectoryNormalAppBar(
+                    currentSortOption,
+                    viewModel,
+                    ref,
+                  ),
             body: DropTarget(
               onDragDone: (details) => _onDragDone(details, viewModel),
               onDragEntered: (_) => setState(() => _isDragging = true),
@@ -277,7 +299,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       ),
       actions: [
         FilledButton.icon(
-          onPressed: () => unawaited(_assignTagsToSelectedDirectories(viewModel)),
+          onPressed: () =>
+              unawaited(_assignTagsToSelectedDirectories(viewModel)),
           icon: const Icon(Icons.tag),
           label: const Text('Assign Tags'),
           style: FilledButton.styleFrom(
@@ -321,7 +344,6 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       }
     }
   }
-
 
   Future<void> _assignTagsToSelectedDirectories(
     DirectoryViewModel viewModel,
@@ -374,8 +396,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     }
 
     final favoritesViewModel = ref.read(favoritesViewModelProvider.notifier);
-    final result = await favoritesViewModel
-        .toggleFavoritesForDirectories(selectedDirectories);
+    final result = await favoritesViewModel.toggleFavoritesForDirectories(
+      selectedDirectories,
+    );
 
     if (!mounted) {
       return;
@@ -383,9 +406,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
     final favoritesState = ref.read(favoritesViewModelProvider);
     if (favoritesState is FavoritesError) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(favoritesState.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(favoritesState.message)));
       return;
     }
 
@@ -399,9 +422,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       _ => 'No changes to directory favorites',
     };
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildTagFilter(DirectoryViewModel viewModel) {
@@ -426,7 +449,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     final favoritesState = ref.watch(favoritesViewModelProvider);
     final hasFavoriteDirectories = switch (favoritesState) {
       FavoritesLoaded(:final directoryFavorites) =>
-          directoryFavorites.isNotEmpty,
+        directoryFavorites.isNotEmpty,
       _ => false,
     };
 
@@ -456,19 +479,19 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             child: switch (tagState) {
               TagLoading() => const Center(child: CircularProgressIndicator()),
               TagError(:final message) => Center(
-                  child: Text(
-                    'Error loading tags: $message',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                child: Text(
+                  'Error loading tags: $message',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
                   ),
                 ),
+              ),
               TagEmpty() => const SizedBox.shrink(),
               TagLoaded(:final tags) => _buildDirectoryTagFilterStrip(
-                  tags,
-                  normalizedSelectedTagIds,
-                  viewModel,
-                ),
+                tags,
+                normalizedSelectedTagIds,
+                viewModel,
+              ),
             },
           ),
         ],
@@ -529,12 +552,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
         return DirectoryGridItem(
           key: itemKey,
           directory: directory,
-          onTap: () => _navigateToMediaGrid(
-            context,
-            directory,
-            directories,
-            index,
-          ),
+          onTap: () =>
+              _navigateToMediaGrid(context, directory, directories, index),
           onDelete: () =>
               _showDeleteConfirmation(context, directory, viewModel),
           onAssignTags: (tagIds) => _assignTagsToDirectory(directory, tagIds),
@@ -635,11 +654,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                     onTap: isInaccessible
                         ? () {}
                         : () => _navigateToMediaGrid(
-                              context,
-                              directory,
-                              allDirectories,
-                              index,
-                            ),
+                            context,
+                            directory,
+                            allDirectories,
+                            index,
+                          ),
                     onDelete: () =>
                         _showDeleteConfirmation(context, directory, viewModel),
                     onAssignTags: (tagIds) =>
@@ -728,11 +747,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                     onTap: isInvalid
                         ? () {}
                         : () => _navigateToMediaGrid(
-                              context,
-                              directory,
-                              allDirectories,
-                              index,
-                            ),
+                            context,
+                            directory,
+                            allDirectories,
+                            index,
+                          ),
                     onDelete: () =>
                         _showDeleteConfirmation(context, directory, viewModel),
                     onAssignTags: (tagIds) =>
@@ -757,19 +776,25 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     required DirectoryViewModel viewModel,
   }) {
     final selectionState = ref.watch(directorySelectionViewModelProvider);
-    final selectionNotifier = ref.read(directorySelectionViewModelProvider.notifier);
+    final selectionNotifier = ref.read(
+      directorySelectionViewModelProvider.notifier,
+    );
 
     return Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (event) => _handleDirectoryPointerDown(event, viewModel, selectionNotifier),
-      onPointerMove: (event) => _handleDirectoryPointerMove(event, viewModel, selectionNotifier),
+      onPointerDown: (event) =>
+          _handleDirectoryPointerDown(event, viewModel, selectionNotifier),
+      onPointerMove: (event) =>
+          _handleDirectoryPointerMove(event, viewModel, selectionNotifier),
       onPointerUp: (_) => selectionNotifier.endMarquee(),
       onPointerCancel: (_) => selectionNotifier.endMarquee(),
       child: Stack(
         key: _directoryGridOverlayKey,
         children: [
           Positioned.fill(child: child),
-          if (selectionState case DirectorySelectionActive(:final selectionRect))
+          if (selectionState case DirectorySelectionActive(
+            :final selectionRect,
+          ))
             Positioned.fromRect(
               rect: selectionRect,
               child: IgnorePointer(
@@ -812,10 +837,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
 
     final cachedItemRects = _computeDirectoryItemRects();
     final localPosition = overlayBox.globalToLocal(event.position);
-    if (_isPointInsideAnyRect(
-      localPosition,
-      cachedItemRects.values,
-    )) {
+    if (_isPointInsideAnyRect(localPosition, cachedItemRects.values)) {
       return;
     }
 
@@ -894,7 +916,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       return;
     }
 
-    selectionNotifier.updateMarqueeSelection(desiredSelection: desiredSelection);
+    selectionNotifier.updateMarqueeSelection(
+      desiredSelection: desiredSelection,
+    );
     viewModel.selectDirectoryRange(desiredSelection, append: false);
   }
 
@@ -1028,8 +1052,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             onPressed: () async {
               try {
                 final directoryPickerService = DirectoryPickerService();
-                final selectedPaths =
-                    await directoryPickerService.pickDirectories();
+                final selectedPaths = await directoryPickerService
+                    .pickDirectories();
                 if (!context.mounted) {
                   return;
                 }
@@ -1048,9 +1072,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
                   return;
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Failed to select directory: $e'),
-                  ),
+                  SnackBar(content: Text('Failed to select directory: $e')),
                 );
               }
             },
@@ -1095,8 +1117,9 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     List<DirectoryEntity> siblingDirectories,
     int currentIndex,
   ) {
-    final navigationTargets =
-        _mapDirectoriesToNavigationTargets(siblingDirectories);
+    final navigationTargets = _mapDirectoriesToNavigationTargets(
+      siblingDirectories,
+    );
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => MediaGridScreen(

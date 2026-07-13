@@ -3,12 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/file_transfer_result.dart';
 import '../../../../shared/providers/media_mutation_bus.dart';
+import '../../../../shared/providers/navigation_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/widgets/confirmation_dialog.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
@@ -71,11 +73,16 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   _TagsFilterView? _filterViewCache;
   TagsLoaded? _filterViewFrom;
 
+  /// Holds the keyboard focus for the tab, so the [Shortcuts] above it are on
+  /// the path a key event walks up. See [_takeFocusOnTabChange].
+  late final FocusNode _focusNode;
+
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
     _searchController.addListener(_onSearchChanged);
+    _focusNode = FocusNode(debugLabel: 'TagsScreen');
     Future.microtask(() async {
       await ref.read(tagsViewModelProvider.notifier).loadTags();
       await ref.read(favoritesViewModelProvider.notifier).loadFavorites();
@@ -86,7 +93,31 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  /// Claims the keyboard focus whenever this tab comes to the front.
+  ///
+  /// The tabs are children of an `IndexedStack`, which hides the ones it is not
+  /// showing behind `ExcludeFocus` — so a backgrounded tab cannot hold the focus,
+  /// and the tab brought forward is handed nothing. Without this the focus sits
+  /// on the enclosing route scope, above this screen's [Shortcuts], and every key
+  /// press here is delivered somewhere it means nothing.
+  ///
+  /// It has to wait for the end of the frame. The listener runs while the tab is
+  /// still the hidden one, where `ExcludeFocus` refuses the request outright.
+  void _takeFocusOnTabChange() {
+    ref.listen<AppTab>(selectedTabProvider, (previous, next) {
+      if (next != AppTab.tags) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _focusNode.requestFocus();
+        }
+      });
+    });
   }
 
   @override
@@ -103,42 +134,68 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       unawaited(ref.read(tagsViewModelProvider.notifier).refreshTags());
     });
 
+    _takeFocusOnTabChange();
+
     final isSelecting = state is TagsLoaded && state.isSelectionMode;
 
-    return Scaffold(
-      appBar: isSelecting
-          ? _buildSelectionAppBar(state, viewModel)
-          : AppBar(
-              title: const Text('Tags'),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.bookmark_outline),
-                  tooltip: 'Saved filters',
-                  onPressed: () => _showSavedFilterMenu(state, viewModel),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.sell_outlined),
-                  tooltip: 'Manage tags',
-                  onPressed: _showTagManagement,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Reload tags',
-                  onPressed: viewModel.loadTags,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.view_module),
-                  tooltip: 'Change grid columns',
-                  onPressed: () => _showColumnSelector(context, gridColumns),
-                ),
-              ],
-            ),
-      body: switch (state) {
-        TagsLoading() => const Center(child: CircularProgressIndicator()),
-        TagsLoaded loaded => _buildContent(loaded, viewModel, gridColumns),
-        TagsEmpty() => _buildEmpty(viewModel),
-        TagsError(:final message) => _buildError(message, viewModel),
+    return Shortcuts(
+      shortcuts: <LogicalKeySet, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.escape):
+            const _ClearTagsSelectionIntent(),
       },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _ClearTagsSelectionIntent: CallbackAction<_ClearTagsSelectionIntent>(
+            onInvoke: (_) {
+              ref.read(tagsViewModelProvider.notifier).clearMediaSelection();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          focusNode: _focusNode,
+          child: Scaffold(
+            appBar: isSelecting
+                ? _buildSelectionAppBar(state, viewModel)
+                : AppBar(
+                    title: const Text('Tags'),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.bookmark_outline),
+                        tooltip: 'Saved filters',
+                        onPressed: () => _showSavedFilterMenu(state, viewModel),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.sell_outlined),
+                        tooltip: 'Manage tags',
+                        onPressed: _showTagManagement,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Reload tags',
+                        onPressed: viewModel.loadTags,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.view_module),
+                        tooltip: 'Change grid columns',
+                        onPressed: () =>
+                            _showColumnSelector(context, gridColumns),
+                      ),
+                    ],
+                  ),
+            body: switch (state) {
+              TagsLoading() => const Center(child: CircularProgressIndicator()),
+              TagsLoaded loaded => _buildContent(
+                loaded,
+                viewModel,
+                gridColumns,
+              ),
+              TagsEmpty() => _buildEmpty(viewModel),
+              TagsError(:final message) => _buildError(message, viewModel),
+            },
+          ),
+        ),
+      ),
     );
   }
 
@@ -252,10 +309,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         setEquals(previous.selectedTagIds, next.selectedTagIds) &&
         setEquals(previous.optionalTagIds, next.optionalTagIds) &&
         setEquals(previous.excludedTagIds, next.excludedTagIds) &&
-        setEquals(
-          previous.selectedDirectoryPaths,
-          next.selectedDirectoryPaths,
-        );
+        setEquals(previous.selectedDirectoryPaths, next.selectedDirectoryPaths);
   }
 
   Widget _buildContent(
@@ -276,7 +330,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final directoryTree = view.directoryTree;
     final selectedDirectories = view.selectedDirectories;
 
-    final savedFilters = ref.watch(savedFiltersProvider).valueOrNull ?? const [];
+    final savedFilters =
+        ref.watch(savedFiltersProvider).valueOrNull ?? const [];
 
     final headerWidgets = <Widget>[
       if (savedFilters.isNotEmpty) ...[
@@ -340,9 +395,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final slivers = <Widget>[
       SliverPadding(
         padding: const EdgeInsets.all(16),
-        sliver: SliverList(
-          delegate: SliverChildListDelegate(headerWidgets),
-        ),
+        sliver: SliverList(delegate: SliverChildListDelegate(headerWidgets)),
       ),
     ];
 
@@ -424,10 +477,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Filter by directory',
-                  style: theme.textTheme.titleMedium,
-                ),
+                Text('Filter by directory', style: theme.textTheme.titleMedium),
                 if (selected.isNotEmpty)
                   TextButton(
                     onPressed: viewModel.clearDirectorySelection,
@@ -518,39 +568,34 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
                 avatar: section.isFavorites
                     ? const Icon(Icons.star, color: Colors.amber)
                     : section.color != null
-                        ? CircleAvatar(
-                            backgroundColor: section.color,
-                            radius: 12,
-                          )
-                        : null,
+                    ? CircleAvatar(backgroundColor: section.color, radius: 12)
+                    : null,
                 selected: isSelected || isOptional || isExcluded,
                 selectedColor: isExcluded
-                    ? Theme.of(context)
-                        .colorScheme
-                        .errorContainer
-                        .withOpacity(0.9)
+                    ? Theme.of(
+                        context,
+                      ).colorScheme.errorContainer.withOpacity(0.9)
                     : isOptional
-                        ? Theme.of(context)
-                            .colorScheme
-                            .secondaryContainer
-                            .withOpacity(0.9)
+                    ? Theme.of(
+                        context,
+                      ).colorScheme.secondaryContainer.withOpacity(0.9)
                     : null,
                 checkmarkColor: isExcluded
                     ? Theme.of(context).colorScheme.onErrorContainer
                     : isOptional
-                        ? Theme.of(context).colorScheme.onSecondaryContainer
+                    ? Theme.of(context).colorScheme.onSecondaryContainer
                     : null,
                 labelStyle: isExcluded
                     ? TextStyle(
                         color: Theme.of(context).colorScheme.onErrorContainer,
                       )
                     : isOptional
-                        ? TextStyle(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSecondaryContainer,
-                          )
-                        : null,
+                    ? TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSecondaryContainer,
+                      )
+                    : null,
                 onSelected: (selected) =>
                     viewModel.setTagSelected(section.id, selected),
               ),
@@ -576,26 +621,23 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             const SizedBox(height: 8),
             Text(
               'Use the chips above to choose which tags or favorites to display.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'Long press (mobile) or right-click (desktop) a tag to exclude it.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'Hybrid mode lets you mix must-include and match-any tags.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -641,7 +683,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               const SizedBox(height: 4),
               Text(
                 [
-                  if (filterMode.isHybrid && hasSelection(selectedTagCount, optionalTagCount))
+                  if (filterMode.isHybrid &&
+                      hasSelection(selectedTagCount, optionalTagCount))
                     filterDescription,
                   if (filterMode.isHybrid && requiredDescription != null)
                     requiredDescription,
@@ -803,7 +846,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           isFavorites: section.isFavorites,
           directories: filteredDirectories,
           mediaIds: filteredMedia,
-          itemCount: filteredMedia.length +
+          itemCount:
+              filteredMedia.length +
               filteredDirectories.fold<int>(
                 0,
                 (sum, entry) => sum + entry.mediaIds.length,
@@ -853,12 +897,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     }
 
     final excludedSet = excludedTagIds;
-    final requiredIds = {
-      for (final section in requiredSections) section.id,
-    };
-    final optionalIds = {
-      for (final section in optionalSections) section.id,
-    };
+    final requiredIds = {for (final section in requiredSections) section.id};
+    final optionalIds = {for (final section in optionalSections) section.id};
     final hasRequired = requiredSections.isNotEmpty;
     final hasOptional = optionalSections.isNotEmpty;
 
@@ -887,8 +927,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         if (media == null) {
           continue;
         }
-        if (excludedSet.isNotEmpty &&
-            media.tagIds.any(excludedSet.contains)) {
+        if (excludedSet.isNotEmpty && media.tagIds.any(excludedSet.contains)) {
           continue;
         }
         matchedMediaById[media.id] = media;
@@ -957,26 +996,25 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             directoryContent.directory.tagIds.any(excludedSet.contains)) {
           continue;
         }
-        final filteredMediaIds = directoryContent.mediaIds.where((mediaId) {
-          final media = mediaById[mediaId];
-          if (media == null) {
-            return false;
-          }
-          if (excludedSet.isEmpty) {
-            return true;
-          }
-          return !media.tagIds.any(excludedSet.contains);
-        }).toList(growable: false);
+        final filteredMediaIds = directoryContent.mediaIds
+            .where((mediaId) {
+              final media = mediaById[mediaId];
+              if (media == null) {
+                return false;
+              }
+              if (excludedSet.isEmpty) {
+                return true;
+              }
+              return !media.tagIds.any(excludedSet.contains);
+            })
+            .toList(growable: false);
         if (filteredMediaIds.isEmpty) {
           continue;
         }
         map.update(
           directoryContent.directory.id,
           (existing) {
-            final merged = <String>{
-              ...existing.mediaIds,
-              ...filteredMediaIds,
-            };
+            final merged = <String>{...existing.mediaIds, ...filteredMediaIds};
             return TagDirectoryContent(
               directory: directoryContent.directory,
               mediaIds: merged.toList(growable: false),
@@ -995,10 +1033,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     return directories;
   }
 
-  Widget _buildFilterModeToggle(
-    TagsLoaded state,
-    TagsViewModel viewModel,
-  ) {
+  Widget _buildFilterModeToggle(TagsLoaded state, TagsViewModel viewModel) {
     return Card(
       elevation: 1,
       child: Padding(
@@ -1025,8 +1060,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             Text(
               state.filterMode.helperText,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -1034,10 +1069,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  Widget _buildSelectionModeToggle(
-    TagsLoaded state,
-    TagsViewModel viewModel,
-  ) {
+  Widget _buildSelectionModeToggle(TagsLoaded state, TagsViewModel viewModel) {
     return Card(
       elevation: 1,
       child: Padding(
@@ -1064,8 +1096,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             Text(
               state.selectionMode.helperText,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -1073,10 +1105,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     );
   }
 
-  Widget _buildMediaTypeFilter(
-    TagsLoaded state,
-    TagsViewModel viewModel,
-  ) {
+  Widget _buildMediaTypeFilter(TagsLoaded state, TagsViewModel viewModel) {
     return Card(
       elevation: 1,
       child: Padding(
@@ -1084,10 +1113,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Media type',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Media type', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             Wrap(
               spacing: 12,
@@ -1150,13 +1176,10 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
         mainAxisSpacing: 12,
         childAspectRatio: 1,
       ),
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final mediaItem = media[index];
-          return _buildMediaTile(mediaItem, collection, state, viewModel);
-        },
-        childCount: media.length,
-      ),
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final mediaItem = media[index];
+        return _buildMediaTile(mediaItem, collection, state, viewModel);
+      }, childCount: media.length),
     );
   }
 
@@ -1199,15 +1222,13 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
           MenuAnchor(
             menuChildren: [
               MenuItemButton(
-                onPressed: () => unawaited(
-                  _transferSelection(selection, TransferMode.move),
-                ),
+                onPressed: () =>
+                    unawaited(_transferSelection(selection, TransferMode.move)),
                 child: const Text('Move to…'),
               ),
               MenuItemButton(
-                onPressed: () => unawaited(
-                  _transferSelection(selection, TransferMode.copy),
-                ),
+                onPressed: () =>
+                    unawaited(_transferSelection(selection, TransferMode.copy)),
                 child: const Text('Copy to…'),
               ),
             ],
@@ -1215,15 +1236,16 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
               onPressed: count == 0
                   ? null
                   : () => controller.isOpen
-                      ? controller.close()
-                      : controller.open(),
+                        ? controller.close()
+                        : controller.open(),
               icon: const Icon(Icons.drive_file_move_outline),
               label: const Text('Move'),
             ),
           ),
           TextButton.icon(
-            onPressed:
-                count == 0 ? null : () => unawaited(_deleteSelection(selection)),
+            onPressed: count == 0
+                ? null
+                : () => unawaited(_deleteSelection(selection)),
             icon: const Icon(Icons.delete_outline),
             label: const Text('Delete'),
             style: TextButton.styleFrom(
@@ -1317,10 +1339,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       context: context,
       position: UiPosition.contextMenu,
       items: [
-        const PopupMenuItem(
-          value: 'save',
-          child: Text('Save current filter…'),
-        ),
+        const PopupMenuItem(value: 'save', child: Text('Save current filter…')),
         if (applied != null && isModified)
           PopupMenuItem(
             value: 'update',
@@ -1372,9 +1391,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
 
     // The filter we just saved becomes the applied one, and is not "modified".
     viewModel.setAppliedFilter(saved.id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Saved filter "${saved.name}"')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Saved filter "${saved.name}"')));
   }
 
   /// Overwrites [filter]'s query with whatever the tab is showing now.
@@ -1412,9 +1431,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     ref.invalidate(savedFiltersProvider);
     // Re-baseline: the applied filter now matches what is on screen.
     viewModel.setAppliedFilter(filter.id);
-    messenger.showSnackBar(
-      SnackBar(content: Text('Updated "${filter.name}"')),
-    );
+    messenger.showSnackBar(SnackBar(content: Text('Updated "${filter.name}"')));
   }
 
   void _applySavedFilter(TagsViewModel viewModel, SavedFilterEntity filter) {
@@ -1467,7 +1484,8 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
     final confirmed = await ConfirmationDialog.show(
       context: context,
       title: 'Delete filter',
-      content: 'Delete "${filter.name}"? The tags and media it selects are not '
+      content:
+          'Delete "${filter.name}"? The tags and media it selects are not '
           'affected — only the saved query is removed.',
       confirmText: 'Delete',
       confirmColor: Colors.red,
@@ -1626,4 +1644,9 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
       ),
     );
   }
+}
+
+/// Escape: leave selection mode, matching the Library tab's grids.
+class _ClearTagsSelectionIntent extends Intent {
+  const _ClearTagsSelectionIntent();
 }
