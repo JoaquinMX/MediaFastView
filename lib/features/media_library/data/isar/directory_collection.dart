@@ -21,6 +21,7 @@ class DirectoryCollection {
     required this.name,
     this.thumbnailPath,
     required this.tagIds,
+    required this.profileIds,
     required this.lastModified,
     this.bookmarkData,
     this.lastScanAt,
@@ -51,8 +52,20 @@ class DirectoryCollection {
   String? thumbnailPath;
 
   /// Tags assigned to the directory.
+  ///
+  /// A directory shared between profiles carries tag ids from all of them. The
+  /// repository filters this down to the active profile's tags on read and
+  /// merges on write, so nothing above the data layer ever sees a foreign tag.
   @Index(type: IndexType.hashElements)
   List<String> tagIds;
+
+  /// Profiles this directory belongs to.
+  ///
+  /// A directory is shared, not copied: one row, one bookmark, one scan cache,
+  /// reused across every profile that tracks the folder. Empty only on rows
+  /// written before profiles existed, which is what the migration detects.
+  @Index(type: IndexType.hashElements)
+  List<String> profileIds;
 
   /// Timestamp of the last modification to the directory metadata.
   DateTime lastModified;
@@ -82,6 +95,7 @@ extension DirectoryCollectionMapper on DirectoryCollection {
       name: name,
       thumbnailPath: thumbnailPath,
       tagIds: List.unmodifiable(tagIds),
+      profileIds: List.unmodifiable(profileIds),
       lastModified: lastModified,
       bookmarkData: bookmarkData,
       lastScanAt: lastScanAt,
@@ -100,7 +114,8 @@ extension DirectoryModelIsarMapper on DirectoryModel {
       path: path,
       name: name,
       thumbnailPath: thumbnailPath,
-      tagIds: tagIds,
+      tagIds: List<String>.from(tagIds),
+      profileIds: List<String>.from(profileIds),
       lastModified: lastModified,
       bookmarkData: bookmarkData,
       lastScanAt: lastScanAt,

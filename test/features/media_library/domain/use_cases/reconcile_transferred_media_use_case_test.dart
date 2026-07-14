@@ -4,7 +4,9 @@ import 'package:media_fast_view/core/services/file_transfer_result.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_entity.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
+import 'package:media_fast_view/features/media_library/data/isar/directory_collection.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
+import 'package:media_fast_view/features/media_library/data/models/directory_model.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
@@ -85,13 +87,32 @@ void main() {
   late _FakeDirectoryRepository directories;
   late ReconcileTransferredMediaUseCase reconcile;
 
-  setUp(() {
+  late InMemoryDirectoryCollectionStore directoryStore;
+
+  setUp(() async {
     mediaStore = InMemoryMediaCollectionStore();
+    directoryStore = InMemoryDirectoryCollectionStore();
     mediaDataSource = IsarMediaDataSource(
       FakeIsarDatabase(),
+      profileId: 'profile-1',
       mediaStoreBuilder: (_) => mediaStore,
-      directoryStoreBuilder: (_) => InMemoryDirectoryCollectionStore(),
+      directoryStoreBuilder: (_) => directoryStore,
+      tagStoreBuilder: (_) => InMemoryTagCollectionStore(),
     );
+
+    // Media is visible to a profile through the directory that contains it, so
+    // both ends of a transfer have to be directories the profile actually owns.
+    for (final path in <String>['/library/Photos', '/library/Trips']) {
+      await directoryStore.put(
+        DirectoryModel(
+          id: generateDirectoryId(path),
+          path: path,
+          name: path.split('/').last,
+          profileIds: const <String>['profile-1'],
+          lastModified: DateTime.utc(2024, 1, 1),
+        ).toCollection(),
+      );
+    }
     favorites = _FakeFavoritesRepository();
     directories = _FakeDirectoryRepository();
     reconcile = ReconcileTransferredMediaUseCase(

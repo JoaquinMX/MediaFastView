@@ -8,6 +8,8 @@ import '../../../../core/error/app_error.dart';
 import '../../../../core/services/isar_database.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/utils/batch_update_result.dart';
+import '../../../tagging/data/isar/isar_tag_data_source.dart';
+import '../../../tagging/data/isar/tag_collection.dart';
 import '../models/media_model.dart';
 import 'isar_directory_data_source.dart';
 import 'media_collection.dart';
@@ -28,29 +30,64 @@ typedef MediaCollectionStoreBuilder = MediaCollectionStore Function(
 class IsarMediaDataSource {
   IsarMediaDataSource(
     this._database, {
+    required this.profileId,
     MediaCollectionStoreBuilder? mediaStoreBuilder,
     DirectoryCollectionStoreBuilder? directoryStoreBuilder,
+    TagCollectionStoreBuilder? tagStoreBuilder,
   })  : _mediaStoreBuilder = mediaStoreBuilder ?? _defaultMediaStoreBuilder,
         _directoryStoreBuilder =
-            directoryStoreBuilder ?? _defaultDirectoryStoreBuilder;
+            directoryStoreBuilder ?? _defaultDirectoryStoreBuilder,
+        _tagStoreBuilder = tagStoreBuilder ?? _defaultTagStoreBuilder;
 
   final IsarDatabase _database;
+
+  /// The profile whose media and tag assignments this data source serves.
+  ///
+  /// Media rows themselves are not owned by a profile — they are a scan cache
+  /// hanging off shared directories. What the profile scopes is which of them
+  /// are *visible* (those under its directories) and which tag ids on them are
+  /// *its own*.
+  final String profileId;
+
   final MediaCollectionStoreBuilder _mediaStoreBuilder;
   final DirectoryCollectionStoreBuilder _directoryStoreBuilder;
+  final TagCollectionStoreBuilder _tagStoreBuilder;
 
   late final MediaCollectionStore _mediaStore = _mediaStoreBuilder(_database);
   late final DirectoryCollectionStore _directoryStore =
       _directoryStoreBuilder(_database);
+  late final TagCollectionStore _tagStore = _tagStoreBuilder(_database);
 
-  /// Loads all persisted media entries.
+  /// Loads the media under this profile's directories.
+  ///
+  /// Scoped here rather than at each caller: every consumer of this — the Tags
+  /// tab's sections, the tag filters, the media queries — wants the active
+  /// profile's library, and an unscoped read would surface another profile's
+  /// media inside it.
   Future<List<MediaModel>> getMedia() async {
     await _ensureReady();
     final startTime = DateTime.now();
     try {
+      final directories = await _directoryStore.getByProfileId(profileId);
+      if (directories.isEmpty) {
+        return const <MediaModel>[];
+      }
+
+      // Matched on path rather than `directoryId`. A media row's `directoryId`
+      // is meant to be its library root, but the transfer paths set it to the
+      // destination folder, which can be a subdirectory of one — so an id
+      // comparison would hide media that is plainly inside this profile.
+      final roots =
+          directories.map((directory) => directory.path).toList(growable: false);
       final collections = await _mediaStore.getAll();
-      final models = collections
-          .map((collection) => collection.toModel())
+      final scoped = collections
+          .where(
+            (collection) =>
+                roots.any((root) => p.isWithin(root, collection.path)),
+          )
           .toList(growable: false);
+      final models = await _toScopedModels(scoped);
+
       final totalTime = DateTime.now().difference(startTime);
       LoggingService.instance.info(
         'Loaded ${models.length} media items from Isar in '
@@ -109,9 +146,7 @@ class IsarMediaDataSource {
         'filtered media has ${collections.length} items for directoryId: '
         '$directoryId',
       );
-      return collections
-          .map((collection) => collection.toModel())
-          .toList(growable: false);
+      return _toScopedModels(collections);
     } catch (error, stackTrace) {
       Error.throwWithStackTrace(
         PersistenceError('Failed to load media for directory: $error'),
@@ -133,7 +168,11 @@ class IsarMediaDataSource {
     }, 'Failed to add media');
   }
 
-  /// Replaces the tag set for the media entry identified by [mediaId].
+  /// Replaces this profile's tag set for the media entry identified by [mediaId].
+  ///
+  /// Merges rather than replaces: media under a directory shared with another
+  /// profile also carries that profile's tag ids, and a straight overwrite would
+  /// silently delete them.
   Future<void> updateMediaTags(String mediaId, List<String> tagIds) async {
     await _executeSafely(() async {
       await _mediaStore.writeTxn(() async {
@@ -141,7 +180,10 @@ class IsarMediaDataSource {
         if (existing == null) {
           return;
         }
-        existing.tagIds = List<String>.from(tagIds);
+        existing.tagIds = await _mergeTagIds(
+          persisted: existing.tagIds,
+          incoming: tagIds,
+        );
         await _mediaStore.put(existing);
       });
     }, 'Failed to update media tags');
@@ -170,7 +212,10 @@ class IsarMediaDataSource {
           continue;
         }
 
-        collection.tagIds = List<String>.from(entry.value);
+        collection.tagIds = await _mergeTagIds(
+          persisted: collection.tagIds,
+          incoming: entry.value,
+        );
         updatedCollections.add(collection);
         successes.add(entry.key);
       }
@@ -448,6 +493,17 @@ class IsarMediaDataSource {
     final collections = <MediaCollection>[];
     for (final model in media) {
       final collection = model.toCollection();
+      // The incoming model's tag ids are this profile's — they were read back
+      // scoped. Persisting them as-is would drop the ids belonging to any other
+      // profile that shares this media's directory, so merge against what is
+      // already on the row.
+      final existing = await _mediaStore.getByMediaId(model.id);
+      if (existing != null) {
+        collection.tagIds = await _mergeTagIds(
+          persisted: existing.tagIds,
+          incoming: model.tagIds,
+        );
+      }
       final directory = await _directoryStore.getByDirectoryId(model.directoryId);
       collection.directory.value = directory;
       collections.add(collection);
@@ -455,10 +511,94 @@ class IsarMediaDataSource {
     return collections;
   }
 
+  /// Rewrites [persisted] so this profile's tag ids become [incoming], leaving
+  /// every other profile's ids on the row untouched.
+  ///
+  /// Tag ids that resolve to no tag are dropped: they are assignments to tags
+  /// that have since been deleted, and nothing can render them.
+  Future<List<String>> _mergeTagIds({
+    required List<String> persisted,
+    required List<String> incoming,
+  }) async {
+    if (persisted.isEmpty) {
+      return List<String>.from(incoming);
+    }
+
+    final foreign = await _foreignTagIds(persisted);
+    return <String>[
+      ...persisted.where(foreign.contains),
+      ...incoming.where((tagId) => !foreign.contains(tagId)),
+    ];
+  }
+
+  /// The subset of [tagIds] owned by a profile other than this one.
+  Future<Set<String>> _foreignTagIds(Iterable<String> tagIds) async {
+    final rows = await _resolveTags(tagIds);
+    return <String>{
+      for (final row in rows)
+        if (row.profileId != profileId) row.tagId,
+    };
+  }
+
+  /// The subset of [tagIds] owned by this profile.
+  Future<Set<String>> _profileTagIds(Iterable<String> tagIds) async {
+    final rows = await _resolveTags(tagIds);
+    return <String>{
+      for (final row in rows)
+        if (row.profileId == profileId) row.tagId,
+    };
+  }
+
+  Future<List<TagCollection>> _resolveTags(Iterable<String> tagIds) async {
+    final unique = tagIds.toSet().toList(growable: false);
+    if (unique.isEmpty) {
+      return const <TagCollection>[];
+    }
+    return _tagStore.getByTagIds(unique);
+  }
+
+  /// Maps [collections] to models with other profiles' tag ids hidden.
+  ///
+  /// Only ids that resolve to a tag owned by *another* profile are removed. An id
+  /// that resolves to nothing — an assignment to a tag that has since been
+  /// deleted — is left alone: those were already tolerated before profiles
+  /// existed, `TagLookup` drops them when it renders, and treating them as
+  /// foreign here would mean a missing tag row could silently unassign tags.
+  Future<List<MediaModel>> _toScopedModels(
+    List<MediaCollection> collections,
+  ) async {
+    if (collections.isEmpty) {
+      return const <MediaModel>[];
+    }
+
+    final foreign = await _foreignTagIds(
+      collections.expand((collection) => collection.tagIds),
+    );
+    if (foreign.isEmpty) {
+      return collections
+          .map((collection) => collection.toModel())
+          .toList(growable: false);
+    }
+
+    return collections
+        .map(
+          (collection) => collection.toModel().copyWith(
+                tagIds: collection.tagIds
+                    .where((tagId) => !foreign.contains(tagId))
+                    .toList(growable: false),
+              ),
+        )
+        .toList(growable: false);
+  }
+
   static DirectoryCollectionStore _defaultDirectoryStoreBuilder(
     IsarDatabase database,
   ) {
     return IsarDirectoryCollectionStore(database);
+  }
+
+  static TagCollectionStore _defaultTagStoreBuilder(IsarDatabase database) {
+    return IsarTagCollectionStore(database);
   }
 
   static MediaCollectionStore _defaultMediaStoreBuilder(

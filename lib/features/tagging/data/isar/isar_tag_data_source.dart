@@ -19,6 +19,7 @@ typedef TagCollectionStoreBuilder = TagCollectionStore Function(
 class IsarTagDataSource {
   IsarTagDataSource(
     this._database, {
+    required this.profileId,
     TagCollectionStoreBuilder? tagStoreBuilder,
     DirectoryCollectionStoreBuilder? directoryStoreBuilder,
     MediaCollectionStoreBuilder? mediaStoreBuilder,
@@ -28,6 +29,10 @@ class IsarTagDataSource {
         _mediaStoreBuilder = mediaStoreBuilder ?? _defaultMediaStoreBuilder;
 
   final IsarDatabase _database;
+
+  /// The profile whose tag vocabulary this data source reads and writes.
+  final String profileId;
+
   final TagCollectionStoreBuilder _tagStoreBuilder;
   final DirectoryCollectionStoreBuilder _directoryStoreBuilder;
   final MediaCollectionStoreBuilder _mediaStoreBuilder;
@@ -37,11 +42,11 @@ class IsarTagDataSource {
       _directoryStoreBuilder(_database);
   late final MediaCollectionStore _mediaStore = _mediaStoreBuilder(_database);
 
-  /// Retrieves every persisted tag.
+  /// Retrieves this profile's tags.
   Future<List<TagModel>> getTags() async {
     await _ensureReady();
     try {
-      final collections = await _tagStore.getAll();
+      final collections = await _tagStore.getByProfileId(profileId);
       collections.sort((a, b) => a.name.compareTo(b.name));
       return collections
           .map((collection) => collection.toModel())
@@ -54,12 +59,15 @@ class IsarTagDataSource {
     }
   }
 
-  /// Replaces all persisted tags with [tags].
+  /// Replaces this profile's tags with [tags].
+  ///
+  /// Deletes by profile rather than clearing the collection — a bare `clear()`
+  /// here would wipe every other profile's vocabulary too.
   Future<void> saveTags(List<TagModel> tags) async {
-    final collections = tags.map((tag) => tag.toCollection()).toList();
+    final collections = tags.map(_stamped).toList();
     await _executeSafely(() async {
       await _tagStore.writeTxn(() async {
-        await _tagStore.clear();
+        await _tagStore.deleteByProfileId(profileId);
         if (collections.isNotEmpty) {
           await _tagStore.putAll(collections);
         }
@@ -67,11 +75,11 @@ class IsarTagDataSource {
     }, 'Failed to save tags');
   }
 
-  /// Adds a new [tag] to persistence.
+  /// Adds a new [tag] to this profile.
   Future<void> addTag(TagModel tag) async {
     await _executeSafely(() async {
       await _tagStore.writeTxn(() async {
-        await _tagStore.put(tag.toCollection());
+        await _tagStore.put(_stamped(tag));
       });
     }, 'Failed to add tag');
   }
@@ -80,7 +88,7 @@ class IsarTagDataSource {
   Future<void> updateTag(TagModel tag) async {
     await _executeSafely(() async {
       await _tagStore.writeTxn(() async {
-        await _tagStore.put(tag.toCollection());
+        await _tagStore.put(_stamped(tag));
       });
     }, 'Failed to update tag');
   }
@@ -94,14 +102,21 @@ class IsarTagDataSource {
     }, 'Failed to remove tag');
   }
 
-  /// Removes all tags and leaves tag assignments empty.
+  /// Removes this profile's tags, leaving other profiles' vocabularies alone.
   Future<void> clearTags() async {
     await _executeSafely(() async {
       await _tagStore.writeTxn(() async {
-        await _tagStore.clear();
+        await _tagStore.deleteByProfileId(profileId);
       });
     }, 'Failed to clear tags');
   }
+
+  /// Binds [tag] to this data source's profile before it is persisted.
+  ///
+  /// The caller never supplies the owner: a tag written through this data source
+  /// belongs to this profile by construction.
+  TagCollection _stamped(TagModel tag) =>
+      tag.copyWith(profileId: profileId).toCollection();
 
   /// Resolves the tags assigned to the media entry identified by [mediaId].
   Future<List<TagModel>> getTagsForMedia(String mediaId) async {
@@ -145,8 +160,11 @@ class IsarTagDataSource {
     if (collections.isEmpty) {
       return const <TagModel>[];
     }
+    // A directory or media row shared between profiles carries tag ids from all
+    // of them, so drop the ones this profile does not own.
     final mapped = <String, TagCollection>{
-      for (final collection in collections) collection.tagId: collection,
+      for (final collection in collections)
+        if (collection.profileId == profileId) collection.tagId: collection,
     };
     return tagIds
         .where(mapped.containsKey)
@@ -192,7 +210,12 @@ class IsarTagDataSource {
 
 /// Contract abstracting access to persisted [TagCollection] records.
 abstract interface class TagCollectionStore {
+  /// Every row in the collection, across all profiles.
+  ///
+  /// For the migrations. Application reads want [getByProfileId].
   Future<List<TagCollection>> getAll();
+
+  Future<List<TagCollection>> getByProfileId(String profileId);
 
   Future<void> putAll(List<TagCollection> tags);
 
@@ -201,6 +224,9 @@ abstract interface class TagCollectionStore {
   Future<void> clear();
 
   Future<void> deleteById(Id id);
+
+  /// Deletes every tag owned by [profileId].
+  Future<void> deleteByProfileId(String profileId);
 
   /// Looks a row up by its Isar primary key.
   ///
@@ -238,6 +264,11 @@ class IsarTagCollectionStore implements TagCollectionStore {
   }
 
   @override
+  Future<List<TagCollection>> getByProfileId(String profileId) {
+    return _collection.filter().profileIdEqualTo(profileId).findAll();
+  }
+
+  @override
   Future<void> putAll(List<TagCollection> tags) async {
     await _collection.putAll(tags);
   }
@@ -255,6 +286,11 @@ class IsarTagCollectionStore implements TagCollectionStore {
   @override
   Future<void> deleteById(Id id) async {
     await _collection.delete(id);
+  }
+
+  @override
+  Future<void> deleteByProfileId(String profileId) async {
+    await _collection.filter().profileIdEqualTo(profileId).deleteAll();
   }
 
   @override

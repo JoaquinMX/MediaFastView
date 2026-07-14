@@ -18,13 +18,13 @@ import 'package:media_fast_view/features/media_library/data/isar/isar_directory_
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart'
     as _i11;
 import 'package:media_fast_view/features/media_library/data/models/directory_model.dart'
-    as _i13;
+    as _i14;
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart'
     as _i10;
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart'
     as _i9;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i14;
+import 'package:mockito/src/dummies.dart' as _i13;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -318,27 +318,46 @@ class MockIsarDirectoryDataSource extends _i1.Mock
   }
 
   @override
-  _i8.Future<List<_i13.DirectoryModel>> getDirectories() => (super.noSuchMethod(
+  String get profileId => (super.noSuchMethod(
+        Invocation.getter(#profileId),
+        returnValue: _i13.dummyValue<String>(
+          this,
+          Invocation.getter(#profileId),
+        ),
+      ) as String);
+
+  @override
+  _i8.Future<List<_i14.DirectoryModel>> getDirectories() => (super.noSuchMethod(
         Invocation.method(
           #getDirectories,
           [],
         ),
-        returnValue: _i8.Future<List<_i13.DirectoryModel>>.value(
-            <_i13.DirectoryModel>[]),
-      ) as _i8.Future<List<_i13.DirectoryModel>>);
+        returnValue: _i8.Future<List<_i14.DirectoryModel>>.value(
+            <_i14.DirectoryModel>[]),
+      ) as _i8.Future<List<_i14.DirectoryModel>>);
 
   @override
-  _i8.Future<_i13.DirectoryModel?> getDirectoryById(String? directoryId) =>
+  _i8.Future<_i14.DirectoryModel?> getDirectoryById(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getDirectoryById,
           [directoryId],
         ),
-        returnValue: _i8.Future<_i13.DirectoryModel?>.value(),
-      ) as _i8.Future<_i13.DirectoryModel?>);
+        returnValue: _i8.Future<_i14.DirectoryModel?>.value(),
+      ) as _i8.Future<_i14.DirectoryModel?>);
 
   @override
-  _i8.Future<void> saveDirectories(List<_i13.DirectoryModel>? directories) =>
+  _i8.Future<_i14.DirectoryModel?> getDirectoryByPathUnscoped(String? path) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getDirectoryByPathUnscoped,
+          [path],
+        ),
+        returnValue: _i8.Future<_i14.DirectoryModel?>.value(),
+      ) as _i8.Future<_i14.DirectoryModel?>);
+
+  @override
+  _i8.Future<void> saveDirectories(List<_i14.DirectoryModel>? directories) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveDirectories,
@@ -349,7 +368,7 @@ class MockIsarDirectoryDataSource extends _i1.Mock
       ) as _i8.Future<void>);
 
   @override
-  _i8.Future<void> addDirectory(_i13.DirectoryModel? directory) =>
+  _i8.Future<void> addDirectory(_i14.DirectoryModel? directory) =>
       (super.noSuchMethod(
         Invocation.method(
           #addDirectory,
@@ -370,7 +389,7 @@ class MockIsarDirectoryDataSource extends _i1.Mock
       ) as _i8.Future<void>);
 
   @override
-  _i8.Future<void> updateDirectory(_i13.DirectoryModel? updatedDirectory) =>
+  _i8.Future<void> updateDirectory(_i14.DirectoryModel? updatedDirectory) =>
       (super.noSuchMethod(
         Invocation.method(
           #updateDirectory,
@@ -417,6 +436,15 @@ class MockIsarMediaDataSource extends _i1.Mock
   MockIsarMediaDataSource() {
     _i1.throwOnMissingStub(this);
   }
+
+  @override
+  String get profileId => (super.noSuchMethod(
+        Invocation.getter(#profileId),
+        returnValue: _i13.dummyValue<String>(
+          this,
+          Invocation.getter(#profileId),
+        ),
+      ) as String);
 
   @override
   _i8.Future<List<_i10.MediaModel>> getMedia() => (super.noSuchMethod(
@@ -650,7 +678,7 @@ class MockBookmarkService extends _i1.Mock implements _i2.BookmarkService {
           #createBookmark,
           [directoryPath],
         ),
-        returnValue: _i8.Future<String>.value(_i14.dummyValue<String>(
+        returnValue: _i8.Future<String>.value(_i13.dummyValue<String>(
           this,
           Invocation.method(
             #createBookmark,
@@ -679,7 +707,7 @@ class MockBookmarkService extends _i1.Mock implements _i2.BookmarkService {
           #resolveBookmark,
           [bookmarkData],
         ),
-        returnValue: _i8.Future<String>.value(_i14.dummyValue<String>(
+        returnValue: _i8.Future<String>.value(_i13.dummyValue<String>(
           this,
           Invocation.method(
             #resolveBookmark,
@@ -715,7 +743,7 @@ class MockBookmarkService extends _i1.Mock implements _i2.BookmarkService {
           #startAccessingBookmark,
           [bookmarkData],
         ),
-        returnValue: _i8.Future<String>.value(_i14.dummyValue<String>(
+        returnValue: _i8.Future<String>.value(_i13.dummyValue<String>(
           this,
           Invocation.method(
             #startAccessingBookmark,

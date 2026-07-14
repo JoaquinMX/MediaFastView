@@ -9,6 +9,7 @@ part 'tag_model.g.dart';
 class TagModel with _$TagModel {
   const factory TagModel({
     required String id,
+    @Default('') String profileId,
     required String name,
     required int color,
     required DateTime createdAt,

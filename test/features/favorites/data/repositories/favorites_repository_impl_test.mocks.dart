@@ -3,15 +3,16 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i3;
+import 'dart:async' as _i4;
 
 import 'package:media_fast_view/features/favorites/data/isar/isar_favorites_data_source.dart'
     as _i2;
 import 'package:media_fast_view/features/favorites/data/models/favorite_model.dart'
-    as _i4;
-import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart'
     as _i5;
+import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart'
+    as _i6;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:mockito/src/dummies.dart' as _i3;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -36,52 +37,61 @@ class MockIsarFavoritesDataSource extends _i1.Mock
   }
 
   @override
-  _i3.Future<List<_i4.FavoriteModel>> getFavorites() => (super.noSuchMethod(
+  String get profileId => (super.noSuchMethod(
+        Invocation.getter(#profileId),
+        returnValue: _i3.dummyValue<String>(
+          this,
+          Invocation.getter(#profileId),
+        ),
+      ) as String);
+
+  @override
+  _i4.Future<List<_i5.FavoriteModel>> getFavorites() => (super.noSuchMethod(
         Invocation.method(
           #getFavorites,
           [],
         ),
         returnValue:
-            _i3.Future<List<_i4.FavoriteModel>>.value(<_i4.FavoriteModel>[]),
-      ) as _i3.Future<List<_i4.FavoriteModel>>);
+            _i4.Future<List<_i5.FavoriteModel>>.value(<_i5.FavoriteModel>[]),
+      ) as _i4.Future<List<_i5.FavoriteModel>>);
 
   @override
-  _i3.Future<void> saveFavorites(List<_i4.FavoriteModel>? favorites) =>
+  _i4.Future<void> saveFavorites(List<_i5.FavoriteModel>? favorites) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveFavorites,
           [favorites],
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<void> addFavorite(_i4.FavoriteModel? favorite) =>
+  _i4.Future<void> addFavorite(_i5.FavoriteModel? favorite) =>
       (super.noSuchMethod(
         Invocation.method(
           #addFavorite,
           [favorite],
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<void> addFavorites(List<_i4.FavoriteModel>? favorites) =>
+  _i4.Future<void> addFavorites(List<_i5.FavoriteModel>? favorites) =>
       (super.noSuchMethod(
         Invocation.method(
           #addFavorites,
           [favorites],
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<void> removeFavorite(
+  _i4.Future<void> removeFavorite(
     String? itemId, {
-    _i5.FavoriteItemType? type,
+    _i6.FavoriteItemType? type,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -89,14 +99,14 @@ class MockIsarFavoritesDataSource extends _i1.Mock
           [itemId],
           {#type: type},
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<void> removeFavorites(
+  _i4.Future<void> removeFavorites(
     List<String>? itemIds, {
-    _i5.FavoriteItemType? type,
+    _i6.FavoriteItemType? type,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -104,25 +114,25 @@ class MockIsarFavoritesDataSource extends _i1.Mock
           [itemIds],
           {#type: type},
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<void> toggleFavorite(_i4.FavoriteModel? favorite) =>
+  _i4.Future<void> toggleFavorite(_i5.FavoriteModel? favorite) =>
       (super.noSuchMethod(
         Invocation.method(
           #toggleFavorite,
           [favorite],
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<bool> isFavorite(
+  _i4.Future<bool> isFavorite(
     String? itemId, {
-    _i5.FavoriteItemType? type,
+    _i6.FavoriteItemType? type,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -130,12 +140,12 @@ class MockIsarFavoritesDataSource extends _i1.Mock
           [itemId],
           {#type: type},
         ),
-        returnValue: _i3.Future<bool>.value(false),
-      ) as _i3.Future<bool>);
+        returnValue: _i4.Future<bool>.value(false),
+      ) as _i4.Future<bool>);
 
   @override
-  _i3.Future<List<_i4.FavoriteModel>> getFavoritesByType(
-    _i5.FavoriteItemType? type, {
+  _i4.Future<List<_i5.FavoriteModel>> getFavoritesByType(
+    _i6.FavoriteItemType? type, {
     bool? newestFirst = true,
   }) =>
       (super.noSuchMethod(
@@ -145,13 +155,13 @@ class MockIsarFavoritesDataSource extends _i1.Mock
           {#newestFirst: newestFirst},
         ),
         returnValue:
-            _i3.Future<List<_i4.FavoriteModel>>.value(<_i4.FavoriteModel>[]),
-      ) as _i3.Future<List<_i4.FavoriteModel>>);
+            _i4.Future<List<_i5.FavoriteModel>>.value(<_i5.FavoriteModel>[]),
+      ) as _i4.Future<List<_i5.FavoriteModel>>);
 
   @override
-  _i3.Future<List<_i4.FavoriteModel>> getFavoritesAddedAfter(
+  _i4.Future<List<_i5.FavoriteModel>> getFavoritesAddedAfter(
     DateTime? threshold, {
-    _i5.FavoriteItemType? type,
+    _i6.FavoriteItemType? type,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -160,24 +170,24 @@ class MockIsarFavoritesDataSource extends _i1.Mock
           {#type: type},
         ),
         returnValue:
-            _i3.Future<List<_i4.FavoriteModel>>.value(<_i4.FavoriteModel>[]),
-      ) as _i3.Future<List<_i4.FavoriteModel>>);
+            _i4.Future<List<_i5.FavoriteModel>>.value(<_i5.FavoriteModel>[]),
+      ) as _i4.Future<List<_i5.FavoriteModel>>);
 
   @override
-  _i3.Future<List<String>> getFavoriteMediaIds() => (super.noSuchMethod(
+  _i4.Future<List<String>> getFavoriteMediaIds() => (super.noSuchMethod(
         Invocation.method(
           #getFavoriteMediaIds,
           [],
         ),
-        returnValue: _i3.Future<List<String>>.value(<String>[]),
-      ) as _i3.Future<List<String>>);
+        returnValue: _i4.Future<List<String>>.value(<String>[]),
+      ) as _i4.Future<List<String>>);
 
   @override
-  _i3.Future<List<String>> getFavoriteDirectoryIds() => (super.noSuchMethod(
+  _i4.Future<List<String>> getFavoriteDirectoryIds() => (super.noSuchMethod(
         Invocation.method(
           #getFavoriteDirectoryIds,
           [],
         ),
-        returnValue: _i3.Future<List<String>>.value(<String>[]),
-      ) as _i3.Future<List<String>>);
+        returnValue: _i4.Future<List<String>>.value(<String>[]),
+      ) as _i4.Future<List<String>>);
 }

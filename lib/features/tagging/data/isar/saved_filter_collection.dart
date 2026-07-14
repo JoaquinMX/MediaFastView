@@ -18,6 +18,7 @@ Id savedFilterCollectionId(String filterId) => isarIdFromKey(filterId);
 class SavedFilterCollection {
   SavedFilterCollection({
     required this.filterId,
+    required this.profileId,
     required this.name,
     required this.requiredTagIds,
     required this.optionalTagIds,
@@ -33,8 +34,16 @@ class SavedFilterCollection {
   set id(Id value) {}
 
   /// Stable filter identifier used throughout the app.
+  ///
+  /// A uuid, so it is already globally unique — the profile does not enter the
+  /// natural key, and existing rows keep their Isar id.
   @Index(unique: true, replace: true)
   String filterId;
+
+  /// The profile that owns this filter. A filter references that profile's tag
+  /// ids and directory paths, so it only makes sense inside it.
+  @Index(type: IndexType.hash)
+  String profileId;
 
   String name;
 
@@ -60,6 +69,7 @@ extension SavedFilterCollectionMapper on SavedFilterCollection {
   SavedFilterModel toModel() {
     return SavedFilterModel(
       id: filterId,
+      profileId: profileId,
       name: name,
       requiredTagIds: List<String>.unmodifiable(requiredTagIds),
       optionalTagIds: List<String>.unmodifiable(optionalTagIds),
@@ -77,6 +87,7 @@ extension SavedFilterModelIsarMapper on SavedFilterModel {
   SavedFilterCollection toCollection() {
     return SavedFilterCollection(
       filterId: id,
+      profileId: profileId,
       name: name,
       requiredTagIds: List<String>.from(requiredTagIds),
       optionalTagIds: List<String>.from(optionalTagIds),

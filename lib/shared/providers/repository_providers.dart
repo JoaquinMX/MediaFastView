@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:isar/isar.dart';
 
 import '../../features/favorites/data/repositories/favorites_repository_impl.dart';
 import '../../features/favorites/domain/repositories/favorites_repository.dart';
@@ -11,7 +12,9 @@ import '../../core/services/file_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../core/services/isar_database.dart';
 import '../../core/services/isar_key_migration.dart';
+import '../../core/services/isar_profile_migration.dart';
 import '../../core/services/isar_schemas.dart';
+import 'active_profile_provider.dart';
 import '../../features/media_library/data/data_sources/filesystem_media_data_source.dart';
 import '../../features/media_library/data/data_sources/local_directory_data_source.dart';
 import '../../features/media_library/data/repositories/directory_repository_impl.dart';
@@ -79,27 +82,50 @@ import '../../features/settings/domain/use_cases/update_theme_mode_use_case.dart
 import '../../features/settings/domain/use_cases/update_thumbnail_caching_use_case.dart';
 import '../utils/tag_lookup.dart';
 
+/// Every migration the database needs, in the order it needs them.
+///
+/// Shared with `main`, which builds its own [IsarDatabase] to bootstrap the
+/// active profile before the first frame and then overrides
+/// [isarDatabaseProvider] with it — so both paths agree on how the database is
+/// brought up to date.
+///
+/// The key migration runs first: it moves favorites off the legacy byte-sum id,
+/// and the profile migration then re-keys them again onto the profile-scoped key.
+/// Both are self-detecting, so a database that needs neither pays nothing and a
+/// database that needs both converges in one launch.
+Future<void> runIsarMigrations(
+  Isar isar,
+  Future<void> Function() backUp,
+) async {
+  await const IsarKeyMigration().run(isar, backUp: backUp);
+  await const IsarProfileMigration().run(isar, backUp: backUp);
+}
+
 // Isar database provider
 final isarDatabaseProvider = Provider<IsarDatabase>((ref) {
   final database = IsarDatabase(
     schemas: isarCollectionSchemas,
     // Runs before the instance is published, so no data source can read or write
     // against rows that are about to be re-keyed.
-    migrate: (isar, backUp) =>
-        const IsarKeyMigration().run(isar, backUp: backUp),
+    migrate: runIsarMigrations,
   );
   ref.onDispose(database.close);
   unawaited(database.open());
   return database;
 });
 
-final isarDirectoryDataSourceProvider =
-    Provider<IsarDirectoryDataSource>(
-      (ref) => IsarDirectoryDataSource(ref.watch(isarDatabaseProvider)),
-    );
+final isarDirectoryDataSourceProvider = Provider<IsarDirectoryDataSource>(
+  (ref) => IsarDirectoryDataSource(
+    ref.watch(isarDatabaseProvider),
+    profileId: ref.watch(activeProfileIdProvider),
+  ),
+);
 
 final isarMediaDataSourceProvider = Provider<IsarMediaDataSource>(
-  (ref) => IsarMediaDataSource(ref.watch(isarDatabaseProvider)),
+  (ref) => IsarMediaDataSource(
+    ref.watch(isarDatabaseProvider),
+    profileId: ref.watch(activeProfileIdProvider),
+  ),
 );
 
 final filesystemMediaDataSourceProvider = Provider<FilesystemMediaDataSource>(
@@ -117,15 +143,24 @@ final localDirectoryDataSourceProvider = Provider<LocalDirectoryDataSource>(
 );
 
 final isarTagDataSourceProvider = Provider<IsarTagDataSource>(
-  (ref) => IsarTagDataSource(ref.watch(isarDatabaseProvider)),
+  (ref) => IsarTagDataSource(
+    ref.watch(isarDatabaseProvider),
+    profileId: ref.watch(activeProfileIdProvider),
+  ),
 );
 
 final isarSavedFilterDataSourceProvider = Provider<IsarSavedFilterDataSource>(
-  (ref) => IsarSavedFilterDataSource(ref.watch(isarDatabaseProvider)),
+  (ref) => IsarSavedFilterDataSource(
+    ref.watch(isarDatabaseProvider),
+    profileId: ref.watch(activeProfileIdProvider),
+  ),
 );
 
 final isarFavoritesDataSourceProvider = Provider<IsarFavoritesDataSource>(
-  (ref) => IsarFavoritesDataSource(ref.watch(isarDatabaseProvider)),
+  (ref) => IsarFavoritesDataSource(
+    ref.watch(isarDatabaseProvider),
+    profileId: ref.watch(activeProfileIdProvider),
+  ),
 );
 
 // Service providers

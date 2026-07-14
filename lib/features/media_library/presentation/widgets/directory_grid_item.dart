@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/ui_constants.dart';
+import '../../../profiles/presentation/widgets/directory_profile_dialog.dart';
 import '../../domain/entities/directory_entity.dart';
 import 'directory_tag_assignment_dialog.dart';
 
@@ -194,6 +195,23 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                                           constraints:
                                               BoxConstraints.tight(Size(iconSize, iconSize)),
                                           tooltip: 'Assign tags',
+                                        ),
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.people_outline,
+                                            size: iconSize,
+                                          ),
+                                          onPressed: () =>
+                                              DirectoryProfileDialog.show(
+                                            context,
+                                            widget.directory,
+                                          ),
+                                          color:
+                                              Theme.of(context).colorScheme.primary,
+                                          padding: EdgeInsets.zero,
+                                          constraints:
+                                              BoxConstraints.tight(Size(iconSize, iconSize)),
+                                          tooltip: 'Profiles',
                                         ),
                                         const Spacer(),
                                         IconButton(

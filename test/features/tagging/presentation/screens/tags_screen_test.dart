@@ -12,7 +12,10 @@ import 'package:media_fast_view/features/tagging/domain/use_cases/filter_by_tags
 import 'package:media_fast_view/features/tagging/domain/use_cases/get_tags_use_case.dart';
 import 'package:media_fast_view/features/tagging/presentation/screens/tags_screen.dart';
 import 'package:media_fast_view/features/tagging/presentation/view_models/tags_view_model.dart';
+import 'package:media_fast_view/features/profiles/domain/entities/profile_entity.dart';
+import 'package:media_fast_view/shared/providers/active_profile_provider.dart';
 import 'package:media_fast_view/shared/providers/navigation_provider.dart';
+import 'package:media_fast_view/shared/providers/profile_providers.dart';
 import 'package:media_fast_view/shared/providers/repository_providers.dart';
 import 'package:mockito/mockito.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -165,6 +168,22 @@ void main() {
 
     container = ProviderContainer(
       overrides: [
+        // Seeded the way `main` does. The app bar's profile switcher reads this,
+        // and the notifier throws rather than defaulting — an unseeded profile
+        // would silently scope the app to a library that owns nothing.
+        activeProfileIdProvider.overrideWith(
+          () => ActiveProfileIdNotifier('profile-1'),
+        ),
+        profilesProvider.overrideWith(
+          (ref) async => <ProfileEntity>[
+            ProfileEntity(
+              id: 'profile-1',
+              name: 'Default',
+              sortOrder: 0,
+              createdAt: DateTime(2024, 1, 1),
+            ),
+          ],
+        ),
         tagsViewModelProvider.overrideWith((ref) => viewModel),
         favoritesViewModelProvider.overrideWith(
           (ref) => _StubFavoritesViewModel(

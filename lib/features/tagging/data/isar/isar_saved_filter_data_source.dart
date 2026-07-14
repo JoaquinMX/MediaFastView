@@ -12,13 +12,21 @@ typedef SavedFilterCollectionStoreBuilder = SavedFilterCollectionStore Function(
 );
 
 /// Provides CRUD access to [SavedFilterCollection] entries.
+///
+/// Bound to a single profile: a filter references that profile's tag ids and
+/// directory paths, so it only means anything inside it.
 class IsarSavedFilterDataSource {
   IsarSavedFilterDataSource(
     this._database, {
+    required this.profileId,
     SavedFilterCollectionStoreBuilder? storeBuilder,
   }) : _storeBuilder = storeBuilder ?? _defaultStoreBuilder;
 
   final IsarDatabase _database;
+
+  /// The profile whose filters this data source reads and writes.
+  final String profileId;
+
   final SavedFilterCollectionStoreBuilder _storeBuilder;
 
   late final SavedFilterCollectionStore _store = _storeBuilder(_database);
@@ -29,11 +37,11 @@ class IsarSavedFilterDataSource {
     return IsarSavedFilterCollectionStore(database);
   }
 
-  /// Every persisted filter, oldest first.
+  /// This profile's filters, oldest first.
   Future<List<SavedFilterModel>> getFilters() async {
     await _ensureReady();
     try {
-      final collections = await _store.getAll();
+      final collections = await _store.getByProfileId(profileId);
       collections.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       return collections
           .map((collection) => collection.toModel())
@@ -50,7 +58,7 @@ class IsarSavedFilterDataSource {
   Future<void> saveFilter(SavedFilterModel filter) async {
     await _executeSafely(() async {
       await _store.writeTxn(() async {
-        await _store.put(filter.toCollection());
+        await _store.put(_stamped(filter));
       });
     }, 'Failed to save filter');
   }
@@ -59,8 +67,7 @@ class IsarSavedFilterDataSource {
     if (filters.isEmpty) {
       return;
     }
-    final collections =
-        filters.map((filter) => filter.toCollection()).toList(growable: false);
+    final collections = filters.map(_stamped).toList(growable: false);
 
     await _executeSafely(() async {
       await _store.writeTxn(() async {
@@ -77,13 +84,18 @@ class IsarSavedFilterDataSource {
     }, 'Failed to remove filter');
   }
 
+  /// Removes this profile's filters, leaving other profiles' alone.
   Future<void> clearFilters() async {
     await _executeSafely(() async {
       await _store.writeTxn(() async {
-        await _store.clear();
+        await _store.deleteByProfileId(profileId);
       });
     }, 'Failed to clear filters');
   }
+
+  /// Binds [filter] to this data source's profile before it is persisted.
+  SavedFilterCollection _stamped(SavedFilterModel filter) =>
+      filter.copyWith(profileId: profileId).toCollection();
 
   Future<void> _executeSafely(
     Future<void> Function() action,
@@ -109,7 +121,12 @@ class IsarSavedFilterDataSource {
 
 /// Contract abstracting access to persisted [SavedFilterCollection] records.
 abstract interface class SavedFilterCollectionStore {
+  /// Every row in the collection, across all profiles.
+  ///
+  /// For the migrations. Application reads want [getByProfileId].
   Future<List<SavedFilterCollection>> getAll();
+
+  Future<List<SavedFilterCollection>> getByProfileId(String profileId);
 
   Future<void> put(SavedFilterCollection filter);
 
@@ -118,6 +135,9 @@ abstract interface class SavedFilterCollectionStore {
   Future<void> clear();
 
   Future<void> deleteById(Id id);
+
+  /// Deletes every filter owned by [profileId].
+  Future<void> deleteByProfileId(String profileId);
 
   Future<SavedFilterCollection?> getById(Id id);
 
@@ -144,6 +164,11 @@ class IsarSavedFilterCollectionStore implements SavedFilterCollectionStore {
       _collection.where().findAll();
 
   @override
+  Future<List<SavedFilterCollection>> getByProfileId(String profileId) {
+    return _collection.filter().profileIdEqualTo(profileId).findAll();
+  }
+
+  @override
   Future<void> put(SavedFilterCollection filter) async {
     await _collection.put(filter);
   }
@@ -161,6 +186,11 @@ class IsarSavedFilterCollectionStore implements SavedFilterCollectionStore {
   @override
   Future<void> deleteById(Id id) async {
     await _collection.delete(id);
+  }
+
+  @override
+  Future<void> deleteByProfileId(String profileId) async {
+    await _collection.filter().profileIdEqualTo(profileId).deleteAll();
   }
 
   @override

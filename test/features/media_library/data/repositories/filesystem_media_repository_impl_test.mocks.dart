@@ -5,7 +5,7 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i7;
 
-import 'package:media_fast_view/core/services/bookmark_service.dart' as _i11;
+import 'package:media_fast_view/core/services/bookmark_service.dart' as _i12;
 import 'package:media_fast_view/core/services/file_transfer_result.dart' as _i3;
 import 'package:media_fast_view/core/services/permission_service.dart' as _i5;
 import 'package:media_fast_view/core/utils/batch_update_result.dart' as _i2;
@@ -14,13 +14,13 @@ import 'package:media_fast_view/features/media_library/data/data_sources/filesys
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart'
     as _i9;
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart'
-    as _i10;
+    as _i11;
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart'
     as _i8;
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart'
     as _i6;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i12;
+import 'package:mockito/src/dummies.dart' as _i10;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -271,17 +271,26 @@ class MockIsarMediaDataSource extends _i1.Mock
   }
 
   @override
-  _i7.Future<List<_i10.MediaModel>> getMedia() => (super.noSuchMethod(
+  String get profileId => (super.noSuchMethod(
+        Invocation.getter(#profileId),
+        returnValue: _i10.dummyValue<String>(
+          this,
+          Invocation.getter(#profileId),
+        ),
+      ) as String);
+
+  @override
+  _i7.Future<List<_i11.MediaModel>> getMedia() => (super.noSuchMethod(
         Invocation.method(
           #getMedia,
           [],
         ),
         returnValue:
-            _i7.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
-      ) as _i7.Future<List<_i10.MediaModel>>);
+            _i7.Future<List<_i11.MediaModel>>.value(<_i11.MediaModel>[]),
+      ) as _i7.Future<List<_i11.MediaModel>>);
 
   @override
-  _i7.Future<void> saveMedia(List<_i10.MediaModel>? media) =>
+  _i7.Future<void> saveMedia(List<_i11.MediaModel>? media) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveMedia,
@@ -292,7 +301,7 @@ class MockIsarMediaDataSource extends _i1.Mock
       ) as _i7.Future<void>);
 
   @override
-  _i7.Future<void> upsertMedia(List<_i10.MediaModel>? media) =>
+  _i7.Future<void> upsertMedia(List<_i11.MediaModel>? media) =>
       (super.noSuchMethod(
         Invocation.method(
           #upsertMedia,
@@ -303,18 +312,18 @@ class MockIsarMediaDataSource extends _i1.Mock
       ) as _i7.Future<void>);
 
   @override
-  _i7.Future<List<_i10.MediaModel>> getMediaForDirectory(String? directoryId) =>
+  _i7.Future<List<_i11.MediaModel>> getMediaForDirectory(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getMediaForDirectory,
           [directoryId],
         ),
         returnValue:
-            _i7.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
-      ) as _i7.Future<List<_i10.MediaModel>>);
+            _i7.Future<List<_i11.MediaModel>>.value(<_i11.MediaModel>[]),
+      ) as _i7.Future<List<_i11.MediaModel>>);
 
   @override
-  _i7.Future<void> addMedia(List<_i10.MediaModel>? mediaItems) =>
+  _i7.Future<void> addMedia(List<_i11.MediaModel>? mediaItems) =>
       (super.noSuchMethod(
         Invocation.method(
           #addMedia,
@@ -427,7 +436,7 @@ class MockIsarMediaDataSource extends _i1.Mock
   @override
   _i7.Future<void> replaceMedia({
     required String? oldMediaId,
-    required _i10.MediaModel? newMedia,
+    required _i11.MediaModel? newMedia,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -444,7 +453,7 @@ class MockIsarMediaDataSource extends _i1.Mock
 
   @override
   _i7.Future<void> replaceMediaBatch(
-          List<({_i10.MediaModel newMedia, String oldMediaId})>? entries) =>
+          List<({_i11.MediaModel newMedia, String oldMediaId})>? entries) =>
       (super.noSuchMethod(
         Invocation.method(
           #replaceMediaBatch,
@@ -455,15 +464,15 @@ class MockIsarMediaDataSource extends _i1.Mock
       ) as _i7.Future<void>);
 
   @override
-  _i7.Future<List<_i10.MediaModel>> getMediaUnderPath(String? directoryPath) =>
+  _i7.Future<List<_i11.MediaModel>> getMediaUnderPath(String? directoryPath) =>
       (super.noSuchMethod(
         Invocation.method(
           #getMediaUnderPath,
           [directoryPath],
         ),
         returnValue:
-            _i7.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
-      ) as _i7.Future<List<_i10.MediaModel>>);
+            _i7.Future<List<_i11.MediaModel>>.value(<_i11.MediaModel>[]),
+      ) as _i7.Future<List<_i11.MediaModel>>);
 
   @override
   _i7.Future<void> clearMedia() => (super.noSuchMethod(
@@ -490,7 +499,7 @@ class MockIsarMediaDataSource extends _i1.Mock
 /// A class which mocks [BookmarkService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockBookmarkService extends _i1.Mock implements _i11.BookmarkService {
+class MockBookmarkService extends _i1.Mock implements _i12.BookmarkService {
   MockBookmarkService() {
     _i1.throwOnMissingStub(this);
   }
@@ -502,7 +511,7 @@ class MockBookmarkService extends _i1.Mock implements _i11.BookmarkService {
           #createBookmark,
           [directoryPath],
         ),
-        returnValue: _i7.Future<String>.value(_i12.dummyValue<String>(
+        returnValue: _i7.Future<String>.value(_i10.dummyValue<String>(
           this,
           Invocation.method(
             #createBookmark,
@@ -531,7 +540,7 @@ class MockBookmarkService extends _i1.Mock implements _i11.BookmarkService {
           #resolveBookmark,
           [bookmarkData],
         ),
-        returnValue: _i7.Future<String>.value(_i12.dummyValue<String>(
+        returnValue: _i7.Future<String>.value(_i10.dummyValue<String>(
           this,
           Invocation.method(
             #resolveBookmark,
@@ -567,7 +576,7 @@ class MockBookmarkService extends _i1.Mock implements _i11.BookmarkService {
           #startAccessingBookmark,
           [bookmarkData],
         ),
-        returnValue: _i7.Future<String>.value(_i12.dummyValue<String>(
+        returnValue: _i7.Future<String>.value(_i10.dummyValue<String>(
           this,
           Invocation.method(
             #startAccessingBookmark,
@@ -712,7 +721,7 @@ class MockFilesystemMediaDataSource extends _i1.Mock
       ) as _i7.Future<_i4.PermissionValidationResult>);
 
   @override
-  _i7.Future<List<_i10.MediaModel>> scanMediaForDirectory(
+  _i7.Future<List<_i11.MediaModel>> scanMediaForDirectory(
     String? directoryPath,
     String? directoryId, {
     String? bookmarkData,
@@ -727,8 +736,8 @@ class MockFilesystemMediaDataSource extends _i1.Mock
           {#bookmarkData: bookmarkData},
         ),
         returnValue:
-            _i7.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
-      ) as _i7.Future<List<_i10.MediaModel>>);
+            _i7.Future<List<_i11.MediaModel>>.value(<_i11.MediaModel>[]),
+      ) as _i7.Future<List<_i11.MediaModel>>);
 
   @override
   _i7.Future<List<String>> scanSubdirectories(String? directoryPath) =>
@@ -741,7 +750,7 @@ class MockFilesystemMediaDataSource extends _i1.Mock
       ) as _i7.Future<List<String>>);
 
   @override
-  _i7.Future<_i10.MediaModel?> getMediaById(
+  _i7.Future<_i11.MediaModel?> getMediaById(
     String? mediaId,
     String? directoryPath,
     String? directoryId, {
@@ -757,11 +766,11 @@ class MockFilesystemMediaDataSource extends _i1.Mock
           ],
           {#bookmarkData: bookmarkData},
         ),
-        returnValue: _i7.Future<_i10.MediaModel?>.value(),
-      ) as _i7.Future<_i10.MediaModel?>);
+        returnValue: _i7.Future<_i11.MediaModel?>.value(),
+      ) as _i7.Future<_i11.MediaModel?>);
 
   @override
-  _i7.Future<List<_i10.MediaModel>> filterMediaByTags(
+  _i7.Future<List<_i11.MediaModel>> filterMediaByTags(
     String? directoryPath,
     String? directoryId,
     List<String>? tagIds, {
@@ -782,8 +791,8 @@ class MockFilesystemMediaDataSource extends _i1.Mock
           },
         ),
         returnValue:
-            _i7.Future<List<_i10.MediaModel>>.value(<_i10.MediaModel>[]),
-      ) as _i7.Future<List<_i10.MediaModel>>);
+            _i7.Future<List<_i11.MediaModel>>.value(<_i11.MediaModel>[]),
+      ) as _i7.Future<List<_i11.MediaModel>>);
 }
 
 /// A class which mocks [PermissionService].

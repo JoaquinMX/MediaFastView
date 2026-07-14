@@ -3,18 +3,19 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i4;
+import 'dart:async' as _i5;
 
 import 'package:media_fast_view/core/utils/batch_update_result.dart' as _i2;
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart'
     as _i3;
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart'
-    as _i5;
-import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart'
-    as _i7;
-import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart'
     as _i6;
+import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart'
+    as _i8;
+import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart'
+    as _i7;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:mockito/src/dummies.dart' as _i4;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -50,59 +51,68 @@ class MockIsarMediaDataSource extends _i1.Mock
   }
 
   @override
-  _i4.Future<List<_i5.MediaModel>> getMedia() => (super.noSuchMethod(
+  String get profileId => (super.noSuchMethod(
+        Invocation.getter(#profileId),
+        returnValue: _i4.dummyValue<String>(
+          this,
+          Invocation.getter(#profileId),
+        ),
+      ) as String);
+
+  @override
+  _i5.Future<List<_i6.MediaModel>> getMedia() => (super.noSuchMethod(
         Invocation.method(
           #getMedia,
           [],
         ),
-        returnValue: _i4.Future<List<_i5.MediaModel>>.value(<_i5.MediaModel>[]),
-      ) as _i4.Future<List<_i5.MediaModel>>);
+        returnValue: _i5.Future<List<_i6.MediaModel>>.value(<_i6.MediaModel>[]),
+      ) as _i5.Future<List<_i6.MediaModel>>);
 
   @override
-  _i4.Future<void> saveMedia(List<_i5.MediaModel>? media) =>
+  _i5.Future<void> saveMedia(List<_i6.MediaModel>? media) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveMedia,
           [media],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> upsertMedia(List<_i5.MediaModel>? media) =>
+  _i5.Future<void> upsertMedia(List<_i6.MediaModel>? media) =>
       (super.noSuchMethod(
         Invocation.method(
           #upsertMedia,
           [media],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<List<_i5.MediaModel>> getMediaForDirectory(String? directoryId) =>
+  _i5.Future<List<_i6.MediaModel>> getMediaForDirectory(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getMediaForDirectory,
           [directoryId],
         ),
-        returnValue: _i4.Future<List<_i5.MediaModel>>.value(<_i5.MediaModel>[]),
-      ) as _i4.Future<List<_i5.MediaModel>>);
+        returnValue: _i5.Future<List<_i6.MediaModel>>.value(<_i6.MediaModel>[]),
+      ) as _i5.Future<List<_i6.MediaModel>>);
 
   @override
-  _i4.Future<void> addMedia(List<_i5.MediaModel>? mediaItems) =>
+  _i5.Future<void> addMedia(List<_i6.MediaModel>? mediaItems) =>
       (super.noSuchMethod(
         Invocation.method(
           #addMedia,
           [mediaItems],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> updateMediaTags(
+  _i5.Future<void> updateMediaTags(
     String? mediaId,
     List<String>? tagIds,
   ) =>
@@ -114,12 +124,12 @@ class MockIsarMediaDataSource extends _i1.Mock
             tagIds,
           ],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<_i2.BatchUpdateResult> updateMediaTagsBatch(
+  _i5.Future<_i2.BatchUpdateResult> updateMediaTagsBatch(
           Map<String, List<String>>? mediaTags) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -127,39 +137,39 @@ class MockIsarMediaDataSource extends _i1.Mock
           [mediaTags],
         ),
         returnValue:
-            _i4.Future<_i2.BatchUpdateResult>.value(_FakeBatchUpdateResult_0(
+            _i5.Future<_i2.BatchUpdateResult>.value(_FakeBatchUpdateResult_0(
           this,
           Invocation.method(
             #updateMediaTagsBatch,
             [mediaTags],
           ),
         )),
-      ) as _i4.Future<_i2.BatchUpdateResult>);
+      ) as _i5.Future<_i2.BatchUpdateResult>);
 
   @override
-  _i4.Future<void> removeMediaByIds(List<String>? mediaIds) =>
+  _i5.Future<void> removeMediaByIds(List<String>? mediaIds) =>
       (super.noSuchMethod(
         Invocation.method(
           #removeMediaByIds,
           [mediaIds],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> removeMediaForDirectory(String? directoryId) =>
+  _i5.Future<void> removeMediaForDirectory(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
           #removeMediaForDirectory,
           [directoryId],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> migrateDirectoryId(
+  _i5.Future<void> migrateDirectoryId(
     String? legacyDirectoryId,
     String? stableDirectoryId,
   ) =>
@@ -171,12 +181,12 @@ class MockIsarMediaDataSource extends _i1.Mock
             stableDirectoryId,
           ],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> relocateMedia({
+  _i5.Future<void> relocateMedia({
     required String? mediaId,
     required String? newPath,
     required String? newName,
@@ -197,14 +207,14 @@ class MockIsarMediaDataSource extends _i1.Mock
             #newLastModified: newLastModified,
           },
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> replaceMedia({
+  _i5.Future<void> replaceMedia({
     required String? oldMediaId,
-    required _i5.MediaModel? newMedia,
+    required _i6.MediaModel? newMedia,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -215,86 +225,86 @@ class MockIsarMediaDataSource extends _i1.Mock
             #newMedia: newMedia,
           },
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> replaceMediaBatch(
-          List<({_i5.MediaModel newMedia, String oldMediaId})>? entries) =>
+  _i5.Future<void> replaceMediaBatch(
+          List<({_i6.MediaModel newMedia, String oldMediaId})>? entries) =>
       (super.noSuchMethod(
         Invocation.method(
           #replaceMediaBatch,
           [entries],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<List<_i5.MediaModel>> getMediaUnderPath(String? directoryPath) =>
+  _i5.Future<List<_i6.MediaModel>> getMediaUnderPath(String? directoryPath) =>
       (super.noSuchMethod(
         Invocation.method(
           #getMediaUnderPath,
           [directoryPath],
         ),
-        returnValue: _i4.Future<List<_i5.MediaModel>>.value(<_i5.MediaModel>[]),
-      ) as _i4.Future<List<_i5.MediaModel>>);
+        returnValue: _i5.Future<List<_i6.MediaModel>>.value(<_i6.MediaModel>[]),
+      ) as _i5.Future<List<_i6.MediaModel>>);
 
   @override
-  _i4.Future<void> clearMedia() => (super.noSuchMethod(
+  _i5.Future<void> clearMedia() => (super.noSuchMethod(
         Invocation.method(
           #clearMedia,
           [],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> removeMediaNotInDirectories(List<String>? directoryIds) =>
+  _i5.Future<void> removeMediaNotInDirectories(List<String>? directoryIds) =>
       (super.noSuchMethod(
         Invocation.method(
           #removeMediaNotInDirectories,
           [directoryIds],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 }
 
 /// A class which mocks [DirectoryRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockDirectoryRepository extends _i1.Mock
-    implements _i6.DirectoryRepository {
+    implements _i7.DirectoryRepository {
   MockDirectoryRepository() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i4.Future<List<_i7.DirectoryEntity>> getDirectories() => (super.noSuchMethod(
+  _i5.Future<List<_i8.DirectoryEntity>> getDirectories() => (super.noSuchMethod(
         Invocation.method(
           #getDirectories,
           [],
         ),
-        returnValue: _i4.Future<List<_i7.DirectoryEntity>>.value(
-            <_i7.DirectoryEntity>[]),
-      ) as _i4.Future<List<_i7.DirectoryEntity>>);
+        returnValue: _i5.Future<List<_i8.DirectoryEntity>>.value(
+            <_i8.DirectoryEntity>[]),
+      ) as _i5.Future<List<_i8.DirectoryEntity>>);
 
   @override
-  _i4.Future<_i7.DirectoryEntity?> getDirectoryById(String? id) =>
+  _i5.Future<_i8.DirectoryEntity?> getDirectoryById(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #getDirectoryById,
           [id],
         ),
-        returnValue: _i4.Future<_i7.DirectoryEntity?>.value(),
-      ) as _i4.Future<_i7.DirectoryEntity?>);
+        returnValue: _i5.Future<_i8.DirectoryEntity?>.value(),
+      ) as _i5.Future<_i8.DirectoryEntity?>);
 
   @override
-  _i4.Future<void> addDirectory(
-    _i7.DirectoryEntity? directory, {
+  _i5.Future<void> addDirectory(
+    _i8.DirectoryEntity? directory, {
     bool? silent = false,
   }) =>
       (super.noSuchMethod(
@@ -303,45 +313,45 @@ class MockDirectoryRepository extends _i1.Mock
           [directory],
           {#silent: silent},
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> removeDirectory(String? id) => (super.noSuchMethod(
+  _i5.Future<void> removeDirectory(String? id) => (super.noSuchMethod(
         Invocation.method(
           #removeDirectory,
           [id],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<List<_i7.DirectoryEntity>> searchDirectories(String? query) =>
+  _i5.Future<List<_i8.DirectoryEntity>> searchDirectories(String? query) =>
       (super.noSuchMethod(
         Invocation.method(
           #searchDirectories,
           [query],
         ),
-        returnValue: _i4.Future<List<_i7.DirectoryEntity>>.value(
-            <_i7.DirectoryEntity>[]),
-      ) as _i4.Future<List<_i7.DirectoryEntity>>);
+        returnValue: _i5.Future<List<_i8.DirectoryEntity>>.value(
+            <_i8.DirectoryEntity>[]),
+      ) as _i5.Future<List<_i8.DirectoryEntity>>);
 
   @override
-  _i4.Future<List<_i7.DirectoryEntity>> filterDirectoriesByTags(
+  _i5.Future<List<_i8.DirectoryEntity>> filterDirectoriesByTags(
           List<String>? tagIds) =>
       (super.noSuchMethod(
         Invocation.method(
           #filterDirectoriesByTags,
           [tagIds],
         ),
-        returnValue: _i4.Future<List<_i7.DirectoryEntity>>.value(
-            <_i7.DirectoryEntity>[]),
-      ) as _i4.Future<List<_i7.DirectoryEntity>>);
+        returnValue: _i5.Future<List<_i8.DirectoryEntity>>.value(
+            <_i8.DirectoryEntity>[]),
+      ) as _i5.Future<List<_i8.DirectoryEntity>>);
 
   @override
-  _i4.Future<void> updateDirectoryTags(
+  _i5.Future<void> updateDirectoryTags(
     String? directoryId,
     List<String>? tagIds,
   ) =>
@@ -353,12 +363,12 @@ class MockDirectoryRepository extends _i1.Mock
             tagIds,
           ],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<_i2.BatchUpdateResult> updateDirectoryTagsBatch(
+  _i5.Future<_i2.BatchUpdateResult> updateDirectoryTagsBatch(
           Map<String, List<String>>? directoryTags) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -366,17 +376,17 @@ class MockDirectoryRepository extends _i1.Mock
           [directoryTags],
         ),
         returnValue:
-            _i4.Future<_i2.BatchUpdateResult>.value(_FakeBatchUpdateResult_0(
+            _i5.Future<_i2.BatchUpdateResult>.value(_FakeBatchUpdateResult_0(
           this,
           Invocation.method(
             #updateDirectoryTagsBatch,
             [directoryTags],
           ),
         )),
-      ) as _i4.Future<_i2.BatchUpdateResult>);
+      ) as _i5.Future<_i2.BatchUpdateResult>);
 
   @override
-  _i4.Future<void> updateDirectoryBookmark(
+  _i5.Future<void> updateDirectoryBookmark(
     String? directoryId,
     String? bookmarkData,
   ) =>
@@ -388,12 +398,12 @@ class MockDirectoryRepository extends _i1.Mock
             bookmarkData,
           ],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> updateDirectoryMetadata(
+  _i5.Future<void> updateDirectoryMetadata(
     String? directoryId, {
     String? path,
     String? name,
@@ -409,27 +419,27 @@ class MockDirectoryRepository extends _i1.Mock
             #bookmarkData: bookmarkData,
           },
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> refreshChangedLibraryRoots() => (super.noSuchMethod(
+  _i5.Future<void> refreshChangedLibraryRoots() => (super.noSuchMethod(
         Invocation.method(
           #refreshChangedLibraryRoots,
           [],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 
   @override
-  _i4.Future<void> clearAllDirectories() => (super.noSuchMethod(
+  _i5.Future<void> clearAllDirectories() => (super.noSuchMethod(
         Invocation.method(
           #clearAllDirectories,
           [],
         ),
-        returnValue: _i4.Future<void>.value(),
-        returnValueForMissingStub: _i4.Future<void>.value(),
-      ) as _i4.Future<void>);
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
 }

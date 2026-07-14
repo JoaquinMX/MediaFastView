@@ -85,8 +85,16 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       'Directory validation successful for: ${directory.path}',
     );
 
-    final directories = await getDirectories();
-    final existing = directories.where((d) => d.path == directory.path).firstOrNull;
+    // Looked up by path and *unscoped* — deliberately. A folder another profile
+    // already tracks is invisible to `getDirectories()`, so matching against that
+    // would report "new", take the insert branch, and have the unique replace
+    // index on `path` overwrite the shared row: bookmark, scan cache and the
+    // other profile's tags, all gone. Finding the row here is what lets the add
+    // become a membership union instead.
+    final existingModel = await _isarDirectoryDataSource
+        .getDirectoryByPathUnscoped(directory.path);
+    final existing =
+        existingModel == null ? null : _modelToEntity(existingModel);
 
     String? bookmarkData;
     if (Platform.isMacOS) {
@@ -174,9 +182,32 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       resolvedBookmarkData = existing?.bookmarkData;
     }
 
+    // Adding a folder joins it to the active profile; it never takes it away from
+    // whoever else already had it. Adding one another profile tracks therefore
+    // costs nothing: no picker, no bookmark, no rescan — the row simply gains a
+    // member.
+    final profileId = _isarDirectoryDataSource.profileId;
+    final profileIds = <String>{
+      ...?existing?.profileIds,
+      profileId,
+    }.toList(growable: false);
+
+    // Carry the scan fingerprint over. Without this, joining a folder another
+    // profile has already scanned would rebuild the row from the incoming entity
+    // — whose scan fields are null — and the next refresh would see an unscanned
+    // root and walk the whole tree again. Sharing the row is supposed to mean
+    // sharing the work.
     final directoryToPersist = directory.copyWith(
       tagIds: preservedTagIds,
+      profileIds: profileIds,
       bookmarkData: resolvedBookmarkData,
+      lastScanAt: directory.lastScanAt ?? existing?.lastScanAt,
+      lastKnownTreeModified:
+          directory.lastKnownTreeModified ?? existing?.lastKnownTreeModified,
+      lastKnownChildDirectoryCount: directory.lastKnownChildDirectoryCount ??
+          existing?.lastKnownChildDirectoryCount,
+      lastKnownMediaFileCount:
+          directory.lastKnownMediaFileCount ?? existing?.lastKnownMediaFileCount,
     );
 
     final model = _entityToModel(directoryToPersist);
@@ -496,6 +527,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       name: model.name,
       thumbnailPath: model.thumbnailPath,
       tagIds: model.tagIds,
+      profileIds: model.profileIds,
       lastModified: model.lastModified,
       bookmarkData: model.bookmarkData,
       lastScanAt: model.lastScanAt,
@@ -512,6 +544,7 @@ class DirectoryRepositoryImpl implements DirectoryRepository {
       name: entity.name,
       thumbnailPath: entity.thumbnailPath,
       tagIds: entity.tagIds,
+      profileIds: entity.profileIds,
       lastModified: entity.lastModified,
       bookmarkData: entity.bookmarkData,
       lastScanAt: entity.lastScanAt,

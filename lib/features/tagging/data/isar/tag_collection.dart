@@ -18,6 +18,7 @@ Id tagCollectionIdFromTagId(String tagId) => isarIdFromKey(tagId);
 class TagCollection {
   TagCollection({
     required this.tagId,
+    required this.profileId,
     required this.name,
     required this.color,
     required this.createdAt,
@@ -28,8 +29,15 @@ class TagCollection {
   set id(Id value) {}
 
   /// Stable tag identifier used throughout the app.
+  ///
+  /// A uuid, so it is already globally unique — the profile does not enter the
+  /// natural key, and existing rows keep their Isar id.
   @Index(unique: true, replace: true)
   String tagId;
+
+  /// The profile that owns this tag. A tag belongs to exactly one profile.
+  @Index(type: IndexType.hash)
+  String profileId;
 
   /// Display name of the tag.
   String name;
@@ -53,6 +61,7 @@ extension TagCollectionMapper on TagCollection {
   TagModel toModel() {
     return TagModel(
       id: tagId,
+      profileId: profileId,
       name: name,
       color: color,
       createdAt: createdAt,
@@ -65,6 +74,7 @@ extension TagModelIsarMapper on TagModel {
   TagCollection toCollection() {
     return TagCollection(
       tagId: id,
+      profileId: profileId,
       name: name,
       color: color,
       createdAt: createdAt,

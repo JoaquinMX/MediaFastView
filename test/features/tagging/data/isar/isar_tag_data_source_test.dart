@@ -25,6 +25,7 @@ void main() {
       mediaStore = InMemoryMediaCollectionStore();
       dataSource = IsarTagDataSource(
         database,
+        profileId: 'profile-1',
         tagStoreBuilder: (_) => tagStore,
         directoryStoreBuilder: (_) => directoryStore,
         mediaStoreBuilder: (_) => mediaStore,
@@ -34,6 +35,7 @@ void main() {
     TagModel _buildTag(String id) {
       return TagModel(
         id: id,
+        profileId: 'profile-1',
         name: 'Tag $id',
         color: 0xFF000000 + id.hashCode,
         createdAt: DateTime.utc(2024, 1, 1),

@@ -9,6 +9,7 @@ part of 'tag_model.dart';
 _$TagModelImpl _$$TagModelImplFromJson(Map<String, dynamic> json) =>
     _$TagModelImpl(
       id: json['id'] as String,
+      profileId: json['profileId'] as String? ?? '',
       name: json['name'] as String,
       color: (json['color'] as num).toInt(),
       createdAt: DateTime.parse(json['createdAt'] as String),
@@ -17,6 +18,7 @@ _$TagModelImpl _$$TagModelImplFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$$TagModelImplToJson(_$TagModelImpl instance) =>
     <String, dynamic>{
       'id': instance.id,
+      'profileId': instance.profileId,
       'name': instance.name,
       'color': instance.color,
       'createdAt': instance.createdAt.toIso8601String(),

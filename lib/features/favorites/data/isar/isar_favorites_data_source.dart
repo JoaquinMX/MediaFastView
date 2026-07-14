@@ -16,9 +16,13 @@ typedef FavoriteCollectionStoreBuilder = FavoriteCollectionStore Function(
 );
 
 /// Data source that persists favorites using Isar collections.
+///
+/// Bound to a single profile: every read is scoped to [profileId] and every
+/// write is stamped with it, so a favorite cannot land in the wrong profile.
 class IsarFavoritesDataSource {
   IsarFavoritesDataSource(
     this._database, {
+    required this.profileId,
     FavoriteCollectionStoreBuilder? favoriteStoreBuilder,
     MediaCollectionStoreBuilder? mediaStoreBuilder,
     DirectoryCollectionStoreBuilder? directoryStoreBuilder,
@@ -29,6 +33,10 @@ class IsarFavoritesDataSource {
             directoryStoreBuilder ?? _defaultDirectoryStoreBuilder;
 
   final IsarDatabase _database;
+
+  /// The profile this data source reads and writes favorites for.
+  final String profileId;
+
   final FavoriteCollectionStoreBuilder _favoriteStoreBuilder;
   final MediaCollectionStoreBuilder _mediaStoreBuilder;
   final DirectoryCollectionStoreBuilder _directoryStoreBuilder;
@@ -39,11 +47,11 @@ class IsarFavoritesDataSource {
   late final DirectoryCollectionStore _directoryStore =
       _directoryStoreBuilder(_database);
 
-  /// Retrieves all persisted favorites sorted by creation time.
+  /// Retrieves this profile's favorites sorted by creation time.
   Future<List<FavoriteModel>> getFavorites() async {
     await _ensureReady();
     try {
-      final collections = await _favoriteStore.getAll();
+      final collections = await _favoriteStore.getByProfileId(profileId);
       collections.sort((a, b) => a.addedAt.compareTo(b.addedAt));
       return collections
           .map((collection) => collection.toModel())
@@ -56,12 +64,15 @@ class IsarFavoritesDataSource {
     }
   }
 
-  /// Persists [favorites] replacing existing records.
+  /// Persists [favorites], replacing this profile's existing records.
+  ///
+  /// Deletes by profile rather than clearing the collection — a bare `clear()`
+  /// here would wipe every other profile's favorites too.
   Future<void> saveFavorites(List<FavoriteModel> favorites) async {
     final collections = await _mapModels(favorites);
     await _executeSafely(() async {
       await _favoriteStore.writeTxn(() async {
-        await _favoriteStore.clear();
+        await _favoriteStore.deleteByProfileId(profileId);
         if (collections.isNotEmpty) {
           await _favoriteStore.putAll(collections);
         }
@@ -111,7 +122,7 @@ class IsarFavoritesDataSource {
       await _favoriteStore.writeTxn(() async {
         if (type != null) {
           final ids = itemIds
-              .map((itemId) => favoriteCollectionId(itemId, type))
+              .map((itemId) => favoriteCollectionId(profileId, itemId, type))
               .toList(growable: false);
           await _favoriteStore.deleteByIds(ids);
           return;
@@ -119,7 +130,7 @@ class IsarFavoritesDataSource {
 
         final toDelete = <Id>[];
         for (final itemId in itemIds) {
-          final matches = await _favoriteStore.getByItemId(itemId);
+          final matches = await _favoriteStore.getByItemId(profileId, itemId);
           if (matches.isEmpty) {
             continue;
           }
@@ -133,11 +144,21 @@ class IsarFavoritesDataSource {
     }, 'Failed to remove favorites');
   }
 
+  /// Removes this profile's favorites, leaving other profiles' alone.
+  Future<void> clearFavorites() async {
+    await _executeSafely(() async {
+      await _favoriteStore.writeTxn(() async {
+        await _favoriteStore.deleteByProfileId(profileId);
+      });
+    }, 'Failed to clear favorites');
+  }
+
   /// Toggles [favorite] by removing it when already persisted or adding it otherwise.
   Future<void> toggleFavorite(FavoriteModel favorite) async {
     await _executeSafely(() async {
       await _favoriteStore.writeTxn(() async {
         final existing = await _favoriteStore.getByCompositeId(
+          profileId,
           favorite.itemId,
           favorite.itemType,
         );
@@ -158,10 +179,11 @@ class IsarFavoritesDataSource {
   }) async {
     await _ensureReady();
     if (type != null) {
-      final existing = await _favoriteStore.getByCompositeId(itemId, type);
+      final existing =
+          await _favoriteStore.getByCompositeId(profileId, itemId, type);
       return existing != null;
     }
-    final matches = await _favoriteStore.getByItemId(itemId);
+    final matches = await _favoriteStore.getByItemId(profileId, itemId);
     return matches.isNotEmpty;
   }
 
@@ -172,7 +194,7 @@ class IsarFavoritesDataSource {
   }) async {
     await _ensureReady();
     try {
-      final collections = await _favoriteStore.getByType(type);
+      final collections = await _favoriteStore.getByType(profileId, type);
       collections.sort(
         (a, b) => newestFirst
             ? b.addedAt.compareTo(a.addedAt)
@@ -197,7 +219,7 @@ class IsarFavoritesDataSource {
     await _ensureReady();
     try {
       final collections =
-          await _favoriteStore.getAddedAfter(threshold, type: type);
+          await _favoriteStore.getAddedAfter(profileId, threshold, type: type);
       collections.sort((a, b) => a.addedAt.compareTo(b.addedAt));
       return collections
           .map((collection) => collection.toModel())
@@ -248,7 +270,10 @@ class IsarFavoritesDataSource {
 
   Future<FavoriteCollection> _mapModel(FavoriteModel favorite) async {
     await _ensureReady();
-    final collection = favorite.toCollection();
+    // Stamped here rather than trusted from the caller: the profile is part of
+    // the row's primary key, so a model that arrived without one — or with a
+    // stale one — would be written under the wrong id.
+    final collection = favorite.copyWith(profileId: profileId).toCollection();
     switch (favorite.itemType) {
       case FavoriteItemType.media:
         collection.media.value =
@@ -303,7 +328,13 @@ class IsarFavoritesDataSource {
 
 /// Contract abstracting access to persisted [FavoriteCollection] records.
 abstract interface class FavoriteCollectionStore {
+  /// Every row in the collection, across all profiles.
+  ///
+  /// For the migrations, which have to see and re-key rows regardless of which
+  /// profile owns them. Application reads want [getByProfileId].
   Future<List<FavoriteCollection>> getAll();
+
+  Future<List<FavoriteCollection>> getByProfileId(String profileId);
 
   Future<void> putAll(List<FavoriteCollection> favorites);
 
@@ -315,6 +346,9 @@ abstract interface class FavoriteCollectionStore {
 
   Future<void> deleteByIds(List<Id> ids);
 
+  /// Deletes every favorite owned by [profileId].
+  Future<void> deleteByProfileId(String profileId);
+
   /// Looks a row up by its Isar primary key.
   ///
   /// Used by the key migration to tell a row stored under the legacy id from one
@@ -322,15 +356,20 @@ abstract interface class FavoriteCollectionStore {
   Future<FavoriteCollection?> getById(Id id);
 
   Future<FavoriteCollection?> getByCompositeId(
+    String profileId,
     String itemId,
     FavoriteItemType type,
   );
 
-  Future<List<FavoriteCollection>> getByItemId(String itemId);
+  Future<List<FavoriteCollection>> getByItemId(String profileId, String itemId);
 
-  Future<List<FavoriteCollection>> getByType(FavoriteItemType type);
+  Future<List<FavoriteCollection>> getByType(
+    String profileId,
+    FavoriteItemType type,
+  );
 
   Future<List<FavoriteCollection>> getAddedAfter(
+    String profileId,
     DateTime threshold, {
     FavoriteItemType? type,
   });
@@ -358,6 +397,11 @@ class IsarFavoriteCollectionStore implements FavoriteCollectionStore {
   @override
   Future<List<FavoriteCollection>> getAll() {
     return _collection.where().findAll();
+  }
+
+  @override
+  Future<List<FavoriteCollection>> getByProfileId(String profileId) {
+    return _collection.filter().profileIdEqualTo(profileId).findAll();
   }
 
   @override
@@ -389,33 +433,56 @@ class IsarFavoriteCollectionStore implements FavoriteCollectionStore {
   }
 
   @override
+  Future<void> deleteByProfileId(String profileId) async {
+    await _collection.filter().profileIdEqualTo(profileId).deleteAll();
+  }
+
+  @override
   Future<FavoriteCollection?> getById(Id id) => _collection.get(id);
 
   @override
   Future<FavoriteCollection?> getByCompositeId(
+    String profileId,
     String itemId,
     FavoriteItemType type,
   ) {
-    return _collection.get(favoriteCollectionId(itemId, type));
+    return _collection.get(favoriteCollectionId(profileId, itemId, type));
   }
 
   @override
-  Future<List<FavoriteCollection>> getByItemId(String itemId) {
-    return _collection.filter().itemIdEqualTo(itemId).findAll();
+  Future<List<FavoriteCollection>> getByItemId(
+    String profileId,
+    String itemId,
+  ) {
+    return _collection
+        .filter()
+        .profileIdEqualTo(profileId)
+        .itemIdEqualTo(itemId)
+        .findAll();
   }
 
   @override
-  Future<List<FavoriteCollection>> getByType(FavoriteItemType type) {
-    return _collection.filter().itemTypeEqualTo(type).findAll();
+  Future<List<FavoriteCollection>> getByType(
+    String profileId,
+    FavoriteItemType type,
+  ) {
+    return _collection
+        .filter()
+        .profileIdEqualTo(profileId)
+        .itemTypeEqualTo(type)
+        .findAll();
   }
 
   @override
   Future<List<FavoriteCollection>> getAddedAfter(
+    String profileId,
     DateTime threshold, {
     FavoriteItemType? type,
   }) {
-    var query =
-        _collection.filter().addedAtGreaterThan(threshold, include: false);
+    var query = _collection
+        .filter()
+        .profileIdEqualTo(profileId)
+        .addedAtGreaterThan(threshold, include: false);
     if (type != null) {
       query = query.itemTypeEqualTo(type);
     }

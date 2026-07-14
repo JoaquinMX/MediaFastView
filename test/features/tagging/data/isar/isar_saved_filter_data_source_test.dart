@@ -15,6 +15,7 @@ SavedFilterModel _filter(
 }) {
   return SavedFilterModel(
     id: id,
+    profileId: 'profile-1',
     name: name,
     requiredTagIds: const ['tag-beach'],
     optionalTagIds: const ['tag-family'],
@@ -37,6 +38,7 @@ void main() {
     store = InMemorySavedFilterCollectionStore();
     dataSource = IsarSavedFilterDataSource(
       database,
+      profileId: 'profile-1',
       storeBuilder: (_) => store,
     );
   });

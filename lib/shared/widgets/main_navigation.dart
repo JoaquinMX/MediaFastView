@@ -5,6 +5,7 @@ import '../../features/media_library/presentation/screens/directory_grid_screen.
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/tagging/presentation/screens/tags_screen.dart';
 import '../../features/tagging/presentation/view_models/tags_view_model.dart';
+import '../providers/active_profile_provider.dart';
 import '../providers/navigation_provider.dart';
 
 /// Main navigation widget with bottom navigation bar.
@@ -21,6 +22,18 @@ class MainNavigation extends ConsumerWidget {
     ref.listen<AppTab>(selectedTabProvider, (previous, next) {
       if (previous != next && next == AppTab.tags) {
         ref.read(tagsViewModelProvider.notifier).refreshTags();
+      }
+    });
+
+    // Switching profiles rebuilds every scoped provider, and the view models
+    // reload themselves when they are recreated. Reading the notifier here is
+    // what guarantees the Tags one is actually *alive* to be recreated: it is
+    // autoDispose, and if the user switches while sitting on the Library tab
+    // nothing is listening to it, so it would only wake up — already scoped
+    // correctly — on the next visit.
+    ref.listen<String>(activeProfileIdProvider, (previous, next) {
+      if (previous != next) {
+        ref.read(tagsViewModelProvider.notifier).loadTags();
       }
     });
 

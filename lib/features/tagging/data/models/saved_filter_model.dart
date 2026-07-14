@@ -14,6 +14,7 @@ part 'saved_filter_model.g.dart';
 class SavedFilterModel with _$SavedFilterModel {
   const factory SavedFilterModel({
     required String id,
+    @Default('') String profileId,
     required String name,
     @Default(<String>[]) List<String> requiredTagIds,
     @Default(<String>[]) List<String> optionalTagIds,

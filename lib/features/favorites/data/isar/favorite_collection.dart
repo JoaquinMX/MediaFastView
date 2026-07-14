@@ -10,38 +10,54 @@ import '../models/favorite_model.dart';
 
 part 'favorite_collection.g.dart';
 
-/// The natural key of a favorite: an item is favorited per type.
-String favoriteKey(String itemId, FavoriteItemType type) =>
-    '${type.name}::$itemId';
+/// The natural key of a favorite: an item is favorited per type, per profile.
+///
+/// The profile has to enter the key because [itemId] is content-derived — the
+/// same media can be favorited independently in two profiles, and without the
+/// profile those two rows would collide on one id.
+String favoriteKey(String profileId, String itemId, FavoriteItemType type) =>
+    '$profileId::${type.name}::$itemId';
 
-/// The Isar primary key for the favorite of [itemId] with [type].
+/// The Isar primary key for the favorite of [itemId] with [type] in [profileId].
 ///
 /// Shared with the data source's delete and lookup paths, which must address
 /// exactly the key the collection was stored under.
-Id favoriteCollectionId(String itemId, FavoriteItemType type) =>
-    isarIdFromKey(favoriteKey(itemId, type));
+Id favoriteCollectionId(
+  String profileId,
+  String itemId,
+  FavoriteItemType type,
+) =>
+    isarIdFromKey(favoriteKey(profileId, itemId, type));
 
 /// Isar collection representing a favorite item stored by the user.
 @collection
 class FavoriteCollection {
   FavoriteCollection({
     required this.itemId,
+    required this.profileId,
     required this.itemType,
     required this.addedAt,
     this.metadataJson,
   });
 
-  /// Unique hash-based identifier derived from item type and ID.
-  Id get id => favoriteCollectionId(itemId, itemType);
+  /// Unique hash-based identifier derived from profile, item type and ID.
+  Id get id => favoriteCollectionId(profileId, itemId, itemType);
   set id(Id value) {}
 
   /// Stable identifier for the favorited item.
   @Index(
     unique: true,
     replace: true,
-    composite: [CompositeIndex('itemType')],
+    composite: [CompositeIndex('itemType'), CompositeIndex('profileId')],
   )
   String itemId;
+
+  /// The profile that owns this favorite.
+  ///
+  /// Indexed separately from the composite above, which leads on [itemId] and so
+  /// cannot serve a scan-by-profile.
+  @Index(type: IndexType.hash)
+  String profileId;
 
   /// Item type (media or directory).
   @Enumerated(EnumType.name)
@@ -66,6 +82,7 @@ extension FavoriteCollectionMapper on FavoriteCollection {
   FavoriteModel toModel() {
     return FavoriteModel(
       itemId: itemId,
+      profileId: profileId,
       itemType: itemType,
       addedAt: addedAt,
       metadata: metadataJson == null
@@ -84,6 +101,7 @@ extension FavoriteModelIsarMapper on FavoriteModel {
   FavoriteCollection toCollection() {
     return FavoriteCollection(
       itemId: itemId,
+      profileId: profileId,
       itemType: itemType,
       addedAt: addedAt,
       metadataJson: metadata == null ? null : jsonEncode(metadata),

@@ -7,6 +7,8 @@ import 'package:media_fast_view/features/media_library/data/isar/directory_colle
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/media_collection.dart';
+import 'package:media_fast_view/features/profiles/data/isar/isar_profile_data_source.dart';
+import 'package:media_fast_view/features/profiles/data/isar/profile_collection.dart';
 import 'package:media_fast_view/features/tagging/data/isar/isar_saved_filter_data_source.dart';
 import 'package:media_fast_view/features/tagging/data/isar/isar_tag_data_source.dart';
 import 'package:media_fast_view/features/tagging/data/isar/saved_filter_collection.dart';
@@ -61,6 +63,24 @@ class InMemoryDirectoryCollectionStore implements DirectoryCollectionStore {
       }
     }
     return null;
+  }
+
+  @override
+  Future<DirectoryCollection?> getByPath(String path) async {
+    for (final directory in _data.values) {
+      if (directory.path.toLowerCase() == path.toLowerCase()) {
+        return _clone(directory);
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<List<DirectoryCollection>> getByProfileId(String profileId) async {
+    return _data.values
+        .where((directory) => directory.profileIds.contains(profileId))
+        .map(_clone)
+        .toList(growable: false);
   }
 
   @override
@@ -205,6 +225,19 @@ class InMemoryTagCollectionStore implements TagCollectionStore {
       data.values.map(_clone).toList(growable: false);
 
   @override
+  Future<List<TagCollection>> getByProfileId(String profileId) async {
+    return data.values
+        .where((tag) => tag.profileId == profileId)
+        .map(_clone)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> deleteByProfileId(String profileId) async {
+    data.removeWhere((_, tag) => tag.profileId == profileId);
+  }
+
+  @override
   Future<TagCollection?> getByTagId(String tagId) async {
     final tag = data[isarIdForString(tagId)];
     return tag == null ? null : _clone(tag);
@@ -266,11 +299,26 @@ class InMemoryFavoriteCollectionStore implements FavoriteCollectionStore {
       data.values.map(_clone).toList(growable: false);
 
   @override
+  Future<List<FavoriteCollection>> getByProfileId(String profileId) async {
+    return data.values
+        .where((favorite) => favorite.profileId == profileId)
+        .map(_clone)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> deleteByProfileId(String profileId) async {
+    data.removeWhere((_, favorite) => favorite.profileId == profileId);
+  }
+
+  @override
   Future<List<FavoriteCollection>> getAddedAfter(
+    String profileId,
     DateTime threshold, {
     FavoriteItemType? type,
   }) async {
     return data.values
+        .where((favorite) => favorite.profileId == profileId)
         .where((favorite) => favorite.addedAt.isAfter(threshold))
         .where((favorite) => type == null || favorite.itemType == type)
         .map(_clone)
@@ -279,24 +327,34 @@ class InMemoryFavoriteCollectionStore implements FavoriteCollectionStore {
 
   @override
   Future<FavoriteCollection?> getByCompositeId(
+    String profileId,
     String itemId,
     FavoriteItemType type,
   ) async {
-    final favorite = data[isarIdForString(favoriteKey(itemId, type))];
+    final favorite =
+        data[isarIdForString(favoriteKey(profileId, itemId, type))];
     return favorite == null ? null : _clone(favorite);
   }
 
   @override
-  Future<List<FavoriteCollection>> getByItemId(String itemId) async {
+  Future<List<FavoriteCollection>> getByItemId(
+    String profileId,
+    String itemId,
+  ) async {
     return data.values
+        .where((favorite) => favorite.profileId == profileId)
         .where((favorite) => favorite.itemId == itemId)
         .map(_clone)
         .toList(growable: false);
   }
 
   @override
-  Future<List<FavoriteCollection>> getByType(FavoriteItemType type) async {
+  Future<List<FavoriteCollection>> getByType(
+    String profileId,
+    FavoriteItemType type,
+  ) async {
     return data.values
+        .where((favorite) => favorite.profileId == profileId)
         .where((favorite) => favorite.itemType == type)
         .map(_clone)
         .toList(growable: false);
@@ -346,6 +404,19 @@ class InMemorySavedFilterCollectionStore
       data.values.map(_clone).toList(growable: false);
 
   @override
+  Future<List<SavedFilterCollection>> getByProfileId(String profileId) async {
+    return data.values
+        .where((filter) => filter.profileId == profileId)
+        .map(_clone)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> deleteByProfileId(String profileId) async {
+    data.removeWhere((_, filter) => filter.profileId == profileId);
+  }
+
+  @override
   Future<void> put(SavedFilterCollection filter) async =>
       data[filter.id] = _clone(filter);
 
@@ -361,4 +432,36 @@ class InMemorySavedFilterCollectionStore
 
   SavedFilterCollection _clone(SavedFilterCollection filter) =>
       filter.toModel().toCollection();
+}
+
+/// In-memory [ProfileCollectionStore]. See [InMemoryTagCollectionStore].
+class InMemoryProfileCollectionStore implements ProfileCollectionStore {
+  final Map<Id, ProfileCollection> data = <Id, ProfileCollection>{};
+
+  @override
+  Future<void> clear() async => data.clear();
+
+  @override
+  Future<void> deleteById(Id id) async => data.remove(id);
+
+  @override
+  Future<List<ProfileCollection>> getAll() async =>
+      data.values.map(_clone).toList(growable: false);
+
+  @override
+  Future<void> put(ProfileCollection profile) async =>
+      data[profile.id] = _clone(profile);
+
+  @override
+  Future<void> putAll(List<ProfileCollection> profiles) async {
+    for (final profile in profiles) {
+      await put(profile);
+    }
+  }
+
+  @override
+  Future<T> writeTxn<T>(Future<T> Function() action) => action();
+
+  ProfileCollection _clone(ProfileCollection profile) =>
+      profile.toModel().toCollection();
 }

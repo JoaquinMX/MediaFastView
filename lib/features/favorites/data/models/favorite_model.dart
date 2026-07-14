@@ -11,6 +11,7 @@ part 'favorite_model.g.dart';
 class FavoriteModel with _$FavoriteModel {
   const factory FavoriteModel({
     required String itemId,
+    @Default('') String profileId,
     required FavoriteItemType itemType,
     required DateTime addedAt,
     Map<String, dynamic>? metadata,

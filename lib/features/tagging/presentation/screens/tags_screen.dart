@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/file_transfer_result.dart';
+import '../../../profiles/presentation/widgets/profile_switcher.dart';
 import '../../../../shared/providers/media_mutation_bus.dart';
 import '../../../../shared/providers/navigation_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
@@ -158,7 +159,7 @@ class _TagsScreenState extends ConsumerState<TagsScreen> {
             appBar: isSelecting
                 ? _buildSelectionAppBar(state, viewModel)
                 : AppBar(
-                    title: const Text('Tags'),
+                    title: const ProfileSwitcher(fallbackTitle: 'Tags'),
                     actions: [
                       IconButton(
                         icon: const Icon(Icons.bookmark_outline),

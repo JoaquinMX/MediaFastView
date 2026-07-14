@@ -129,8 +129,13 @@ class IsarKeyMigration {
       return 0;
     }
 
+    // On a pre-profile database every row's `profileId` is still empty, so this
+    // dedupes on type+item exactly as it did before profiles existed. The
+    // profile migration runs next and re-keys these rows again onto the real
+    // profile; both are self-detecting, so the pair converges after one launch.
     final unique = <String, FavoriteCollection>{
-      for (final row in rows) favoriteKey(row.itemId, row.itemType): row,
+      for (final row in rows)
+        favoriteKey(row.profileId, row.itemId, row.itemType): row,
     };
 
     await store.writeTxn(() async {

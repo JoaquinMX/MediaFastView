@@ -6,12 +6,15 @@ import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/core/services/file_transfer_result.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
+import 'package:media_fast_view/features/media_library/data/isar/directory_collection.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
+import 'package:media_fast_view/features/media_library/data/models/directory_model.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/directory_repository.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/file_operations_repository.dart';
+import 'package:media_fast_view/shared/utils/directory_id_utils.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/delete_directory_use_case.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/delete_file_use_case.dart';
 import 'package:media_fast_view/features/media_library/domain/use_cases/reconcile_transferred_media_use_case.dart';
@@ -175,10 +178,25 @@ class _NoopBookmarkService implements BookmarkService {
 }
 
 IsarMediaDataSource _inMemoryMediaDataSource() {
+  // Media is visible to a profile through the directory that contains it, so the
+  // root everything in this file sits under has to be one the profile owns.
+  final directoryStore = InMemoryDirectoryCollectionStore()
+    ..put(
+      DirectoryModel(
+        id: generateDirectoryId('/library'),
+        path: '/library',
+        name: 'library',
+        profileIds: const <String>['profile-1'],
+        lastModified: DateTime.utc(2024, 1, 1),
+      ).toCollection(),
+    );
+
   return IsarMediaDataSource(
     FakeIsarDatabase(),
+    profileId: 'profile-1',
     mediaStoreBuilder: (_) => InMemoryMediaCollectionStore(),
-    directoryStoreBuilder: (_) => InMemoryDirectoryCollectionStore(),
+    directoryStoreBuilder: (_) => directoryStore,
+    tagStoreBuilder: (_) => InMemoryTagCollectionStore(),
   );
 }
 

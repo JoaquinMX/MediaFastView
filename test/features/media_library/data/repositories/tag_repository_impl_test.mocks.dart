@@ -3,13 +3,14 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i3;
+import 'dart:async' as _i4;
 
 import 'package:media_fast_view/features/media_library/data/models/tag_model.dart'
-    as _i4;
+    as _i5;
 import 'package:media_fast_view/features/tagging/data/isar/isar_tag_data_source.dart'
     as _i2;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:mockito/src/dummies.dart' as _i3;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -33,81 +34,90 @@ class MockIsarTagDataSource extends _i1.Mock implements _i2.IsarTagDataSource {
   }
 
   @override
-  _i3.Future<List<_i4.TagModel>> getTags() => (super.noSuchMethod(
+  String get profileId => (super.noSuchMethod(
+        Invocation.getter(#profileId),
+        returnValue: _i3.dummyValue<String>(
+          this,
+          Invocation.getter(#profileId),
+        ),
+      ) as String);
+
+  @override
+  _i4.Future<List<_i5.TagModel>> getTags() => (super.noSuchMethod(
         Invocation.method(
           #getTags,
           [],
         ),
-        returnValue: _i3.Future<List<_i4.TagModel>>.value(<_i4.TagModel>[]),
-      ) as _i3.Future<List<_i4.TagModel>>);
+        returnValue: _i4.Future<List<_i5.TagModel>>.value(<_i5.TagModel>[]),
+      ) as _i4.Future<List<_i5.TagModel>>);
 
   @override
-  _i3.Future<void> saveTags(List<_i4.TagModel>? tags) => (super.noSuchMethod(
+  _i4.Future<void> saveTags(List<_i5.TagModel>? tags) => (super.noSuchMethod(
         Invocation.method(
           #saveTags,
           [tags],
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<void> addTag(_i4.TagModel? tag) => (super.noSuchMethod(
+  _i4.Future<void> addTag(_i5.TagModel? tag) => (super.noSuchMethod(
         Invocation.method(
           #addTag,
           [tag],
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<void> updateTag(_i4.TagModel? tag) => (super.noSuchMethod(
+  _i4.Future<void> updateTag(_i5.TagModel? tag) => (super.noSuchMethod(
         Invocation.method(
           #updateTag,
           [tag],
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<void> removeTag(String? id) => (super.noSuchMethod(
+  _i4.Future<void> removeTag(String? id) => (super.noSuchMethod(
         Invocation.method(
           #removeTag,
           [id],
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<void> clearTags() => (super.noSuchMethod(
+  _i4.Future<void> clearTags() => (super.noSuchMethod(
         Invocation.method(
           #clearTags,
           [],
         ),
-        returnValue: _i3.Future<void>.value(),
-        returnValueForMissingStub: _i3.Future<void>.value(),
-      ) as _i3.Future<void>);
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.Future<List<_i4.TagModel>> getTagsForMedia(String? mediaId) =>
+  _i4.Future<List<_i5.TagModel>> getTagsForMedia(String? mediaId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getTagsForMedia,
           [mediaId],
         ),
-        returnValue: _i3.Future<List<_i4.TagModel>>.value(<_i4.TagModel>[]),
-      ) as _i3.Future<List<_i4.TagModel>>);
+        returnValue: _i4.Future<List<_i5.TagModel>>.value(<_i5.TagModel>[]),
+      ) as _i4.Future<List<_i5.TagModel>>);
 
   @override
-  _i3.Future<List<_i4.TagModel>> getTagsForDirectory(String? directoryId) =>
+  _i4.Future<List<_i5.TagModel>> getTagsForDirectory(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getTagsForDirectory,
           [directoryId],
         ),
-        returnValue: _i3.Future<List<_i4.TagModel>>.value(<_i4.TagModel>[]),
-      ) as _i3.Future<List<_i4.TagModel>>);
+        returnValue: _i4.Future<List<_i5.TagModel>>.value(<_i5.TagModel>[]),
+      ) as _i4.Future<List<_i5.TagModel>>);
 }

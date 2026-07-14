@@ -15,7 +15,7 @@ import 'package:media_fast_view/features/favorites/domain/repositories/favorites
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart'
     as _i14;
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart'
-    as _i15;
+    as _i16;
 import 'package:media_fast_view/features/media_library/domain/entities/directory_entity.dart'
     as _i7;
 import 'package:media_fast_view/features/media_library/domain/entities/directory_media_counts.dart'
@@ -31,6 +31,7 @@ import 'package:media_fast_view/features/media_library/domain/repositories/media
 import 'package:media_fast_view/features/media_library/domain/repositories/tag_repository.dart'
     as _i3;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:mockito/src/dummies.dart' as _i15;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -572,17 +573,26 @@ class MockIsarMediaDataSource extends _i1.Mock
   }
 
   @override
-  _i4.Future<List<_i15.MediaModel>> getMedia() => (super.noSuchMethod(
+  String get profileId => (super.noSuchMethod(
+        Invocation.getter(#profileId),
+        returnValue: _i15.dummyValue<String>(
+          this,
+          Invocation.getter(#profileId),
+        ),
+      ) as String);
+
+  @override
+  _i4.Future<List<_i16.MediaModel>> getMedia() => (super.noSuchMethod(
         Invocation.method(
           #getMedia,
           [],
         ),
         returnValue:
-            _i4.Future<List<_i15.MediaModel>>.value(<_i15.MediaModel>[]),
-      ) as _i4.Future<List<_i15.MediaModel>>);
+            _i4.Future<List<_i16.MediaModel>>.value(<_i16.MediaModel>[]),
+      ) as _i4.Future<List<_i16.MediaModel>>);
 
   @override
-  _i4.Future<void> saveMedia(List<_i15.MediaModel>? media) =>
+  _i4.Future<void> saveMedia(List<_i16.MediaModel>? media) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveMedia,
@@ -593,7 +603,7 @@ class MockIsarMediaDataSource extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<void> upsertMedia(List<_i15.MediaModel>? media) =>
+  _i4.Future<void> upsertMedia(List<_i16.MediaModel>? media) =>
       (super.noSuchMethod(
         Invocation.method(
           #upsertMedia,
@@ -604,18 +614,18 @@ class MockIsarMediaDataSource extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i15.MediaModel>> getMediaForDirectory(String? directoryId) =>
+  _i4.Future<List<_i16.MediaModel>> getMediaForDirectory(String? directoryId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getMediaForDirectory,
           [directoryId],
         ),
         returnValue:
-            _i4.Future<List<_i15.MediaModel>>.value(<_i15.MediaModel>[]),
-      ) as _i4.Future<List<_i15.MediaModel>>);
+            _i4.Future<List<_i16.MediaModel>>.value(<_i16.MediaModel>[]),
+      ) as _i4.Future<List<_i16.MediaModel>>);
 
   @override
-  _i4.Future<void> addMedia(List<_i15.MediaModel>? mediaItems) =>
+  _i4.Future<void> addMedia(List<_i16.MediaModel>? mediaItems) =>
       (super.noSuchMethod(
         Invocation.method(
           #addMedia,
@@ -728,7 +738,7 @@ class MockIsarMediaDataSource extends _i1.Mock
   @override
   _i4.Future<void> replaceMedia({
     required String? oldMediaId,
-    required _i15.MediaModel? newMedia,
+    required _i16.MediaModel? newMedia,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -745,7 +755,7 @@ class MockIsarMediaDataSource extends _i1.Mock
 
   @override
   _i4.Future<void> replaceMediaBatch(
-          List<({_i15.MediaModel newMedia, String oldMediaId})>? entries) =>
+          List<({_i16.MediaModel newMedia, String oldMediaId})>? entries) =>
       (super.noSuchMethod(
         Invocation.method(
           #replaceMediaBatch,
@@ -756,15 +766,15 @@ class MockIsarMediaDataSource extends _i1.Mock
       ) as _i4.Future<void>);
 
   @override
-  _i4.Future<List<_i15.MediaModel>> getMediaUnderPath(String? directoryPath) =>
+  _i4.Future<List<_i16.MediaModel>> getMediaUnderPath(String? directoryPath) =>
       (super.noSuchMethod(
         Invocation.method(
           #getMediaUnderPath,
           [directoryPath],
         ),
         returnValue:
-            _i4.Future<List<_i15.MediaModel>>.value(<_i15.MediaModel>[]),
-      ) as _i4.Future<List<_i15.MediaModel>>);
+            _i4.Future<List<_i16.MediaModel>>.value(<_i16.MediaModel>[]),
+      ) as _i4.Future<List<_i16.MediaModel>>);
 
   @override
   _i4.Future<void> clearMedia() => (super.noSuchMethod(

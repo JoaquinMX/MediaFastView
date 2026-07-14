@@ -55,23 +55,15 @@ void main() {
     });
 
     group('addDirectory', () {
-      test('preserves existing tag assignments when updating a known directory',
-          () async {
-        const directoryId = 'dir-1';
-        const directoryPath = '/test/path';
-        final existingModel = DirectoryModel(
-          id: directoryId,
-          path: directoryPath,
-          name: 'Test',
-          thumbnailPath: null,
-          tagIds: const ['tag-a'],
-          lastModified: DateTime(2024, 1, 1),
-          bookmarkData: 'existing-bookmark',
-        );
+      const directoryId = 'dir-1';
+      const directoryPath = '/test/path';
 
-        when(isarDirectoryDataSource.getDirectories()).thenAnswer(
-          (_) async => [existingModel],
-        );
+      /// Stubs the happy path around whatever `existing` row is on disk.
+      void stubAdd(DirectoryModel? existing) {
+        when(isarDirectoryDataSource.profileId).thenReturn('profile-1');
+        when(
+          isarDirectoryDataSource.getDirectoryByPathUnscoped(directoryPath),
+        ).thenAnswer((_) async => existing);
         when(localDirectoryDataSource.validateDirectory(any))
             .thenAnswer((_) async => true);
         when(bookmarkService.createBookmark(any))
@@ -81,19 +73,35 @@ void main() {
         );
         when(isarDirectoryDataSource.updateDirectory(any))
             .thenAnswer((_) async {});
+        when(isarDirectoryDataSource.addDirectory(any)).thenAnswer((_) async {});
         when(isarMediaDataSource.migrateDirectoryId(any, any))
             .thenAnswer((_) async {});
+      }
 
-        final directory = DirectoryEntity(
+      DirectoryEntity incoming() => DirectoryEntity(
+            id: directoryId,
+            path: directoryPath,
+            name: 'Test',
+            thumbnailPath: null,
+            tagIds: const [],
+            lastModified: DateTime(2024, 1, 1),
+          );
+
+      test('preserves existing tag assignments when updating a known directory',
+          () async {
+        final existingModel = DirectoryModel(
           id: directoryId,
           path: directoryPath,
           name: 'Test',
           thumbnailPath: null,
-          tagIds: const [],
+          tagIds: const ['tag-a'],
+          profileIds: const ['profile-1'],
           lastModified: DateTime(2024, 1, 1),
+          bookmarkData: 'existing-bookmark',
         );
+        stubAdd(existingModel);
 
-        await repository.addDirectory(directory);
+        await repository.addDirectory(incoming());
 
         final capturedModel =
             verify(isarDirectoryDataSource.updateDirectory(captureAny))
@@ -102,6 +110,55 @@ void main() {
 
         expect(capturedModel.tagIds, equals(existingModel.tagIds));
         expect(capturedModel.bookmarkData, equals(existingModel.bookmarkData));
+      });
+
+      test('joins the active profile to a directory another profile owns',
+          () async {
+        // The regression that motivated the unscoped path lookup. The row belongs
+        // to profile-2, so a profile-scoped `getDirectories()` cannot see it —
+        // and the insert branch would have replaced it through the unique index
+        // on `path`, taking its bookmark, its scan cache and profile-2's tags.
+        final foreignModel = DirectoryModel(
+          id: directoryId,
+          path: directoryPath,
+          name: 'Test',
+          thumbnailPath: null,
+          tagIds: const ['tag-owned-by-profile-2'],
+          profileIds: const ['profile-2'],
+          lastModified: DateTime(2024, 1, 1),
+          bookmarkData: 'profile-2-bookmark',
+          lastScanAt: DateTime(2024, 3, 1),
+        );
+        stubAdd(foreignModel);
+
+        await repository.addDirectory(incoming());
+
+        verifyNever(isarDirectoryDataSource.addDirectory(any));
+        final capturedModel =
+            verify(isarDirectoryDataSource.updateDirectory(captureAny))
+                .captured
+                .single as DirectoryModel;
+
+        expect(
+          capturedModel.profileIds,
+          containsAll(<String>['profile-1', 'profile-2']),
+        );
+        expect(capturedModel.bookmarkData, equals('profile-2-bookmark'));
+        expect(capturedModel.lastScanAt, equals(DateTime(2024, 3, 1)));
+        expect(capturedModel.tagIds, contains('tag-owned-by-profile-2'));
+      });
+
+      test('a brand new directory joins the active profile', () async {
+        stubAdd(null);
+
+        await repository.addDirectory(incoming());
+
+        final capturedModel =
+            verify(isarDirectoryDataSource.addDirectory(captureAny))
+                .captured
+                .single as DirectoryModel;
+
+        expect(capturedModel.profileIds, equals(<String>['profile-1']));
       });
     });
 

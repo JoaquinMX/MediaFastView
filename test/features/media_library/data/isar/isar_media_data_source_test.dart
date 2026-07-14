@@ -3,26 +3,46 @@ import 'package:media_fast_view/features/media_library/data/isar/directory_colle
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/models/directory_model.dart';
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
+import 'package:media_fast_view/features/media_library/data/models/tag_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
+import 'package:media_fast_view/features/tagging/data/isar/tag_collection.dart';
 
 import '../../../../helpers/in_memory_isar_stores.dart';
+
+const String _profile = 'profile-1';
 
 void main() {
   group('IsarMediaDataSource', () {
     late FakeIsarDatabase database;
     late InMemoryDirectoryCollectionStore directoryStore;
     late InMemoryMediaCollectionStore mediaStore;
+    late InMemoryTagCollectionStore tagStore;
     late IsarMediaDataSource dataSource;
 
-    setUp(() {
+    setUp(() async {
       database = FakeIsarDatabase();
       directoryStore = InMemoryDirectoryCollectionStore();
       mediaStore = InMemoryMediaCollectionStore();
+      tagStore = InMemoryTagCollectionStore();
       dataSource = IsarMediaDataSource(
         database,
+        profileId: _profile,
         mediaStoreBuilder: (_) => mediaStore,
         directoryStoreBuilder: (_) => directoryStore,
+        tagStoreBuilder: (_) => tagStore,
       );
+
+      for (final tagId in <String>['tag-1', 'tag-2', 'a', 'b', 'c']) {
+        await tagStore.put(
+          TagModel(
+            id: tagId,
+            profileId: _profile,
+            name: tagId,
+            color: 0xFF000000,
+            createdAt: DateTime.utc(2024, 1, 1),
+          ).toCollection(),
+        );
+      }
     });
 
     DirectoryModel _buildDirectory(String id) {
@@ -30,6 +50,7 @@ void main() {
         id: id,
         path: '/path/$id',
         name: 'Directory $id',
+        profileIds: const <String>[_profile],
         lastModified: DateTime.utc(2024, 1, 1),
       );
     }
@@ -41,7 +62,9 @@ void main() {
     }) {
       return MediaModel(
         id: id,
-        path: '/media/$id',
+        // Under its directory's path: a profile sees media through the
+        // directories it owns, and `getMedia` matches on path containment.
+        path: '/path/$directoryId/$id',
         name: 'Media $id',
         type: MediaType.image,
         size: 1024,

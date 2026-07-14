@@ -8,6 +8,7 @@ class DirectoryEntity {
     required this.name,
     required this.thumbnailPath,
     required this.tagIds,
+    this.profileIds = const <String>[],
     required this.lastModified,
     this.bookmarkData,
     this.lastScanAt,
@@ -21,7 +22,17 @@ class DirectoryEntity {
   final String path;
   final String name;
   final String? thumbnailPath;
+
+  /// Tags the active profile has assigned to this directory.
+  ///
+  /// Already scoped: the repository filters out tag ids owned by other profiles
+  /// that share this directory, so this list can be rendered and counted
+  /// directly.
   final List<String> tagIds;
+
+  /// Profiles this directory belongs to.
+  final List<String> profileIds;
+
   final DateTime lastModified;
   final String? bookmarkData;
   final DateTime? lastScanAt;
@@ -37,6 +48,7 @@ class DirectoryEntity {
     String? name,
     String? thumbnailPath,
     List<String>? tagIds,
+    List<String>? profileIds,
     DateTime? lastModified,
     String? bookmarkData,
     DateTime? lastScanAt,
@@ -51,6 +63,7 @@ class DirectoryEntity {
       name: name ?? this.name,
       thumbnailPath: thumbnailPath ?? this.thumbnailPath,
       tagIds: tagIds ?? this.tagIds,
+      profileIds: profileIds ?? this.profileIds,
       lastModified: lastModified ?? this.lastModified,
       bookmarkData: bookmarkData ?? this.bookmarkData,
       lastScanAt: lastScanAt ?? this.lastScanAt,
@@ -82,6 +95,7 @@ class DirectoryEntity {
         'name: $name, '
         'thumbnailPath: $thumbnailPath, '
         'tagIds: $tagIds, '
+        'profileIds: $profileIds, '
         'lastModified: $lastModified, '
         'bookmarkData: $bookmarkData, '
         'lastScanAt: $lastScanAt, '

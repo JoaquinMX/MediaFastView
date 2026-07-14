@@ -25,6 +25,7 @@ void main() {
       directoryStore = InMemoryDirectoryCollectionStore();
       dataSource = IsarFavoritesDataSource(
         database,
+        profileId: 'profile-1',
         favoriteStoreBuilder: (_) => favoriteStore,
         mediaStoreBuilder: (_) => mediaStore,
         directoryStoreBuilder: (_) => directoryStore,
@@ -35,9 +36,11 @@ void main() {
       String id,
       FavoriteItemType type, {
       DateTime? addedAt,
+      String profileId = 'profile-1',
     }) {
       return FavoriteModel(
         itemId: id,
+        profileId: profileId,
         itemType: type,
         addedAt: addedAt ?? DateTime.utc(2024, 1, 1),
       );

@@ -55,7 +55,9 @@ void main() {
   void seedLegacyFavorites(Iterable<FavoriteCollection> rows) {
     for (final row in rows) {
       favorites.seedAt(
-        legacyIsarIdForString(favoriteKey(row.itemId, row.itemType)),
+        legacyIsarIdForString(
+          favoriteKey(row.profileId, row.itemId, row.itemType),
+        ),
         row,
       );
     }
@@ -95,12 +97,18 @@ void main() {
       final report = await migrate();
 
       expect(report.favoritesRekeyed, 3);
+      // The profile is empty here on purpose: the key migration runs against a
+      // pre-profiles database, before IsarProfileMigration adopts these rows.
       expect(
-        await favorites.getByCompositeId('dir-1', FavoriteItemType.directory),
+        await favorites.getByCompositeId(
+          '',
+          'dir-1',
+          FavoriteItemType.directory,
+        ),
         isNotNull,
       );
       expect(
-        await favorites.getByCompositeId('media-1', FavoriteItemType.media),
+        await favorites.getByCompositeId('', 'media-1', FavoriteItemType.media),
         isNotNull,
       );
       expect((await favorites.getAll()).length, 3);

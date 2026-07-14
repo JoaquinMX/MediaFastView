@@ -13,6 +13,7 @@ class DirectoryModel with _$DirectoryModel {
     required String name,
     String? thumbnailPath,
     @Default(<String>[]) List<String> tagIds,
+    @Default(<String>[]) List<String> profileIds,
     required DateTime lastModified,
     String? bookmarkData,
     DateTime? lastScanAt,

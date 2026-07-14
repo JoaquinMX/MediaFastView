@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/directory_picker_service.dart';
+import '../../../profiles/presentation/widgets/profile_switcher.dart';
 
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/navigation_provider.dart';
@@ -239,7 +240,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     WidgetRef ref,
   ) {
     return AppBar(
-      title: const Text('Directories'),
+      title: const ProfileSwitcher(fallbackTitle: 'Directories'),
       actions: [
         IconButton(
           icon: const Icon(Icons.add),

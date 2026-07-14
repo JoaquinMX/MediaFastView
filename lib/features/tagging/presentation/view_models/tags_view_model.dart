@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
@@ -1170,5 +1171,11 @@ final tagsViewModelProvider =
         ref.watch(directoryRepositoryProvider),
         ref.watch(assignTagUseCaseProvider),
       );
+      // Loads itself, like every other view model. `TagsScreen.initState` used to
+      // be the only caller, which was fine while this was built once — but
+      // switching profiles rebuilds it, and the screen is kept alive inside
+      // `MainNavigation`'s IndexedStack, so `initState` never runs again and the
+      // tab would sit on its loading spinner forever.
+      unawaited(viewModel.loadTags());
       return viewModel;
     });
