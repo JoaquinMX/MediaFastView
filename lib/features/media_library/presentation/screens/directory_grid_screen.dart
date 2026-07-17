@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/directory_picker_service.dart';
+import '../../../duplicates/presentation/screens/duplicate_management_screen.dart';
 import '../../../profiles/presentation/widgets/profile_switcher.dart';
 
 import '../../../../shared/providers/grid_columns_provider.dart';
@@ -267,6 +268,16 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
           icon: const Icon(Icons.view_module),
           onPressed: () => _showColumnSelector(context, ref),
         ),
+        if (_isMacOS)
+          IconButton(
+            icon: const Icon(Icons.difference_outlined),
+            tooltip: 'Find duplicate images',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const DuplicateManagementScreen(),
+              ),
+            ),
+          ),
         IconButton(
           icon: const Icon(Icons.help_outline),
           tooltip: 'Keyboard shortcuts (?)',
@@ -275,6 +286,11 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       ],
     );
   }
+
+  /// Duplicate cleanup means moving files to the Trash, which is macOS-only in
+  /// this app, so the entry point follows the same gate as the folder
+  /// move/delete actions.
+  bool get _isMacOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 
   AppBar _buildDirectorySelectionAppBar(
     int selectedCount,

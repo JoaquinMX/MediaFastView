@@ -16,7 +16,7 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 - Scan directories for images, videos, audio, and text documents with lazy metadata caching (`lib/features/media_library/data/data_sources`).
 - Adjustable column density and multiple sort options for both directory and media grids.
 - Marquee (rubber-band) and keyboard multi-select, with bulk tag assignment and bulk favorite toggling.
-- Background duplicate-media scanning with lightweight progress feedback.
+- Perceptual duplicate-image detection with a dedicated review UI (see **Duplicate management**).
 
 ### Media grid & file operations
 - Filter media by type (images, videos, audio, directories), favorites, untagged status, and tags.
@@ -39,6 +39,12 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 ### Favorites & slideshow
 - Toggle favorites for both media and directories, individually or in bulk.
 - Run a full-screen slideshow with overlay controls whose auto-hide delay is configurable in Settings.
+
+### Duplicate management
+- Find visually-similar images across the whole profile library with perceptual (difference-hash) matching (`lib/features/duplicates`), launched from a macOS-gated Library app-bar action.
+- Tune a Strict / Balanced / Loose sensitivity that re-clusters instantly from cached hashes — no rescanning.
+- Review each group side-by-side with resolution, size, format, and path; the suggested keeper (highest resolution by default, or largest/newest) is starred and protected while the rest are pre-selected for the Trash.
+- Dismiss false-positive groups, then move the marked copies to the Trash with a single confirmation; results self-heal via the media mutation bus. Similarity matching covers images (video/audio are excluded).
 
 ### Profiles
 - Named, switchable scopes over the whole library (`lib/features/profiles`). Each profile owns its own directories, tags, favorites, and saved filters; switching re-scopes the entire app.
@@ -127,7 +133,7 @@ Widget and integration test scaffolds live under `test/`. Add coverage for new v
 
 ## Roadmap
 
-- **Duplicate management UI** to review and resolve the duplicates the background scan already surfaces.
+- **Perceptual matching for video** and near-duplicate audio, extending duplicate detection beyond images.
 - **Portable, sidecar tag metadata** (e.g. XMP export/import) so tags travel with files between machines.
 - **Video thumbnail generation** with hover/scrub previews in the grid.
 - **Video chapter tagging** so viewers can jump between tagged segments inside long clips.

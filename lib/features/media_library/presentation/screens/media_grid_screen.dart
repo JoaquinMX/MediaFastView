@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../core/utils/file_size_formatter.dart';
 import '../../../../core/services/directory_picker_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/repository_providers.dart';
@@ -1437,7 +1437,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           children: [
             Text('Path: ${media.path}'),
             Text('Type: ${media.type.name}'),
-            Text('Size: ${_formatFileSize(media.size)}'),
+            Text('Size: ${formatFileSize(media.size)}'),
             Text('Modified: ${_formatDate(media.lastModified)}'),
             if (media.tagIds.isNotEmpty) Text('Tags: ${media.tagIds.length}'),
           ],
@@ -1521,19 +1521,6 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     if (mounted) {
       _focusNode.requestFocus();
     }
-  }
-
-  String _formatFileSize(int bytes) {
-    if (bytes < AppConfig.kbBytes) {
-      return '$bytes ${AppConfig.byteSuffix}';
-    }
-    if (bytes < AppConfig.mbBytes) {
-      return '${(bytes / AppConfig.kbBytes).toStringAsFixed(AppConfig.fileSizeDecimalPlaces)} ${AppConfig.kbSuffix}';
-    }
-    if (bytes < AppConfig.gbBytes) {
-      return '${(bytes / AppConfig.mbBytes).toStringAsFixed(AppConfig.fileSizeDecimalPlaces)} ${AppConfig.mbSuffix}';
-    }
-    return '${(bytes / AppConfig.gbBytes).toStringAsFixed(AppConfig.fileSizeDecimalPlaces)} ${AppConfig.gbSuffix}';
   }
 
   String _formatDate(DateTime date) {

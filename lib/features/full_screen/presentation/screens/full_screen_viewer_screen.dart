@@ -23,6 +23,7 @@ import '../../../../shared/widgets/favorite_toggle_button.dart';
 import '../../../../shared/providers/settings_providers.dart';
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../core/services/file_transfer_result.dart';
+import '../../../../core/utils/file_size_formatter.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
 import '../../../../shared/widgets/finder_media_actions.dart';
 import '../../../../shared/widgets/move_copy_media_action.dart';
@@ -374,7 +375,7 @@ class _FullScreenViewerScreenState
           children: [
             Text('Path: ${media.path}'),
             Text('Type: ${media.type.name}'),
-            Text('Size: ${_formatFileSize(media.size)}'),
+            Text('Size: ${formatFileSize(media.size)}'),
             Text('Modified: ${_formatDate(media.lastModified)}'),
             if (media.tagIds.isNotEmpty) Text('Tags: ${media.tagIds.length}'),
           ],
@@ -504,19 +505,6 @@ class _FullScreenViewerScreenState
   Future<void> _toggleFavoriteAndRefreshTags() async {
     await _viewModel.toggleFavorite();
     await ref.read(tagsViewModelProvider.notifier).refreshFavorites();
-  }
-
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    }
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   String _formatDate(DateTime date) {
