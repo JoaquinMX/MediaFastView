@@ -10,7 +10,9 @@ class SettingsRepositoryImpl implements SettingsRepository {
   const SettingsRepositoryImpl();
 
   static const String _themeKey = 'theme_mode';
-  static const String _thumbnailCachingKey = 'thumbnail_caching_enabled';
+  static const String _thumbnailDiskCacheKey =
+      'thumbnail_disk_cache_enabled_v2';
+  static const String _legacyThumbnailCachingKey = 'thumbnail_caching_enabled';
   static const String _deleteFromSourceKey = 'delete_from_source_enabled';
   static const String _autoplayKey = 'video_autoplay_enabled';
   static const String _loopKey = 'video_loop_enabled';
@@ -30,8 +32,13 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final autoplay = prefs.getBool(_autoplayKey) ?? false;
     final loop = prefs.getBool(_loopKey) ?? false;
     final startMuted = prefs.getBool(_startMutedKey) ?? false;
-    final thumbnailCachingEnabled = prefs.getBool(_thumbnailCachingKey) ?? true;
-    final deleteFromSourceEnabled = prefs.getBool(_deleteFromSourceKey) ?? false;
+    final thumbnailDiskCacheEnabled =
+        prefs.getBool(_thumbnailDiskCacheKey) ?? true;
+    if (prefs.containsKey(_legacyThumbnailCachingKey)) {
+      await prefs.remove(_legacyThumbnailCachingKey);
+    }
+    final deleteFromSourceEnabled =
+        prefs.getBool(_deleteFromSourceKey) ?? false;
     final autoNavigateSiblingDirectories =
         prefs.getBool(_autoNavigateKey) ?? false;
     final navigateToSiblingAfterDirectoryDelete =
@@ -39,17 +46,20 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final showDirectoryTaggedMediaCounts =
         prefs.getBool(_showDirectoryTaggedMediaCountsKey) ?? false;
     final storedHideDelay = prefs.getInt(_slideshowControlsHideDelayKey);
-    final hideDelaySeconds = (storedHideDelay ??
-            const AppSettings.initial().slideshowControlsHideDelay.inSeconds)
-        .clamp(
-          slideshowControlsHideDelayMinSeconds,
-          slideshowControlsHideDelayMaxSeconds,
-        )
-        .toInt();
+    final hideDelaySeconds =
+        (storedHideDelay ??
+                const AppSettings.initial()
+                    .slideshowControlsHideDelay
+                    .inSeconds)
+            .clamp(
+              slideshowControlsHideDelayMinSeconds,
+              slideshowControlsHideDelayMaxSeconds,
+            )
+            .toInt();
 
     return AppSettings(
       themeMode: ThemeMode.values[themeIndex],
-      thumbnailCachingEnabled: thumbnailCachingEnabled,
+      thumbnailDiskCacheEnabled: thumbnailDiskCacheEnabled,
       deleteFromSourceEnabled: deleteFromSourceEnabled,
       playbackSettings: PlaybackSettings(
         autoplayVideos: autoplay,
@@ -60,9 +70,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
       navigateToSiblingAfterDirectoryDelete:
           navigateToSiblingAfterDirectoryDelete,
       showDirectoryTaggedMediaCounts: showDirectoryTaggedMediaCounts,
-      slideshowControlsHideDelay: Duration(
-        seconds: hideDelaySeconds,
-      ),
+      slideshowControlsHideDelay: Duration(seconds: hideDelaySeconds),
     );
   }
 
@@ -73,9 +81,9 @@ class SettingsRepositoryImpl implements SettingsRepository {
   }
 
   @override
-  Future<void> saveThumbnailCachingEnabled(bool enabled) async {
+  Future<void> saveThumbnailDiskCacheEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_thumbnailCachingKey, enabled);
+    await prefs.setBool(_thumbnailDiskCacheKey, enabled);
   }
 
   @override

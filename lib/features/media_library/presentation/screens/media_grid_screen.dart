@@ -165,56 +165,57 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       bookmarkData: widget.bookmarkData,
       navigateToDirectory:
           (
-        path,
-        name,
-        bookmarkData,
-        siblingDirectories,
-        currentIndex, {
-        bool replaceCurrentRoute = false,
-      }) {
-        final targetIndex =
-            currentIndex ?? _currentDirectoryNavigationIndex;
-        final hasSiblingNavigation =
-            (siblingDirectories?.isNotEmpty ?? false) &&
-            _siblingNavigationTargets.isNotEmpty;
-        final isBackwardNavigation = replaceCurrentRoute && hasSiblingNavigation
-            ? targetIndex < _currentDirectoryNavigationIndex
-            : false;
+            path,
+            name,
+            bookmarkData,
+            siblingDirectories,
+            currentIndex, {
+            bool replaceCurrentRoute = false,
+          }) {
+            final targetIndex =
+                currentIndex ?? _currentDirectoryNavigationIndex;
+            final hasSiblingNavigation =
+                (siblingDirectories?.isNotEmpty ?? false) &&
+                _siblingNavigationTargets.isNotEmpty;
+            final isBackwardNavigation =
+                replaceCurrentRoute && hasSiblingNavigation
+                ? targetIndex < _currentDirectoryNavigationIndex
+                : false;
 
-        final route = PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 250),
-          reverseTransitionDuration: const Duration(milliseconds: 250),
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              MediaGridScreen(
-            directoryPath: path,
-            directoryName: name,
-            bookmarkData: bookmarkData,
-            siblingDirectories: siblingDirectories,
-            currentDirectoryIndex: currentIndex,
-          ),
-          transitionsBuilder:
-              (context, animation, secondaryAnimation, child) {
-            final beginOffset = isBackwardNavigation
-                ? const Offset(-1, 0)
-                : const Offset(1, 0);
-            final tween = Tween(
-              begin: beginOffset,
-              end: Offset.zero,
-            ).chain(CurveTween(curve: Curves.easeInOutCubic));
+            final route = PageRouteBuilder(
+              transitionDuration: const Duration(milliseconds: 250),
+              reverseTransitionDuration: const Duration(milliseconds: 250),
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  MediaGridScreen(
+                    directoryPath: path,
+                    directoryName: name,
+                    bookmarkData: bookmarkData,
+                    siblingDirectories: siblingDirectories,
+                    currentDirectoryIndex: currentIndex,
+                  ),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    final beginOffset = isBackwardNavigation
+                        ? const Offset(-1, 0)
+                        : const Offset(1, 0);
+                    final tween = Tween(
+                      begin: beginOffset,
+                      end: Offset.zero,
+                    ).chain(CurveTween(curve: Curves.easeInOutCubic));
 
-            return SlideTransition(
-              position: animation.drive(tween),
-              child: child,
+                    return SlideTransition(
+                      position: animation.drive(tween),
+                      child: child,
+                    );
+                  },
             );
-          },
-        );
 
-        if (replaceCurrentRoute) {
-          Navigator.of(context).pushReplacement(route);
-        } else {
-          Navigator.of(context).push(route);
-        }
-      },
+            if (replaceCurrentRoute) {
+              Navigator.of(context).pushReplacement(route);
+            } else {
+              Navigator.of(context).push(route);
+            }
+          },
       onPermissionRecoveryNeeded: () async {
         try {
           final directoryPickerService = DirectoryPickerService();
@@ -222,9 +223,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         } catch (e) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to select directory: $e'),
-              ),
+              SnackBar(content: Text('Failed to select directory: $e')),
             );
           }
           return null;
@@ -582,8 +581,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     if (!mounted) return;
 
     // Optionally move to a sibling directory instead of going back.
-    final goToSibling =
-        container.read(navigateToSiblingAfterDirectoryDeleteProvider);
+    final goToSibling = container.read(
+      navigateToSiblingAfterDirectoryDeleteProvider,
+    );
     final navigatedToSibling = goToSibling && _navigateToSiblingAfterDelete();
 
     if (!navigatedToSibling) {
@@ -619,8 +619,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       for (var i = 0; i < siblings.length; i++)
         if (i != currentIndex) siblings[i],
     ];
-    final updatedIndex =
-        updatedSiblings.indexWhere((d) => d.path == target.path);
+    final updatedIndex = updatedSiblings.indexWhere(
+      (d) => d.path == target.path,
+    );
 
     _viewModel?.navigateToDirectory(
       target.path,
@@ -1079,6 +1080,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         return MediaGridItem(
           key: itemKey,
           media: mediaItem,
+          bookmarkData: widget.bookmarkData,
           onTap: () => _onMediaTap(context, mediaItem),
           onDoubleTap: () => _onMediaDoubleTap(context, mediaItem),
           onLongPress: () => _onMediaLongPress(context, mediaItem),
@@ -1174,7 +1176,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   }
 
   bool _shouldLogBuild(Size screenSize) {
-    final hasDirectoryChanged = _lastLoggedDirectoryName != widget.directoryName;
+    final hasDirectoryChanged =
+        _lastLoggedDirectoryName != widget.directoryName;
     final hasScreenChanged = _lastLoggedScreenSize != screenSize;
     if (hasDirectoryChanged || hasScreenChanged) {
       _lastLoggedDirectoryName = widget.directoryName;
@@ -1206,23 +1209,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     developer.log(message, name: 'MediaGridScreen');
   }
 
-
-
-
-
-
-
-
-
-
-
-
   void _pruneMediaItemKeys(Iterable<MediaEntity> media) {
     final validIds = media.map((item) => item.id).toSet();
     _mediaItemKeys.removeWhere((id, _) => !validIds.contains(id));
   }
-
-
 
   Widget _buildError(String message, MediaViewModel viewModel) {
     return Center(

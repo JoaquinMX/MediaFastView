@@ -28,6 +28,8 @@
 		33CC10F62044A3C60003C045 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 33CC10F42044A3C60003C045 /* MainMenu.xib */; };
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
 		33D4F78A294CF78900263BE5 /* BookmarkHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33D4F789294CF78900263BE5 /* BookmarkHandler.swift */; };
+		A5F000012F00000000000001 /* SecurityScopedAccessRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F000022F00000000000001 /* SecurityScopedAccessRegistry.swift */; };
+		A5F000032F00000000000001 /* ThumbnailHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F000042F00000000000001 /* ThumbnailHandler.swift */; };
 		C0FA34536CDBF71D0511D294 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1AC1EBB566906A3F4581005 /* Pods_RunnerTests.framework */; };
 		DAD2070F0BF0060341778CCC /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F8F2E32922CC2CB5C6538647 /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
@@ -75,6 +77,8 @@
 		33CC10F72044A3C60003C045 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Runner/Info.plist; sourceTree = "<group>"; };
 		33CC11122044BFA00003C045 /* MainFlutterWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainFlutterWindow.swift; sourceTree = "<group>"; };
 		33D4F789294CF78900263BE5 /* BookmarkHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkHandler.swift; sourceTree = "<group>"; };
+		A5F000022F00000000000001 /* SecurityScopedAccessRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityScopedAccessRegistry.swift; sourceTree = "<group>"; };
+		A5F000042F00000000000001 /* ThumbnailHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailHandler.swift; sourceTree = "<group>"; };
 		33CEB47222A05771004F2AC0 /* Flutter-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Debug.xcconfig"; sourceTree = "<group>"; };
 		33CEB47422A05771004F2AC0 /* Flutter-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Release.xcconfig"; sourceTree = "<group>"; };
 		33CEB47722A0578A004F2AC0 /* Flutter-Generated.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Flutter-Generated.xcconfig"; path = "ephemeral/Flutter-Generated.xcconfig"; sourceTree = "<group>"; };
@@ -179,6 +183,8 @@
 			children = (
 				33CC10F02044A3C60003C045 /* AppDelegate.swift */,
 				33D4F789294CF78900263BE5 /* BookmarkHandler.swift */,
+				A5F000022F00000000000001 /* SecurityScopedAccessRegistry.swift */,
+				A5F000042F00000000000001 /* ThumbnailHandler.swift */,
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
 				33E51914231749380026EE4D /* Release.entitlements */,
@@ -443,6 +449,8 @@
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				33D4F78A294CF78900263BE5 /* BookmarkHandler.swift in Sources */,
+				A5F000012F00000000000001 /* SecurityScopedAccessRegistry.swift in Sources */,
+				A5F000032F00000000000001 /* ThumbnailHandler.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

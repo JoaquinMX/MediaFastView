@@ -120,7 +120,7 @@ class _Thumb extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: DuplicateThumbnail(media: candidate.media, cacheWidth: 200),
+            child: DuplicateThumbnail(media: candidate.media),
           ),
           if (isMarkedForDeletion)
             DecoratedBox(

@@ -80,7 +80,7 @@ import '../../features/settings/domain/use_cases/update_playback_settings_use_ca
 import '../../features/settings/domain/use_cases/update_show_directory_tagged_media_counts_use_case.dart';
 import '../../features/settings/domain/use_cases/update_slideshow_controls_hide_delay_use_case.dart';
 import '../../features/settings/domain/use_cases/update_theme_mode_use_case.dart';
-import '../../features/settings/domain/use_cases/update_thumbnail_caching_use_case.dart';
+import '../../features/settings/domain/use_cases/update_thumbnail_disk_cache_use_case.dart';
 import '../utils/tag_lookup.dart';
 
 /// Every migration the database needs, in the order it needs them.
@@ -180,20 +180,18 @@ final directoryRepositoryProvider =
     StateNotifierProvider.autoDispose<
       DirectoryRepositoryNotifier,
       DirectoryRepository
-    >(
-      (ref) {
-        return DirectoryRepositoryNotifier(
-          DirectoryRepositoryImpl(
-            ref.watch(isarDirectoryDataSourceProvider),
-            ref.watch(localDirectoryDataSourceProvider),
-            ref.watch(bookmarkServiceProvider),
-            ref.watch(permissionServiceProvider),
-            ref.watch(isarMediaDataSourceProvider),
-            ref.watch(filesystemMediaDataSourceProvider),
-          ),
-        );
-      },
-    );
+    >((ref) {
+      return DirectoryRepositoryNotifier(
+        DirectoryRepositoryImpl(
+          ref.watch(isarDirectoryDataSourceProvider),
+          ref.watch(localDirectoryDataSourceProvider),
+          ref.watch(bookmarkServiceProvider),
+          ref.watch(permissionServiceProvider),
+          ref.watch(isarMediaDataSourceProvider),
+          ref.watch(filesystemMediaDataSourceProvider),
+        ),
+      );
+    });
 
 final mediaRepositoryProvider =
     StateNotifierProvider.autoDispose<MediaRepositoryNotifier, MediaRepository>(
@@ -216,20 +214,23 @@ final directoryMediaCountsProvider =
     });
 
 final tagRepositoryProvider =
-    StateNotifierProvider.autoDispose<TagRepositoryNotifier, TagRepository>(
-      (ref) {
-        return TagRepositoryNotifier(
-          TagRepositoryImpl(ref.watch(isarTagDataSourceProvider)),
-        );
-      },
-    );
+    StateNotifierProvider.autoDispose<TagRepositoryNotifier, TagRepository>((
+      ref,
+    ) {
+      return TagRepositoryNotifier(
+        TagRepositoryImpl(ref.watch(isarTagDataSourceProvider)),
+      );
+    });
 
-final savedFilterRepositoryProvider = StateNotifierProvider.autoDispose<
-    SavedFilterRepositoryNotifier, SavedFilterRepository>((ref) {
-  return SavedFilterRepositoryNotifier(
-    SavedFilterRepositoryImpl(ref.watch(isarSavedFilterDataSourceProvider)),
-  );
-});
+final savedFilterRepositoryProvider =
+    StateNotifierProvider.autoDispose<
+      SavedFilterRepositoryNotifier,
+      SavedFilterRepository
+    >((ref) {
+      return SavedFilterRepositoryNotifier(
+        SavedFilterRepositoryImpl(ref.watch(isarSavedFilterDataSourceProvider)),
+      );
+    });
 
 final tagLookupProvider = Provider<TagLookup>((ref) {
   return TagLookup(ref.watch(tagRepositoryProvider));
@@ -239,13 +240,11 @@ final favoritesRepositoryProvider =
     StateNotifierProvider.autoDispose<
       FavoritesRepositoryNotifier,
       FavoritesRepository
-    >(
-      (ref) {
-        return FavoritesRepositoryNotifier(
-          FavoritesRepositoryImpl(ref.watch(isarFavoritesDataSourceProvider)),
-        );
-      },
-    );
+    >((ref) {
+      return FavoritesRepositoryNotifier(
+        FavoritesRepositoryImpl(ref.watch(isarFavoritesDataSourceProvider)),
+      );
+    });
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return const SettingsRepositoryImpl();
@@ -315,10 +314,14 @@ final removeDirectoryUseCaseProvider = Provider<RemoveDirectoryUseCase>((ref) {
 
 final updateDirectoryAccessUseCaseProvider =
     Provider<UpdateDirectoryAccessUseCase>((ref) {
-  return UpdateDirectoryAccessUseCase(ref.watch(directoryRepositoryProvider));
-});
+      return UpdateDirectoryAccessUseCase(
+        ref.watch(directoryRepositoryProvider),
+      );
+    });
 
-final clearDirectoriesUseCaseProvider = Provider<ClearDirectoriesUseCase>((ref) {
+final clearDirectoriesUseCaseProvider = Provider<ClearDirectoriesUseCase>((
+  ref,
+) {
   return ClearDirectoriesUseCase(ref.watch(directoryRepositoryProvider));
 });
 
@@ -429,34 +432,40 @@ final updateThemeModeUseCaseProvider = Provider<UpdateThemeModeUseCase>((ref) {
   return UpdateThemeModeUseCase(ref.watch(settingsRepositoryProvider));
 });
 
-final updateThumbnailCachingUseCaseProvider =
-    Provider<UpdateThumbnailCachingUseCase>((ref) {
-  return UpdateThumbnailCachingUseCase(ref.watch(settingsRepositoryProvider));
-});
+final updateThumbnailDiskCacheUseCaseProvider =
+    Provider<UpdateThumbnailDiskCacheUseCase>((ref) {
+      return UpdateThumbnailDiskCacheUseCase(
+        ref.watch(settingsRepositoryProvider),
+      );
+    });
 
 final updateDeleteFromSourceUseCaseProvider =
     Provider<UpdateDeleteFromSourceUseCase>((ref) {
-  return UpdateDeleteFromSourceUseCase(ref.watch(settingsRepositoryProvider));
-});
+      return UpdateDeleteFromSourceUseCase(
+        ref.watch(settingsRepositoryProvider),
+      );
+    });
 
 final updatePlaybackSettingsUseCaseProvider =
     Provider<UpdatePlaybackSettingsUseCase>((ref) {
-  return UpdatePlaybackSettingsUseCase(ref.watch(settingsRepositoryProvider));
-});
+      return UpdatePlaybackSettingsUseCase(
+        ref.watch(settingsRepositoryProvider),
+      );
+    });
 
-final updateAutoNavigateSiblingDirectoriesUseCaseProvider = Provider<
-    UpdateAutoNavigateSiblingDirectoriesUseCase>((ref) {
-  return UpdateAutoNavigateSiblingDirectoriesUseCase(
-    ref.watch(settingsRepositoryProvider),
-  );
-});
+final updateAutoNavigateSiblingDirectoriesUseCaseProvider =
+    Provider<UpdateAutoNavigateSiblingDirectoriesUseCase>((ref) {
+      return UpdateAutoNavigateSiblingDirectoriesUseCase(
+        ref.watch(settingsRepositoryProvider),
+      );
+    });
 
-final updateNavigateToSiblingAfterDirectoryDeleteUseCaseProvider = Provider<
-    UpdateNavigateToSiblingAfterDirectoryDeleteUseCase>((ref) {
-  return UpdateNavigateToSiblingAfterDirectoryDeleteUseCase(
-    ref.watch(settingsRepositoryProvider),
-  );
-});
+final updateNavigateToSiblingAfterDirectoryDeleteUseCaseProvider =
+    Provider<UpdateNavigateToSiblingAfterDirectoryDeleteUseCase>((ref) {
+      return UpdateNavigateToSiblingAfterDirectoryDeleteUseCase(
+        ref.watch(settingsRepositoryProvider),
+      );
+    });
 
 final updateShowDirectoryTaggedMediaCountsUseCaseProvider =
     Provider<UpdateShowDirectoryTaggedMediaCountsUseCase>((ref) {
@@ -467,10 +476,10 @@ final updateShowDirectoryTaggedMediaCountsUseCaseProvider =
 
 final updateSlideshowControlsHideDelayUseCaseProvider =
     Provider<UpdateSlideshowControlsHideDelayUseCase>((ref) {
-  return UpdateSlideshowControlsHideDelayUseCase(
-    ref.watch(settingsRepositoryProvider),
-  );
-});
+      return UpdateSlideshowControlsHideDelayUseCase(
+        ref.watch(settingsRepositoryProvider),
+      );
+    });
 // Tag use case providers
 final getTagsUseCaseProvider = Provider<GetTagsUseCase>((ref) {
   return GetTagsUseCase(ref.watch(tagRepositoryProvider));
@@ -509,16 +518,17 @@ final saveFilterUseCaseProvider = Provider<SaveFilterUseCase>((ref) {
   return SaveFilterUseCase(ref.watch(savedFilterRepositoryProvider));
 });
 
-final deleteSavedFilterUseCaseProvider =
-    Provider<DeleteSavedFilterUseCase>((ref) {
+final deleteSavedFilterUseCaseProvider = Provider<DeleteSavedFilterUseCase>((
+  ref,
+) {
   return DeleteSavedFilterUseCase(ref.watch(savedFilterRepositoryProvider));
 });
 
 /// Every saved filter, oldest first. Invalidated whenever one is written.
 final savedFiltersProvider =
     FutureProvider.autoDispose<List<SavedFilterEntity>>(
-  (ref) => ref.watch(getSavedFiltersUseCaseProvider)(),
-);
+      (ref) => ref.watch(getSavedFiltersUseCaseProvider)(),
+    );
 
 final getTagUsageUseCaseProvider = Provider<GetTagUsageUseCase>((ref) {
   return GetTagUsageUseCase(
@@ -535,13 +545,14 @@ final tagUsageProvider = FutureProvider.autoDispose<Map<String, TagUsage>>(
   (ref) => ref.watch(getTagUsageUseCaseProvider)(),
 );
 
-final clearTagAssignmentsUseCaseProvider =
-    Provider<ClearTagAssignmentsUseCase>((ref) {
-  return ClearTagAssignmentsUseCase(
-    directoryRepository: ref.watch(directoryRepositoryProvider),
-    mediaRepository: ref.watch(mediaRepositoryProvider),
-  );
-});
+final clearTagAssignmentsUseCaseProvider = Provider<ClearTagAssignmentsUseCase>(
+  (ref) {
+    return ClearTagAssignmentsUseCase(
+      directoryRepository: ref.watch(directoryRepositoryProvider),
+      mediaRepository: ref.watch(mediaRepositoryProvider),
+    );
+  },
+);
 
 final clearTagsUseCaseProvider = Provider<ClearTagsUseCase>((ref) {
   return ClearTagsUseCase(
@@ -610,12 +621,17 @@ final loadMediaForViewingUseCaseProvider = Provider<LoadMediaForViewingUseCase>(
 // Directory preview provider
 const Duration _previewProviderKeepAliveDuration = Duration(milliseconds: 500);
 
-void _configurePreviewProviderKeepAlive<T>(AutoDisposeFutureProviderRef<T> ref) {
+void _configurePreviewProviderKeepAlive<T>(
+  AutoDisposeFutureProviderRef<T> ref,
+) {
   final keepAliveLink = ref.keepAlive();
   Timer? disposeTimer;
 
   ref.onCancel(() {
-    disposeTimer = Timer(_previewProviderKeepAliveDuration, keepAliveLink.close);
+    disposeTimer = Timer(
+      _previewProviderKeepAliveDuration,
+      keepAliveLink.close,
+    );
   });
 
   ref.onResume(() {
@@ -629,48 +645,46 @@ void _configurePreviewProviderKeepAlive<T>(AutoDisposeFutureProviderRef<T> ref) 
   });
 }
 
-final directoryPreviewProvider = FutureProvider.autoDispose.family<String?, String>((
-  ref,
-  directoryPath,
-) async {
-  _configurePreviewProviderKeepAlive(ref);
-  debugPrint('Getting directory preview for: $directoryPath');
-  final fileService = ref.watch(fileServiceProvider);
-  try {
-    final contents = await fileService.getDirectoryContents(directoryPath);
-    final imageFiles = contents.where((entity) {
-      return entity is File &&
-          fileService.getMediaTypeFromExtension(entity.path) == 'image';
-    }).toList();
-    debugPrint('Found ${imageFiles.length} image files in $directoryPath');
-    if (imageFiles.isNotEmpty) {
-      return imageFiles.first.path;
-    }
-  } catch (e) {
-    debugPrint('Error getting directory contents for $directoryPath: $e');
-  }
-  return null;
-});
+final directoryPreviewProvider = FutureProvider.autoDispose
+    .family<String?, String>((ref, directoryPath) async {
+      _configurePreviewProviderKeepAlive(ref);
+      debugPrint('Getting directory preview for: $directoryPath');
+      final fileService = ref.watch(fileServiceProvider);
+      try {
+        final contents = await fileService.getDirectoryContents(directoryPath);
+        final imageFiles = contents.where((entity) {
+          return entity is File &&
+              fileService.getMediaTypeFromExtension(entity.path) == 'image';
+        }).toList();
+        debugPrint('Found ${imageFiles.length} image files in $directoryPath');
+        if (imageFiles.isNotEmpty) {
+          return imageFiles.first.path;
+        }
+      } catch (e) {
+        debugPrint('Error getting directory contents for $directoryPath: $e');
+      }
+      return null;
+    });
 
-final directoryPreviewStripProvider =
-    FutureProvider.autoDispose.family<List<String>, String>((ref, directoryPath) async {
-  _configurePreviewProviderKeepAlive(ref);
-  debugPrint('Getting directory preview strip for: $directoryPath');
-  final fileService = ref.watch(fileServiceProvider);
-  try {
-    final contents = await fileService.getDirectoryContents(directoryPath);
-    final imageFiles = contents
-        .whereType<File>()
-        .where(
-          (entity) =>
-              fileService.getMediaTypeFromExtension(entity.path) == 'image',
-        )
-        .take(5)
-        .map((entity) => entity.path)
-        .toList();
-    return imageFiles;
-  } catch (e) {
-    debugPrint('Error getting preview strip for $directoryPath: $e');
-  }
-  return const <String>[];
-});
+final directoryPreviewStripProvider = FutureProvider.autoDispose
+    .family<List<String>, String>((ref, directoryPath) async {
+      _configurePreviewProviderKeepAlive(ref);
+      debugPrint('Getting directory preview strip for: $directoryPath');
+      final fileService = ref.watch(fileServiceProvider);
+      try {
+        final contents = await fileService.getDirectoryContents(directoryPath);
+        final imageFiles = contents
+            .whereType<File>()
+            .where(
+              (entity) =>
+                  fileService.getMediaTypeFromExtension(entity.path) == 'image',
+            )
+            .take(5)
+            .map((entity) => entity.path)
+            .toList();
+        return imageFiles;
+      } catch (e) {
+        debugPrint('Error getting preview strip for $directoryPath: $e');
+      }
+      return const <String>[];
+    });

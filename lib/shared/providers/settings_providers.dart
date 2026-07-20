@@ -17,11 +17,11 @@ final themeProvider = Provider<ThemeMode>((ref) {
   );
 });
 
-final thumbnailCachingProvider = Provider<bool>((ref) {
+final thumbnailDiskCacheEnabledProvider = Provider<bool>((ref) {
   final settings = ref.watch(settingsProvider);
   return settings.maybeWhen(
-    data: (value) => value.thumbnailCachingEnabled,
-    orElse: () => const AppSettings.initial().thumbnailCachingEnabled,
+    data: (value) => value.thumbnailDiskCacheEnabled,
+    orElse: () => const AppSettings.initial().thumbnailDiskCacheEnabled,
   );
 });
 

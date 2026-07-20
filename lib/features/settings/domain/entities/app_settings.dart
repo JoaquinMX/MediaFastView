@@ -10,7 +10,7 @@ const int slideshowControlsHideDelayMaxSeconds = 30;
 class AppSettings {
   const AppSettings({
     required this.themeMode,
-    required this.thumbnailCachingEnabled,
+    required this.thumbnailDiskCacheEnabled,
     required this.deleteFromSourceEnabled,
     required this.playbackSettings,
     required this.autoNavigateSiblingDirectories,
@@ -20,17 +20,19 @@ class AppSettings {
   });
 
   const AppSettings.initial()
-      : themeMode = ThemeMode.system,
-        thumbnailCachingEnabled = true,
-        deleteFromSourceEnabled = false,
-        playbackSettings = const PlaybackSettings.initial(),
-        autoNavigateSiblingDirectories = false,
-        navigateToSiblingAfterDirectoryDelete = false,
-        showDirectoryTaggedMediaCounts = false,
-        slideshowControlsHideDelay = AppConfig.defaultSlideshowControlsHideDelay;
+    : themeMode = ThemeMode.system,
+      thumbnailDiskCacheEnabled = true,
+      deleteFromSourceEnabled = false,
+      playbackSettings = const PlaybackSettings.initial(),
+      autoNavigateSiblingDirectories = false,
+      navigateToSiblingAfterDirectoryDelete = false,
+      showDirectoryTaggedMediaCounts = false,
+      slideshowControlsHideDelay = AppConfig.defaultSlideshowControlsHideDelay;
 
   final ThemeMode themeMode;
-  final bool thumbnailCachingEnabled;
+
+  /// Whether generated image and video previews are persisted to disk.
+  final bool thumbnailDiskCacheEnabled;
   final bool deleteFromSourceEnabled;
   final PlaybackSettings playbackSettings;
   final bool autoNavigateSiblingDirectories;
@@ -46,7 +48,7 @@ class AppSettings {
 
   AppSettings copyWith({
     ThemeMode? themeMode,
-    bool? thumbnailCachingEnabled,
+    bool? thumbnailDiskCacheEnabled,
     bool? deleteFromSourceEnabled,
     PlaybackSettings? playbackSettings,
     bool? autoNavigateSiblingDirectories,
@@ -56,8 +58,8 @@ class AppSettings {
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
-      thumbnailCachingEnabled:
-          thumbnailCachingEnabled ?? this.thumbnailCachingEnabled,
+      thumbnailDiskCacheEnabled:
+          thumbnailDiskCacheEnabled ?? this.thumbnailDiskCacheEnabled,
       deleteFromSourceEnabled:
           deleteFromSourceEnabled ?? this.deleteFromSourceEnabled,
       playbackSettings: playbackSettings ?? this.playbackSettings,
@@ -67,8 +69,7 @@ class AppSettings {
           navigateToSiblingAfterDirectoryDelete ??
           this.navigateToSiblingAfterDirectoryDelete,
       showDirectoryTaggedMediaCounts:
-          showDirectoryTaggedMediaCounts ??
-          this.showDirectoryTaggedMediaCounts,
+          showDirectoryTaggedMediaCounts ?? this.showDirectoryTaggedMediaCounts,
       slideshowControlsHideDelay:
           slideshowControlsHideDelay ?? this.slideshowControlsHideDelay,
     );

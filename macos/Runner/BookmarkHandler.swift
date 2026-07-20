@@ -75,6 +75,13 @@ private enum TransferOutcome {
 }
 
 class BookmarkHandler: NSObject {
+    init(accessRegistry: SecurityScopedAccessRegistry = SecurityScopedAccessRegistry()) {
+        self.accessRegistry = accessRegistry
+        super.init()
+    }
+
+    private let accessRegistry: SecurityScopedAccessRegistry
+
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "createBookmark":
@@ -645,38 +652,11 @@ class BookmarkHandler: NSObject {
     }
 
     private func startAccessingBookmark(_ bookmarkData: Data) throws -> String {
-        var isStale = false
-        let url = try URL(resolvingBookmarkData: bookmarkData,
-                          options: .withSecurityScope,
-                          relativeTo: nil,
-                          bookmarkDataIsStale: &isStale)
-
-        if isStale {
-            logWarning("Resolved bookmark is stale")
-        }
-
-        // Start accessing the security-scoped resource
-        guard url.startAccessingSecurityScopedResource() else {
-            throw NSError(domain: "BookmarkHandler",
-                          code: 3,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to start accessing security-scoped resource"])
-        }
-
-        return url.path
+        return try accessRegistry.acquire(bookmarkData.base64EncodedString())
     }
 
     private func stopAccessingBookmark(_ bookmarkData: Data) throws {
-        var isStale = false
-        let url = try URL(resolvingBookmarkData: bookmarkData,
-                          options: .withSecurityScope,
-                          relativeTo: nil,
-                          bookmarkDataIsStale: &isStale)
-
-        if isStale {
-            logWarning("Bookmark is stale when stopping access")
-        }
-
-        url.stopAccessingSecurityScopedResource()
+        accessRegistry.release(bookmarkData.base64EncodedString())
     }
 
     private func logInfo(_ message: String) {

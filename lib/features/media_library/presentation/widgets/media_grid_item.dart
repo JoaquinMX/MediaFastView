@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,7 @@ import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../core/services/bookmark_service.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
@@ -14,6 +16,8 @@ import '../../../../shared/widgets/file_operation_button.dart';
 import '../../../../shared/widgets/move_copy_button.dart';
 import '../../../favorites/presentation/widgets/favorite_toggle_button.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
+import '../../../thumbnails/presentation/file_thumbnail.dart';
+import '../../../thumbnails/presentation/media_thumbnail.dart';
 import '../../domain/entities/directory_media_counts.dart';
 import '../../domain/entities/media_entity.dart';
 
@@ -27,6 +31,7 @@ class MediaGridItem extends StatefulWidget {
     this.onLongPress,
     this.onSecondaryTap,
     this.onFavoriteToggle,
+    this.bookmarkData,
     required this.onSelectionToggle,
     required this.isSelected,
     required this.isSelectionMode,
@@ -39,6 +44,7 @@ class MediaGridItem extends StatefulWidget {
   final VoidCallback? onLongPress;
   final VoidCallback? onSecondaryTap;
   final ValueChanged<bool>? onFavoriteToggle;
+  final String? bookmarkData;
   final VoidCallback onSelectionToggle;
   final bool isSelected;
   final bool isSelectionMode;
@@ -55,6 +61,8 @@ class MediaGridItem extends StatefulWidget {
 class _MediaGridItemState extends State<MediaGridItem> {
   bool _isHovering = false;
   VideoPlayerController? _videoController;
+  String? _activeVideoBookmark;
+  int _videoSession = 0;
   Future<String>? _textPreviewFuture;
 
   @override
@@ -68,7 +76,11 @@ class _MediaGridItemState extends State<MediaGridItem> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.media.path != widget.media.path ||
         oldWidget.media.type != widget.media.type) {
+      unawaited(_disposeVideoController());
       _initializeTextPreviewFuture();
+      if (_isHovering && widget.media.type == MediaType.video) {
+        unawaited(_initializeVideoController());
+      }
     }
   }
 
@@ -88,25 +100,79 @@ class _MediaGridItemState extends State<MediaGridItem> {
 
   @override
   void dispose() {
-    _disposeVideoController();
+    unawaited(_disposeVideoController());
     super.dispose();
   }
 
   Future<void> _initializeVideoController() async {
-    if (_videoController != null) return;
-    _videoController = VideoPlayerController.file(File(widget.media.path));
-    await _videoController!.initialize();
-    _videoController!.setVolume(0.0); // Mute for preview
-    _videoController!.setLooping(true);
-    _videoController!.play();
-    setState(() {});
+    if (_videoController != null || widget.media.type != MediaType.video) {
+      return;
+    }
+
+    final session = ++_videoSession;
+    final bookmark = widget.bookmarkData ?? widget.media.bookmarkData;
+    String? acquiredBookmark;
+    if (bookmark != null) {
+      try {
+        await BookmarkService.instance.startAccessingBookmark(bookmark);
+        acquiredBookmark = bookmark;
+      } catch (_) {
+        // The player may still have access (for example, for an app-local file),
+        // so initialization remains worth attempting.
+      }
+    }
+    if (!mounted || session != _videoSession || !_isHovering) {
+      if (acquiredBookmark != null) {
+        await BookmarkService.instance.stopAccessingBookmark(acquiredBookmark);
+      }
+      return;
+    }
+
+    final controller = VideoPlayerController.file(File(widget.media.path));
+    _videoController = controller;
+    _activeVideoBookmark = acquiredBookmark;
+    try {
+      await controller.initialize();
+      if (!mounted ||
+          session != _videoSession ||
+          controller != _videoController ||
+          !_isHovering) {
+        await _disposeVideoController();
+        return;
+      }
+      await controller.setVolume(0.0);
+      await controller.setLooping(true);
+      await controller.play();
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      if (controller == _videoController) {
+        await _disposeVideoController();
+      } else {
+        await controller.dispose();
+      }
+    }
   }
 
   Future<void> _disposeVideoController() async {
-    if (_videoController != null) {
-      await _videoController!.pause();
-      await _videoController!.dispose();
-      _videoController = null;
+    _videoSession += 1;
+    final controller = _videoController;
+    final bookmark = _activeVideoBookmark;
+    _videoController = null;
+    _activeVideoBookmark = null;
+    try {
+      if (controller != null) {
+        try {
+          await controller.pause();
+        } finally {
+          await controller.dispose();
+        }
+      }
+    } finally {
+      if (bookmark != null) {
+        await BookmarkService.instance.stopAccessingBookmark(bookmark);
+      }
     }
   }
 
@@ -118,7 +184,7 @@ class _MediaGridItemState extends State<MediaGridItem> {
           key: Key('media-grid-${widget.media.id}'),
           onVisibilityChanged: (info) {
             if (info.visibleFraction == 0) {
-              _disposeVideoController();
+              unawaited(_disposeVideoController());
               if (_isHovering) {
                 setState(() => _isHovering = false);
               }
@@ -283,7 +349,7 @@ class _MediaGridItemState extends State<MediaGridItem> {
   Widget _buildMediaContent(WidgetRef ref) {
     switch (widget.media.type) {
       case MediaType.image:
-        return _buildImageContent(ref);
+        return _buildImageContent();
       case MediaType.video:
         return _buildVideoContent();
       case MediaType.audio:
@@ -295,23 +361,12 @@ class _MediaGridItemState extends State<MediaGridItem> {
     }
   }
 
-  Widget _buildImageContent(WidgetRef ref) {
-    final isCachingEnabled = ref.watch(thumbnailCachingProvider);
-    return Image.file(
-      File(widget.media.path),
-      fit: BoxFit.cover,
-      cacheWidth: isCachingEnabled ? 200 : null,
-      cacheHeight: isCachingEnabled ? 200 : null,
-      errorBuilder: (context, error, stackTrace) {
-        debugPrint('Image load failed for ${widget.media.name}: $error');
-        return _buildErrorContent();
-      },
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (frame == null) {
-          return _buildLoadingContent();
-        }
-        return child;
-      },
+  Widget _buildImageContent() {
+    return MediaThumbnail(
+      media: widget.media,
+      bookmarkData: widget.bookmarkData,
+      placeholderBuilder: (_) => _buildLoadingContent(),
+      errorBuilder: (_) => _buildErrorContent(),
     );
   }
 
@@ -320,18 +375,39 @@ class _MediaGridItemState extends State<MediaGridItem> {
         _videoController != null &&
         _videoController!.value.isInitialized) {
       return VideoPlayer(_videoController!);
-    } else {
-      return Container(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Center(
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        MediaThumbnail(
+          media: widget.media,
+          bookmarkData: widget.bookmarkData,
+          placeholderBuilder: (_) => _buildVideoPlaceholder(),
+          errorBuilder: (_) => _buildVideoPlaceholder(),
+        ),
+        Center(
           child: Icon(
-            Icons.video_file,
+            Icons.play_circle_fill,
             size: UiSizing.iconExtraLarge,
             color: UiColors.whiteOverlay,
           ),
         ),
-      );
-    }
+      ],
+    );
+  }
+
+  Widget _buildVideoPlaceholder() {
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: Icon(
+          Icons.video_file,
+          size: UiSizing.iconExtraLarge,
+          color: UiColors.whiteOverlay,
+        ),
+      ),
+    );
   }
 
   Widget _buildAudioContent() {
@@ -389,11 +465,14 @@ class _MediaGridItemState extends State<MediaGridItem> {
 
   Widget _buildDirectoryContent(WidgetRef ref) {
     final previewAsync = ref.watch(directoryPreviewProvider(widget.media.path));
-    final isCachingEnabled = ref.watch(thumbnailCachingProvider);
-    final showTaggedMediaCounts = ref.watch(showDirectoryTaggedMediaCountsProvider);
+    final showTaggedMediaCounts = ref.watch(
+      showDirectoryTaggedMediaCountsProvider,
+    );
     final directoryCountsAsync = ref.watch(directoryMediaCountsProvider);
     final directoryCounts =
-        directoryCountsAsync.valueOrNull?[generateDirectoryId(widget.media.path)] ??
+        directoryCountsAsync.valueOrNull?[generateDirectoryId(
+          widget.media.path,
+        )] ??
         const DirectoryMediaCounts();
     return previewAsync.when(
       data: (String? previewPath) {
@@ -402,33 +481,12 @@ class _MediaGridItemState extends State<MediaGridItem> {
             Expanded(
               flex: UiGrid.directoryPreviewFlex,
               child: previewPath != null
-                  ? Image.file(
-                      File(previewPath),
+                  ? FileThumbnail(
+                      path: previewPath,
+                      bookmarkData: widget.bookmarkData,
                       fit: BoxFit.cover,
-                      cacheWidth: isCachingEnabled ? 200 : null,
-                      cacheHeight: isCachingEnabled ? 200 : null,
-                      errorBuilder: (context, error, stackTrace) {
-                        debugPrint(
-                          'Error loading preview image for ${widget.media.name}: $error',
-                        );
-                        return Container(
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          child: Center(
-                            child: Icon(
-                              Icons.folder,
-                              size: UiSizing.iconExtraLarge,
-                              color: UiColors.whiteOverlay,
-                            ),
-                          ),
-                        );
-                      },
-                      frameBuilder:
-                          (context, child, frame, wasSynchronouslyLoaded) {
-                            if (frame == null) {
-                              return _buildLoadingContent();
-                            }
-                            return child;
-                          },
+                      placeholderBuilder: (_) => _buildLoadingContent(),
+                      errorBuilder: (_) => _buildDirectoryPlaceholder(),
                     )
                   : Container(
                       color: Theme.of(context).colorScheme.primaryContainer,
@@ -487,6 +545,19 @@ class _MediaGridItemState extends State<MediaGridItem> {
         }
         return _buildErrorContent();
       },
+    );
+  }
+
+  Widget _buildDirectoryPlaceholder() {
+    return Container(
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Center(
+        child: Icon(
+          Icons.folder,
+          size: UiSizing.iconExtraLarge,
+          color: UiColors.whiteOverlay,
+        ),
+      ),
     );
   }
 

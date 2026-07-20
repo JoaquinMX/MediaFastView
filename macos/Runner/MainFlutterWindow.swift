@@ -10,11 +10,18 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    let accessRegistry = SecurityScopedAccessRegistry()
+
     // Set up bookmark method channel
     let bookmarkChannel = FlutterMethodChannel(name: "com.joaquinmx.media_fast_view/bookmarks",
                                                binaryMessenger: flutterViewController.engine.binaryMessenger)
-    let bookmarkHandler = BookmarkHandler()
+    let bookmarkHandler = BookmarkHandler(accessRegistry: accessRegistry)
     bookmarkChannel.setMethodCallHandler(bookmarkHandler.handle)
+
+    let thumbnailChannel = FlutterMethodChannel(name: "com.joaquinmx.media_fast_view/thumbnails",
+                                                binaryMessenger: flutterViewController.engine.binaryMessenger)
+    let thumbnailHandler = ThumbnailHandler(accessRegistry: accessRegistry)
+    thumbnailChannel.setMethodCallHandler(thumbnailHandler.handle)
 
     super.awakeFromNib()
   }

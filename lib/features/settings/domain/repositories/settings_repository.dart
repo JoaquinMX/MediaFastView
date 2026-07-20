@@ -9,7 +9,7 @@ abstract class SettingsRepository {
 
   Future<void> saveThemeMode(ThemeMode themeMode);
 
-  Future<void> saveThumbnailCachingEnabled(bool enabled);
+  Future<void> saveThumbnailDiskCacheEnabled(bool enabled);
 
   Future<void> saveDeleteFromSourceEnabled(bool enabled);
 

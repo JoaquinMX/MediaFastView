@@ -1,9 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../thumbnails/presentation/file_thumbnail.dart';
 
 /// Shows a floating strip of thumbnails from [directoryPath] while the pointer
 /// hovers over [child].
@@ -73,7 +72,9 @@ class DirectoryHoverPreviewState extends State<DirectoryHoverPreview> {
               elevation: 8,
               borderRadius: BorderRadius.circular(12),
               color: Theme.of(context).colorScheme.surface,
-              child: _DirectoryPreviewStrip(directoryPath: widget.directoryPath),
+              child: _DirectoryPreviewStrip(
+                directoryPath: widget.directoryPath,
+              ),
             ),
           ),
         );
@@ -109,7 +110,9 @@ class _DirectoryPreviewStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final previewAsync = ref.watch(directoryPreviewStripProvider(directoryPath));
+    final previewAsync = ref.watch(
+      directoryPreviewStripProvider(directoryPath),
+    );
     final theme = Theme.of(context);
 
     return Padding(
@@ -171,10 +174,14 @@ class _PreviewThumbnail extends StatelessWidget {
       borderRadius: borderRadius,
       child: AspectRatio(
         aspectRatio: 1,
-        child: Image.file(
-          File(path),
+        child: FileThumbnail(
+          path: path,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Container(
+          placeholderBuilder: (_) => Container(
+            color: theme.colorScheme.surfaceContainerHighest,
+            child: const Center(child: CircularProgressIndicator()),
+          ),
+          errorBuilder: (_) => Container(
             color: theme.colorScheme.surfaceContainerHighest,
             child: Icon(
               Icons.broken_image,

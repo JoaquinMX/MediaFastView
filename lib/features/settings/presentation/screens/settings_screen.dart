@@ -1,9 +1,14 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/widgets/app_bar.dart';
+import '../../../thumbnails/presentation/thumbnail_batch_controller.dart';
+import '../../../thumbnails/presentation/thumbnail_batch_progress_dialog.dart';
+import '../../../thumbnails/presentation/thumbnail_providers.dart';
+import '../../../../core/utils/file_size_formatter.dart';
 import '../../domain/entities/app_settings.dart';
 import '../view_models/settings_view_model.dart';
 
@@ -17,21 +22,13 @@ class SettingsScreen extends ConsumerWidget {
     final viewModel = ref.read(settingsViewModelProvider.notifier);
 
     return settingsState.when(
-      data: (settings) => _buildLoadedState(
-        context,
-        viewModel,
-        settings,
-      ),
+      data: (settings) => _buildLoadedState(context, ref, viewModel, settings),
       loading: () => const Scaffold(
-        appBar: CustomAppBar(
-          title: 'Settings',
-        ),
+        appBar: CustomAppBar(title: 'Settings'),
         body: Center(child: CircularProgressIndicator()),
       ),
       error: (error, _) => Scaffold(
-        appBar: const CustomAppBar(
-          title: 'Settings',
-        ),
+        appBar: const CustomAppBar(title: 'Settings'),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -53,13 +50,12 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildLoadedState(
     BuildContext context,
+    WidgetRef ref,
     SettingsViewModel viewModel,
     AppSettings settings,
   ) {
     return Scaffold(
-      appBar: const CustomAppBar(
-        title: 'Settings',
-      ),
+      appBar: const CustomAppBar(title: 'Settings'),
       body: ListView(
         children: [
           const SizedBox(height: 16),
@@ -71,10 +67,7 @@ class SettingsScreen extends ConsumerWidget {
             settings.playbackSettings.autoplayVideos,
             viewModel,
           ),
-          _buildLoopSetting(
-            settings.playbackSettings.loopVideos,
-            viewModel,
-          ),
+          _buildLoopSetting(settings.playbackSettings.loopVideos, viewModel),
           _buildStartMutedSetting(
             settings.playbackSettings.startMuted,
             viewModel,
@@ -95,10 +88,16 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const Divider(),
           _buildSectionHeader('Data Management'),
-          _buildThumbnailCachingSetting(
-            settings.thumbnailCachingEnabled,
+          _buildThumbnailDiskCacheSetting(
+            settings.thumbnailDiskCacheEnabled,
             viewModel,
           ),
+          _buildGenerateThumbnailsTile(
+            context,
+            ref,
+            settings.thumbnailDiskCacheEnabled,
+          ),
+          _buildThumbnailCacheTile(context, ref),
           _buildDeleteFromSourceSetting(
             settings.deleteFromSourceEnabled,
             viewModel,
@@ -160,18 +159,154 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildThumbnailCachingSetting(
+  Widget _buildThumbnailDiskCacheSetting(
     bool isEnabled,
     SettingsViewModel viewModel,
   ) {
     return ListTile(
       title: const Text('Thumbnail Caching'),
-      subtitle: const Text('Cache thumbnails for faster loading (uses more storage)'),
+      subtitle: const Text(
+        'Keep generated image and video previews on disk for faster browsing. '
+        'When disabled, previews are temporary and memory-only.',
+      ),
       trailing: Switch(
         value: isEnabled,
         onChanged: (bool value) {
-          viewModel.updateThumbnailCaching(value);
+          viewModel.updateThumbnailDiskCache(value);
         },
+      ),
+    );
+  }
+
+  Widget _buildGenerateThumbnailsTile(
+    BuildContext context,
+    WidgetRef ref,
+    bool cacheEnabled,
+  ) {
+    final progress = ref.watch(thumbnailBatchControllerProvider);
+    return ListTile(
+      enabled: cacheEnabled,
+      title: const Text('Pre-generate Thumbnails'),
+      subtitle: Text(
+        !cacheEnabled
+            ? 'Enable thumbnail caching to generate previews in advance.'
+            : progress.isActive
+            ? '${progress.completed} of ${progress.total} processed'
+            : 'Generate image and video previews for the active library.',
+      ),
+      trailing: progress.isActive
+          ? SizedBox.square(
+              dimension: 24,
+              child: CircularProgressIndicator(value: progress.fraction),
+            )
+          : const Icon(Icons.photo_library_outlined),
+      onTap: cacheEnabled
+          ? () => _showGenerateThumbnailsDialog(context, ref)
+          : null,
+    );
+  }
+
+  Widget _buildThumbnailCacheTile(BuildContext context, WidgetRef ref) {
+    final usage = ref.watch(thumbnailCacheUsageProvider);
+    return ListTile(
+      title: const Text('Clear Thumbnail Cache'),
+      subtitle: Text(
+        usage.when(
+          data: (bytes) => '${formatFileSize(bytes)} currently stored',
+          loading: () => 'Calculating cache usage…',
+          error: (_, __) => 'Cache usage unavailable',
+        ),
+      ),
+      trailing: const Icon(Icons.delete_outline),
+      onTap: () => _showClearThumbnailCacheDialog(context, ref),
+    );
+  }
+
+  Future<void> _showGenerateThumbnailsDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final controller = ref.read(thumbnailBatchControllerProvider.notifier);
+    final current = ref.read(thumbnailBatchControllerProvider);
+    if (!current.isActive) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Pre-generate Thumbnails'),
+          content: const Text(
+            'Generate standard-size previews for every image and video in the '
+            'active library? Browsing remains available and visible thumbnails '
+            'take priority. You can cancel at any time.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Generate'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) {
+        return;
+      }
+      unawaited(controller.start());
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const ThumbnailBatchProgressDialog(),
+    );
+  }
+
+  Future<void> _showClearThumbnailCacheDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Thumbnail Cache'),
+        content: const Text(
+          'Remove all generated image and video previews? Original media is not '
+          'changed, and previews will be generated again as needed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final cleared = await ref
+        .read(thumbnailBatchControllerProvider.notifier)
+        .clearCache();
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          cleared
+              ? 'Thumbnail cache cleared.'
+              : 'Could not clear the thumbnail cache while generation is active.',
+        ),
       ),
     );
   }
@@ -215,10 +350,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAutoplaySetting(
-    bool isEnabled,
-    SettingsViewModel viewModel,
-  ) {
+  Widget _buildAutoplaySetting(bool isEnabled, SettingsViewModel viewModel) {
     return ListTile(
       title: const Text('Autoplay Videos'),
       subtitle: const Text('Automatically start playback when a video loads'),
@@ -231,10 +363,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildLoopSetting(
-    bool isEnabled,
-    SettingsViewModel viewModel,
-  ) {
+  Widget _buildLoopSetting(bool isEnabled, SettingsViewModel viewModel) {
     return ListTile(
       title: const Text('Loop Videos'),
       subtitle: const Text('Repeat videos automatically when they finish'),
@@ -247,10 +376,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStartMutedSetting(
-    bool isEnabled,
-    SettingsViewModel viewModel,
-  ) {
+  Widget _buildStartMutedSetting(bool isEnabled, SettingsViewModel viewModel) {
     return ListTile(
       title: const Text('Start Videos Muted'),
       subtitle: const Text('Mute videos by default when they begin playback'),
@@ -290,7 +416,8 @@ class SettingsScreen extends ConsumerWidget {
                 .toDouble(),
             min: slideshowControlsHideDelayMinSeconds.toDouble(),
             max: slideshowControlsHideDelayMaxSeconds.toDouble(),
-            divisions: slideshowControlsHideDelayMaxSeconds -
+            divisions:
+                slideshowControlsHideDelayMaxSeconds -
                 slideshowControlsHideDelayMinSeconds,
             label: '$seconds s',
             onChanged: (value) => viewModel.updateSlideshowControlsHideDelay(
@@ -650,7 +777,7 @@ class SettingsScreen extends ConsumerWidget {
           folders == null
               ? 'Failed to rescan the library.'
               : 'Rescanned $folders '
-                  '${folders == 1 ? 'folder' : 'folders'} from disk.',
+                    '${folders == 1 ? 'folder' : 'folders'} from disk.',
         ),
         backgroundColor: folders == null ? Colors.red : Colors.green,
         duration: const Duration(seconds: 5),
@@ -697,7 +824,8 @@ class SettingsScreen extends ConsumerWidget {
     } else if (removed == 0) {
       message = 'Everything in the cache is still on disk — nothing to clean.';
     } else {
-      message = 'Removed $removed stale '
+      message =
+          'Removed $removed stale '
           '${removed == 1 ? 'entry' : 'entries'} for files no longer on disk.';
     }
 
@@ -817,10 +945,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showClearTagsDialog(
-    BuildContext context,
-    SettingsViewModel viewModel,
-  ) {
+  void _showClearTagsDialog(BuildContext context, SettingsViewModel viewModel) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -864,9 +989,7 @@ class SettingsScreen extends ConsumerWidget {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          success ? successMessage : '$failurePrefix.',
-        ),
+        content: Text(success ? successMessage : '$failurePrefix.'),
         backgroundColor: success ? Colors.green : Colors.red,
       ),
     );
