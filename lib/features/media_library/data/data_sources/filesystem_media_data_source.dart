@@ -120,6 +120,7 @@ class FilesystemMediaDataSource {
     '.DS_Store', // macOS directory metadata
     'Thumbs.db', // Windows thumbnail cache
     'desktop.ini', // Windows desktop.ini
+    '.mediafastview.json', // Portable tag/favorite sidecar manifest
   };
 
   /// Validates permissions for directory access before scanning

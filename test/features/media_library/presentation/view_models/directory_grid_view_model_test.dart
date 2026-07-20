@@ -250,6 +250,17 @@ class InMemoryMediaRepository implements MediaRepository {
     _media.removeWhere((item) => !allowedIds.contains(item.directoryId));
   }
 
+  /// No filesystem in this fake, so nothing can be confirmed missing.
+  @override
+  Future<int> pruneMissingMedia() async => 0;
+
+  /// No filesystem in this fake, so there is nothing to re-read.
+  @override
+  Future<int> rescanLibrary({
+    void Function(int done, int total)? onProgress,
+  }) async =>
+      0;
+
   @override
   Future<void> clearAllMedia() async {
     _media.clear();

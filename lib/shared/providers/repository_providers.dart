@@ -31,6 +31,7 @@ import '../../features/media_library/domain/use_cases/clear_directories_use_case
 import '../../features/media_library/domain/use_cases/delete_directory_use_case.dart';
 import '../../features/media_library/domain/use_cases/delete_file_use_case.dart';
 import '../../features/media_library/domain/use_cases/clear_media_cache_use_case.dart';
+import '../../features/media_library/domain/use_cases/rescan_library_use_case.dart';
 import '../../features/media_library/domain/use_cases/get_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/get_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/remove_directory_use_case.dart';
@@ -322,10 +323,11 @@ final clearDirectoriesUseCaseProvider = Provider<ClearDirectoriesUseCase>((ref) 
 });
 
 final clearMediaCacheUseCaseProvider = Provider<ClearMediaCacheUseCase>((ref) {
-  return ClearMediaCacheUseCase(
-    ref.watch(mediaRepositoryProvider),
-    ref.watch(directoryRepositoryProvider),
-  );
+  return ClearMediaCacheUseCase(ref.watch(mediaRepositoryProvider));
+});
+
+final rescanLibraryUseCaseProvider = Provider<RescanLibraryUseCase>((ref) {
+  return RescanLibraryUseCase(ref.watch(mediaRepositoryProvider));
 });
 
 final deleteFileUseCaseProvider = Provider<DeleteFileUseCase>((ref) {

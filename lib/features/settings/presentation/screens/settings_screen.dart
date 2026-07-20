@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -105,6 +107,11 @@ class SettingsScreen extends ConsumerWidget {
             settings.navigateToSiblingAfterDirectoryDelete,
             viewModel,
           ),
+          if (Platform.isMacOS) ...[
+            _buildExportSidecarsTile(context, viewModel),
+            _buildImportSidecarsTile(context, viewModel),
+          ],
+          _buildRescanLibraryTile(context, viewModel),
           _buildClearMediaCacheTile(context, viewModel),
           _buildClearCacheTile(context, viewModel),
           _buildClearFavoritesTile(context, viewModel),
@@ -331,6 +338,52 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildExportSidecarsTile(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
+    return ListTile(
+      title: const Text('Save Tags & Favorites to Disk'),
+      subtitle: const Text(
+        'Write a .mediafastview.json file into each tagged folder so your tags '
+        'and favorites survive a cache clear and travel with the files.',
+      ),
+      trailing: const Icon(Icons.save_alt),
+      onTap: () => _showExportSidecarsDialog(context, viewModel),
+    );
+  }
+
+  Widget _buildImportSidecarsTile(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
+    return ListTile(
+      title: const Text('Load Tags & Favorites from Disk'),
+      subtitle: const Text(
+        'Read .mediafastview.json files from your library folders and merge '
+        'their tags and favorites into the current profile.',
+      ),
+      trailing: const Icon(Icons.file_download_outlined),
+      onTap: () => _showImportSidecarsDialog(context, viewModel),
+    );
+  }
+
+  Widget _buildRescanLibraryTile(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) {
+    return ListTile(
+      title: const Text('Rescan Library'),
+      subtitle: const Text(
+        'Re-read every folder from disk to pick up files added, changed, or '
+        'removed outside the app. Tags and favorites are kept for everything '
+        'still present.',
+      ),
+      trailing: const Icon(Icons.refresh),
+      onTap: () => _showRescanLibraryDialog(context, viewModel),
+    );
+  }
+
   Widget _buildClearMediaCacheTile(
     BuildContext context,
     SettingsViewModel viewModel,
@@ -338,10 +391,11 @@ class SettingsScreen extends ConsumerWidget {
     return ListTile(
       title: const Text('Clean Cached Media'),
       subtitle: const Text(
-        'Remove stored media entries so deleted files or directories stop '
-        'appearing in tag filters.',
+        'Remove entries for files and folders that no longer exist on disk, so '
+        'they stop appearing in tag filters. Tags and favorites are kept for '
+        'everything still present.',
       ),
-      trailing: const Icon(Icons.cleaning_services, color: Colors.red),
+      trailing: const Icon(Icons.cleaning_services),
       onTap: () => _showClearMediaCacheDialog(context, viewModel),
     );
   }
@@ -404,37 +458,254 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showClearMediaCacheDialog(
+  Future<void> _showExportSidecarsDialog(
     BuildContext context,
     SettingsViewModel viewModel,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Save Tags & Favorites to Disk'),
+        content: const Text(
+          'This writes a hidden .mediafastview.json file into each folder that '
+          'has tagged or favorited items. It only overwrites Media Fast View\'s '
+          'own manifests and never changes your media files.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    final progress = ValueNotifier<double?>(null);
+    _showSidecarProgressDialog(context, 'Saving tags & favorites…', progress);
+
+    final result = await viewModel.exportSidecars(
+      onProgress: (done, total) {
+        progress.value = total > 0 ? done / total : null;
+      },
+    );
+
+    rootNavigator.pop();
+    progress.dispose();
+    _showSidecarSummary(
+      messenger,
+      result?.describe() ?? 'Failed to save tags & favorites.',
+      isError: result == null || result.hasFailures,
+    );
+  }
+
+  Future<void> _showImportSidecarsDialog(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Load Tags & Favorites from Disk'),
+        content: const Text(
+          'This reads .mediafastview.json files from your library folders and '
+          'merges their tags and favorites into the current profile. Existing '
+          'tags are never deleted — only added to.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Load'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    final progress = ValueNotifier<double?>(null);
+    _showSidecarProgressDialog(context, 'Loading tags & favorites…', progress);
+
+    final result = await viewModel.importSidecars(
+      onProgress: (done, total) {
+        progress.value = total > 0 ? done / total : null;
+      },
+    );
+
+    rootNavigator.pop();
+    progress.dispose();
+    _showSidecarSummary(
+      messenger,
+      result?.describe() ?? 'Failed to load tags & favorites.',
+      isError: result == null || result.hasFailures,
+    );
+  }
+
+  void _showSidecarProgressDialog(
+    BuildContext context,
+    String label,
+    ValueNotifier<double?> progress,
   ) {
-    showDialog(
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: ValueListenableBuilder<double?>(
+                valueListenable: progress,
+                builder: (context, value, _) =>
+                    CircularProgressIndicator(value: value),
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(child: Text(label)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSidecarSummary(
+    ScaffoldMessengerState messenger,
+    String message, {
+    required bool isError,
+  }) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  Future<void> _showRescanLibraryDialog(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rescan Library'),
+        content: const Text(
+          'This re-reads every folder in your library from disk. It can take a '
+          'while on a large library, and nothing on disk is changed — your tags '
+          'and favorites are kept for every file that is still there.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Rescan'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    final progress = ValueNotifier<double?>(null);
+    _showSidecarProgressDialog(context, 'Rescanning library…', progress);
+
+    final folders = await viewModel.rescanLibrary(
+      onProgress: (done, total) {
+        progress.value = total > 0 ? done / total : null;
+      },
+    );
+
+    rootNavigator.pop();
+    progress.dispose();
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          folders == null
+              ? 'Failed to rescan the library.'
+              : 'Rescanned $folders '
+                  '${folders == 1 ? 'folder' : 'folders'} from disk.',
+        ),
+        backgroundColor: folders == null ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  Future<void> _showClearMediaCacheDialog(
+    BuildContext context,
+    SettingsViewModel viewModel,
+  ) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clean Cached Media'),
         content: const Text(
-          'This will remove all cached media entries, including those from deleted '
-          'directories. Media will be rebuilt from disk on the next scan.',
+          'This checks your library against disk and removes cached entries '
+          'whose file or folder is gone. Anything still on disk keeps its tags '
+          'and favorites, and nothing is deleted from disk.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              final success = await viewModel.clearMediaCache();
-              _showOperationResult(
-                context,
-                success,
-                successMessage: 'Cached media cleaned successfully',
-                failurePrefix: 'Failed to clean media cache',
-              );
-            },
-            child: const Text('Clean', style: TextStyle(color: Colors.red)),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clean'),
           ),
         ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final removed = await viewModel.clearMediaCache();
+
+    final String message;
+    if (removed == null) {
+      message = 'Failed to clean media cache.';
+    } else if (removed == 0) {
+      message = 'Everything in the cache is still on disk — nothing to clean.';
+    } else {
+      message = 'Removed $removed stale '
+          '${removed == 1 ? 'entry' : 'entries'} for files no longer on disk.';
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: removed == null ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 5),
       ),
     );
   }

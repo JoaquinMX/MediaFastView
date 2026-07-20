@@ -50,7 +50,26 @@ abstract class MediaRepository {
 
   /// Removes cached media whose directories are no longer present in the
   /// library, preserving entries (and their tags) for existing directories.
+  ///
+  /// Prefer [pruneMissingMedia]: this matches on `directoryId`, which for media
+  /// inside a subfolder is that subfolder's id rather than the library root's,
+  /// so it treats perfectly valid media as orphaned.
   Future<void> removeMediaNotInDirectories(List<String> directoryIds);
+
+  /// Removes cached entries whose file or folder is confirmed gone from disk,
+  /// leaving tags and favorites intact for everything still present.
+  ///
+  /// Implementations must never prune an entry they could not positively verify.
+  /// Returns the number of entries removed.
+  Future<int> pruneMissingMedia();
+
+  /// Re-reads every folder in the library from disk, refreshing the cache.
+  ///
+  /// Picks up files added, changed, or removed outside the app. Each folder's
+  /// scan merges tag assignments back onto the media that survived, so tags are
+  /// preserved for everything still on disk. Returns the number of folders
+  /// rescanned; [onProgress] reports `(done, total)` as it goes.
+  Future<int> rescanLibrary({void Function(int done, int total)? onProgress});
 
   /// Removes every persisted media entry, clearing cached results across
   /// directories.

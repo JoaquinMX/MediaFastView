@@ -124,6 +124,20 @@ class MediaRepositoryImpl implements MediaRepository {
     return _mediaDataSource.removeMediaNotInDirectories(directoryIds);
   }
 
+  /// Prunes nothing: this repository is a pure Isar cache with no filesystem
+  /// access, so it cannot confirm that a path is gone — and guessing would
+  /// delete a live file's tags. The filesystem-backed repository does the real
+  /// reconciliation.
+  @override
+  Future<int> pruneMissingMedia() async => 0;
+
+  /// Rescans nothing: there is no filesystem behind this repository to re-read.
+  @override
+  Future<int> rescanLibrary({
+    void Function(int done, int total)? onProgress,
+  }) async =>
+      0;
+
   /// Converts MediaModel to MediaEntity.
   MediaEntity _modelToEntity(MediaModel model) {
     return MediaEntity(

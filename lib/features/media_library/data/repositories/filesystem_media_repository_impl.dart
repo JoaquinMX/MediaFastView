@@ -1,8 +1,15 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
+import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/utils/batch_update_result.dart';
+import '../../../../shared/utils/bookmark_resolver.dart';
 import '../../../../shared/utils/directory_id_utils.dart';
+import '../../../../shared/utils/media_cache_pruning.dart';
 import '../../domain/entities/directory_media_counts.dart';
 import '../../domain/entities/media_entity.dart';
 import '../../domain/repositories/directory_repository.dart';
@@ -20,12 +27,14 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
     PermissionService? permissionService,
     FilesystemMediaDataSource? filesystemDataSource,
   }) : _mediaDataSource = isarMediaDataSource,
+       _bookmarkService = bookmarkService,
        _filesystemDataSource =
            filesystemDataSource ??
            FilesystemMediaDataSource(bookmarkService, permissionService),
        _permissionService = permissionService ?? PermissionService();
   final DirectoryRepository _directoryRepository;
   final IsarMediaDataSource _mediaDataSource;
+  final BookmarkService _bookmarkService;
   final FilesystemMediaDataSource _filesystemDataSource;
   final PermissionService _permissionService;
 
@@ -379,6 +388,153 @@ class FilesystemMediaRepositoryImpl implements MediaRepository {
   @override
   Future<void> removeMediaNotInDirectories(List<String> directoryIds) {
     return _mediaDataSource.removeMediaNotInDirectories(directoryIds);
+  }
+
+  /// Removes cached entries whose file or folder is confirmed gone from disk.
+  ///
+  /// This is deliberately conservative: an entry is pruned **only** when its
+  /// path was checked under valid security-scoped access and found missing.
+  /// Anything that could not be verified — no bookmark covers it, or access
+  /// could not be started — is treated as still present, because pruning on the
+  /// strength of a check that never ran would delete a live file's tags.
+  ///
+  /// Existence is checked per enclosing library root so the root's scope is
+  /// opened once for the whole batch rather than per file.
+  @override
+  Future<int> pruneMissingMedia() async {
+    final directories = await _directoryRepository.getDirectories();
+    final media = await getAllMedia();
+    if (media.isEmpty) {
+      return 0;
+    }
+
+    final byBookmark = <String?, List<MediaEntity>>{};
+    for (final item in media) {
+      final bookmark = resolveBookmarkForPath(
+        p.dirname(item.path),
+        directories,
+      );
+      byBookmark.putIfAbsent(bookmark, () => <MediaEntity>[]).add(item);
+    }
+
+    final existingPaths = <String>{};
+    for (final entry in byBookmark.entries) {
+      final bookmark = entry.key;
+      final group = entry.value;
+
+      if (bookmark == null) {
+        // Outside every bookmarked root: unverifiable, so keep it.
+        existingPaths.addAll(group.map((item) => item.path));
+        continue;
+      }
+
+      try {
+        await _bookmarkService.startAccessingBookmark(bookmark);
+      } catch (error) {
+        LoggingService.instance.warning(
+          '[MediaCache] Skipping prune for a group; could not start scoped '
+          'access: $error',
+        );
+        existingPaths.addAll(group.map((item) => item.path));
+        continue;
+      }
+
+      try {
+        for (final item in group) {
+          final exists = item.type == MediaType.directory
+              ? await Directory(item.path).exists()
+              : await File(item.path).exists();
+          if (exists) {
+            existingPaths.add(item.path);
+          }
+        }
+      } finally {
+        await _bookmarkService.stopAccessingBookmark(bookmark);
+      }
+    }
+
+    final missing = missingMediaIds(media, existingPaths);
+    if (missing.isEmpty) {
+      return 0;
+    }
+
+    await _mediaDataSource.removeMediaByIds(missing);
+    LoggingService.instance.info(
+      '[MediaCache] Pruned ${missing.length} stale media entries',
+    );
+    return missing.length;
+  }
+
+  /// Re-reads every folder under every library root from disk.
+  ///
+  /// Two passes: enumerate the folders while holding each root's scope, then
+  /// scan them. Scanning a folder replaces that folder's cached rows with what
+  /// is actually on disk while merging tag assignments back onto the files that
+  /// survived — so this picks up additions and removals without costing tags.
+  @override
+  Future<int> rescanLibrary({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final directories = await _directoryRepository.getDirectories();
+    if (directories.isEmpty) {
+      return 0;
+    }
+
+    // Folder path -> the bookmark that grants access to scan it.
+    final folders = <String, String?>{};
+    for (final root in directories) {
+      final bookmark = root.bookmarkData;
+      folders[root.path] = bookmark;
+      if (bookmark == null) {
+        continue;
+      }
+
+      try {
+        await _bookmarkService.startAccessingBookmark(bookmark);
+      } catch (error) {
+        LoggingService.instance.warning(
+          '[MediaCache] Cannot enumerate "${root.path}" for rescan: $error',
+        );
+        continue;
+      }
+
+      try {
+        await for (final entity
+            in Directory(root.path).list(recursive: true, followLinks: false)) {
+          // Hidden folders are skipped by the scanner too, so walking into
+          // them (.git, caches) would only cost time.
+          if (entity is Directory &&
+              !p.basename(entity.path).startsWith('.')) {
+            folders[entity.path] = bookmark;
+          }
+        }
+      } on FileSystemException catch (error) {
+        LoggingService.instance.warning(
+          '[MediaCache] Stopped enumerating "${root.path}" early: '
+          '${error.message}',
+        );
+      } finally {
+        await _bookmarkService.stopAccessingBookmark(bookmark);
+      }
+    }
+
+    final total = folders.length;
+    var done = 0;
+    for (final entry in folders.entries) {
+      try {
+        await getMediaForDirectoryPath(entry.key, bookmarkData: entry.value);
+      } catch (error) {
+        // One unreadable folder must not abort the whole rescan.
+        LoggingService.instance.warning(
+          '[MediaCache] Rescan skipped "${entry.key}": $error',
+        );
+      }
+      done++;
+      onProgress?.call(done, total);
+    }
+
+    LoggingService.instance.info('[MediaCache] Rescanned $total folders');
+    return total;
   }
 
   @override

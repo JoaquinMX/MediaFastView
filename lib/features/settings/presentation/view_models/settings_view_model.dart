@@ -13,12 +13,17 @@ import '../../domain/use_cases/update_slideshow_controls_hide_delay_use_case.dar
 import '../../domain/use_cases/update_theme_mode_use_case.dart';
 import '../../domain/use_cases/update_thumbnail_caching_use_case.dart';
 import '../../../media_library/domain/use_cases/clear_media_cache_use_case.dart';
+import '../../../media_library/domain/use_cases/rescan_library_use_case.dart';
 import '../../../tagging/domain/use_cases/clear_tag_assignments_use_case.dart';
 import '../../../tagging/domain/use_cases/clear_tags_use_case.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/sidecar_providers.dart';
 import '../../../../shared/utils/tag_cache_refresher.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../media_library/presentation/view_models/directory_grid_view_model.dart';
+import '../../../sidecar/domain/entities/sidecar_result.dart';
+import '../../../sidecar/domain/use_cases/export_sidecars_use_case.dart';
+import '../../../sidecar/domain/use_cases/import_sidecars_use_case.dart';
 import '../../../../core/services/logging_service.dart';
 
 final settingsViewModelProvider =
@@ -53,12 +58,18 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
       ref.read(updateSlideshowControlsHideDelayUseCaseProvider);
   late final ClearMediaCacheUseCase _clearMediaCacheUseCase =
       ref.read(clearMediaCacheUseCaseProvider);
+  late final RescanLibraryUseCase _rescanLibraryUseCase =
+      ref.read(rescanLibraryUseCaseProvider);
   late final ClearTagAssignmentsUseCase _clearTagAssignmentsUseCase =
       ref.read(clearTagAssignmentsUseCaseProvider);
   late final ClearTagsUseCase _clearTagsUseCase =
       ref.read(clearTagsUseCaseProvider);
   late final TagCacheRefresher _tagCacheRefresher =
       ref.read(tagCacheRefresherProvider);
+  late final ExportSidecarsUseCase _exportSidecarsUseCase =
+      ref.read(exportSidecarsUseCaseProvider);
+  late final ImportSidecarsUseCase _importSidecarsUseCase =
+      ref.read(importSidecarsUseCaseProvider);
 
   @override
   Future<AppSettings> build() {
@@ -149,15 +160,35 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
     );
   }
 
-  Future<bool> clearMediaCache() async {
+  /// Removes cache entries whose file or folder is gone from disk, keeping tags
+  /// and favorites for everything still present. Returns how many entries were
+  /// removed, or null when the operation failed outright.
+  Future<int?> clearMediaCache() async {
     try {
-      await _clearMediaCacheUseCase();
+      final removed = await _clearMediaCacheUseCase();
       await _tagCacheRefresher.refresh();
-      return true;
+      return removed;
     } catch (error, stackTrace) {
-      LoggingService.instance.error('Failed to clear media cache: $error');
+      LoggingService.instance.error('Failed to clean media cache: $error');
       LoggingService.instance.debug('$stackTrace');
-      return false;
+      return null;
+    }
+  }
+
+  /// Re-reads every folder in the library from disk, picking up files added,
+  /// changed, or removed outside the app. Tags survive for everything still
+  /// present. Returns the number of folders rescanned, or null on failure.
+  Future<int?> rescanLibrary({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    try {
+      final folders = await _rescanLibraryUseCase(onProgress: onProgress);
+      await _tagCacheRefresher.refresh();
+      return folders;
+    } catch (error, stackTrace) {
+      LoggingService.instance.error('Failed to rescan library: $error');
+      LoggingService.instance.debug('$stackTrace');
+      return null;
     }
   }
 
@@ -206,6 +237,39 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
       LoggingService.instance.error('Failed to clear tags: $error');
       LoggingService.instance.debug('$stackTrace');
       return false;
+    }
+  }
+
+  /// Writes the active profile's tags and favorites into per-folder sidecar
+  /// manifests. Returns null only on an unexpected top-level failure; ordinary
+  /// per-folder write failures are reported inside the result.
+  Future<SidecarExportResult?> exportSidecars({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    try {
+      return await _exportSidecarsUseCase(onProgress: onProgress);
+    } catch (error, stackTrace) {
+      LoggingService.instance.error('Failed to export sidecars: $error');
+      LoggingService.instance.debug('$stackTrace');
+      return null;
+    }
+  }
+
+  /// Reads sidecar manifests from disk and merges their tags and favorites into
+  /// the active profile, then refreshes the tag and favorite caches so the UI
+  /// reflects the imported data. Returns null on an unexpected failure.
+  Future<SidecarImportResult?> importSidecars({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    try {
+      final result = await _importSidecarsUseCase(onProgress: onProgress);
+      await _tagCacheRefresher.refresh();
+      await ref.read(favoritesViewModelProvider.notifier).loadFavorites();
+      return result;
+    } catch (error, stackTrace) {
+      LoggingService.instance.error('Failed to import sidecars: $error');
+      LoggingService.instance.debug('$stackTrace');
+      return null;
     }
   }
 

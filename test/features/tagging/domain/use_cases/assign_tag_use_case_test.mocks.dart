@@ -365,6 +365,30 @@ class MockMediaRepository extends _i1.Mock implements _i6.MediaRepository {
       ) as _i4.Future<void>);
 
   @override
+  _i4.Future<int> pruneMissingMedia() => (super.noSuchMethod(
+        Invocation.method(
+          #pruneMissingMedia,
+          [],
+        ),
+        returnValue: _i4.Future<int>.value(0),
+      ) as _i4.Future<int>);
+
+  @override
+  _i4.Future<int> rescanLibrary(
+          {void Function(
+            int,
+            int,
+          )? onProgress}) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #rescanLibrary,
+          [],
+          {#onProgress: onProgress},
+        ),
+        returnValue: _i4.Future<int>.value(0),
+      ) as _i4.Future<int>);
+
+  @override
   _i4.Future<void> clearAllMedia() => (super.noSuchMethod(
         Invocation.method(
           #clearAllMedia,

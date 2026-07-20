@@ -149,46 +149,34 @@ void main() {
   });
 
   group('ClearMediaCacheUseCase', () {
-    late MockDirectoryRepository directoryRepository;
     late MockMediaRepository mediaRepository;
     late ClearMediaCacheUseCase useCase;
 
     setUp(() {
-      directoryRepository = MockDirectoryRepository();
       mediaRepository = MockMediaRepository();
-      useCase = ClearMediaCacheUseCase(mediaRepository, directoryRepository);
+      useCase = ClearMediaCacheUseCase(mediaRepository);
     });
 
-    test('removes media not linked to current directories', () async {
-      final directories = [
-        DirectoryEntity(
-          id: 'dir-a',
-          path: '/a',
-          name: 'A',
-          thumbnailPath: null,
-          tagIds: const [],
-          lastModified: DateTime(2024, 1, 1),
-        ),
-        DirectoryEntity(
-          id: 'dir-b',
-          path: '/b',
-          name: 'B',
-          thumbnailPath: null,
-          tagIds: const [],
-          lastModified: DateTime(2024, 1, 1),
-        ),
-      ];
+    test('prunes only entries confirmed missing from disk', () async {
+      when(mediaRepository.pruneMissingMedia()).thenAnswer((_) async => 3);
 
-      when(directoryRepository.getDirectories())
-          .thenAnswer((_) async => directories);
-      when(mediaRepository.removeMediaNotInDirectories(any))
-          .thenAnswer((_) async {});
+      final removed = await useCase();
+
+      expect(removed, 3);
+      verify(mediaRepository.pruneMissingMedia()).called(1);
+    });
+
+    test('never falls back to the destructive directoryId-based prune',
+        () async {
+      when(mediaRepository.pruneMissingMedia()).thenAnswer((_) async => 0);
 
       await useCase();
 
-      verify(directoryRepository.getDirectories()).called(1);
-      verify(mediaRepository.removeMediaNotInDirectories(['dir-a', 'dir-b']))
-          .called(1);
+      // Pruning by directoryId deleted every media item living in a subfolder
+      // — its directoryId is the subfolder's, not the library root's — and took
+      // that media's tag assignments with it. It must never be used here again.
+      verifyNever(mediaRepository.removeMediaNotInDirectories(any));
+      verifyNever(mediaRepository.clearAllMedia());
     });
   });
 }
