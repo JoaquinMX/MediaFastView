@@ -59,6 +59,7 @@ Future<bool> confirmAndDeleteMedia(
         'You can restore it from the Trash.',
     confirmText: 'Delete',
     confirmColor: Colors.red,
+    confirmButtonAutofocus: true,
   );
 
   if (confirmed != true) {
@@ -138,6 +139,7 @@ Future<BatchUpdateResult?> confirmAndDeleteMediaBatch(
         'You can restore them from the Trash.',
     confirmText: 'Delete',
     confirmColor: Colors.red,
+    confirmButtonAutofocus: true,
   );
 
   if (confirmed != true || !context.mounted) {
@@ -257,7 +259,8 @@ String _describeSelection(List<MediaEntity> items) {
   if (directories == 0) {
     return '$files file${files == 1 ? '' : 's'}';
   }
-  final folderText = '$directories folder${directories == 1 ? '' : 's'} '
+  final folderText =
+      '$directories folder${directories == 1 ? '' : 's'} '
       '(with everything inside)';
   if (files == 0) {
     return folderText;

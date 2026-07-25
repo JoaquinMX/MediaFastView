@@ -9,6 +9,7 @@ class ConfirmationDialog extends StatelessWidget {
     required this.confirmText,
     required this.cancelText,
     this.confirmColor = Colors.red,
+    this.confirmButtonAutofocus = false,
     this.onConfirm,
     this.onCancel,
   });
@@ -18,6 +19,7 @@ class ConfirmationDialog extends StatelessWidget {
   final String confirmText;
   final String cancelText;
   final Color confirmColor;
+  final bool confirmButtonAutofocus;
   final VoidCallback? onConfirm;
   final VoidCallback? onCancel;
 
@@ -35,6 +37,7 @@ class ConfirmationDialog extends StatelessWidget {
           child: Text(cancelText),
         ),
         TextButton(
+          autofocus: confirmButtonAutofocus,
           onPressed: () {
             onConfirm?.call();
             Navigator.of(context).pop(true);
@@ -54,6 +57,7 @@ class ConfirmationDialog extends StatelessWidget {
     required String confirmText,
     String cancelText = 'Cancel',
     Color confirmColor = Colors.red,
+    bool confirmButtonAutofocus = false,
     VoidCallback? onConfirm,
     VoidCallback? onCancel,
   }) {
@@ -65,6 +69,7 @@ class ConfirmationDialog extends StatelessWidget {
         confirmText: confirmText,
         cancelText: cancelText,
         confirmColor: confirmColor,
+        confirmButtonAutofocus: confirmButtonAutofocus,
         onConfirm: onConfirm,
         onCancel: onCancel,
       ),

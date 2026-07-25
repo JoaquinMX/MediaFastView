@@ -7,11 +7,13 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 - **Desktop-first**: A macOS-first experience with iOS support. Security-scoped bookmarks keep directory access stable across launches, and file operations (move/copy/trash) are surfaced on macOS.
 - **Feature-based clean architecture**: Presentation, domain, and data layers are split by feature (media library, tagging, favorites, full screen, profiles, settings) and coordinated with Riverpod view models.
 - **Rich browsing experience**: Directory and media grids offer drag-and-drop intake, search, tag filtering, marquee (rubber-band) multi-select, column density controls, and quick entry into a full-screen viewer with keyboard shortcuts and playback controls.
+- **Native thumbnail pipeline**: ImageIO and AVFoundation generate bounded image and video previews lazily, backed by an optional disk cache and a cancellable active-library batch workflow.
 - **Stateful persistence**: Isar persists user selections (directories, tags, favorites, saved filters) per profile, while filesystem scans keep metadata fresh and permission recovery keeps access stable across relaunches.
 
 ## Feature Highlights
 
 ### Library & directories
+
 - Add folders via picker or drag-and-drop, validate access permissions, recover lost bookmarks, and generate security-scoped bookmarks for macOS (`lib/features/media_library`).
 - Scan directories for images, videos, audio, and text documents with lazy metadata caching (`lib/features/media_library/data/data_sources`).
 - Adjustable column density and multiple sort options for both directory and media grids.
@@ -19,63 +21,80 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 - Perceptual duplicate-image detection with a dedicated review UI (see **Duplicate management**).
 
 ### Media grid & file operations
+
 - Filter media by type (images, videos, audio, directories), favorites, untagged status, and tags.
+- Browse real image and video thumbnails in media grids, duplicate review, directory cards, and directory-filter hover previews; hovering a video card transitions from its poster frame to muted looping playback.
 - Move, copy, and trash items or whole folders on macOS — individually, from the right-click menu, or in bulk from selection mode.
 - Navigate between sibling directories with arrow keys, swipe, or on-screen chevrons; optionally open the next folder automatically after deleting the one you're viewing.
 - "Go to directory" reveals and briefly highlights an item back in its grid after you leave the viewer.
 
+### Thumbnail generation & caching
+
+- Generate 256, 512, or 1024-pixel previews on demand without decoding full-resolution media in Flutter's UI isolate. Images use ImageIO; video poster frames use `AVAssetImageGenerator` at approximately 10% of the duration.
+- Coalesce duplicate work, cancel requests when their consumers disappear, and reserve decoder capacity for visible items so scrolling remains responsive while a background batch is running.
+- Persist source-fingerprinted JPEG previews in an atomic, size-bounded disk cache (1 GiB maximum with oldest-entry eviction). Changes to a file's size or modification time automatically select a new cache entry.
+- Turn disk caching off for temporary memory-only previews, inspect current cache usage, or clear generated previews without touching original media.
+- Use **Settings → Pre-generate Thumbnails** to populate image and video previews for the active profile with cancellable modal progress and a generated/cached/failed summary.
+- On macOS, thumbnail and hover-playback access participates in a shared reference-counted security-scope registry, ensuring every bookmark stop balances the exact URL instance that started access.
+
 ### Full-screen viewer
+
 - Immersive viewer for images, videos, and audio with keyboard navigation (arrows, Home/End, Page Up/Down).
 - Zoom and pan for images; play/pause, mute, loop, seek, and speed controls for time-based media.
 - Assign or remove your most-used "shortcut tags" with `Cmd/Ctrl + Alt + 1–0`, toggle favorites, and inspect item details inline.
 - Right-click for **Go to directory**, **Reveal in Finder**, and **Copy path**.
 
 ### Tagging & filtering
+
 - A dual tagging system that applies to both directories and individual media, with colored tags and tag-driven library views (`lib/features/tagging`).
 - Manage tags: create, rename, recolor, merge, and delete.
 - The Tags tab filters media with **Any / All / Hybrid** match modes, required/optional/excluded tags, a media-type filter, tag search, and a hierarchical **directory filter tree** with hover previews.
 - **Saved filters**: name and persist a query, apply it from a chip strip, update/rename/delete it, and get notified when a saved filter references tags or directories that no longer exist. Start a slideshow directly from any filtered result set.
 
 ### Favorites & slideshow
+
 - Toggle favorites for both media and directories, individually or in bulk.
 - Run a full-screen slideshow with overlay controls whose auto-hide delay is configurable in Settings.
 
 ### Duplicate management
+
 - Find visually-similar images across the whole profile library with perceptual (difference-hash) matching (`lib/features/duplicates`), launched from a macOS-gated Library app-bar action.
 - Tune a Strict / Balanced / Loose sensitivity that re-clusters instantly from cached hashes — no rescanning.
 - Review each group side-by-side with resolution, size, format, and path; the suggested keeper (highest resolution by default, or largest/newest) is starred and protected while the rest are pre-selected for the Trash.
 - Dismiss false-positive groups, then move the marked copies to the Trash with a single confirmation; results self-heal via the media mutation bus. Similarity matching covers images (video/audio are excluded).
 
 ### Profiles
+
 - Named, switchable scopes over the whole library (`lib/features/profiles`). Each profile owns its own directories, tags, favorites, and saved filters; switching re-scopes the entire app.
 - App-wide preferences (theme, playback, grid columns) deliberately live outside profiles.
 - A profile switcher lives in the Library and Tags app bars; create, rename, reorder, and delete profiles from the management dialog.
 
 ### Settings
+
 - **Appearance**: theme mode (system / light / dark).
 - **Playback**: autoplay, loop, start muted, and slideshow controls auto-hide delay.
 - **Navigation**: auto-navigate sibling directories, show tagged-vs-total media counts on directory cards.
-- **Data management**: thumbnail caching, delete-from-source toggle, open-next-folder-after-delete, and maintenance actions to clean cached media, clear the directory cache, clear favorites, clear tag assignments, or clear all tags.
+- **Data management**: real image/video thumbnail disk caching, cache usage and clearing, cancellable active-library pre-generation, delete-from-source toggle, open-next-folder-after-delete, and maintenance actions to clean cached media, clear the directory cache, clear favorites, clear tag assignments, or clear all tags.
 
 ## Keyboard Shortcuts
 
 The in-app guide (press `?`) is the source of truth; a summary:
 
-| Keys | Action | Context |
-| --- | --- | --- |
-| `?` / `Shift + /` | Open the keyboard shortcut guide | Viewer, grids |
-| `Escape` | Exit the viewer or clear the current selection | Viewer, grids |
-| `← / →` | Navigate between media items | Full-screen viewer |
-| `← / →` | Move between sibling directories | Media grids |
-| `Home / End` | Jump to the first or last item | Full-screen viewer |
-| `Page Up / Page Down` | Move ten items at a time | Full-screen viewer |
-| `Cmd/Ctrl + Alt + 1–0` | Assign/remove the matching shortcut tag | Full-screen viewer |
-| `F` / `I` | Toggle favorite / show item details | Full-screen viewer |
-| `Space` / `M` / `L` | Play-pause / mute / loop | Full-screen viewer |
-| `Cmd + A` | Select all visible media (macOS) | Media grids |
-| `Cmd + R` / `Ctrl + R` | Re-read the folder from disk | Media grids |
-| `Cmd + M` / `Cmd + D` | Move / copy the current item (macOS) | Full-screen viewer |
-| `Delete` / `Backspace` | Move item(s) to the Trash (macOS; requires "Delete From Source") | Viewer, grids |
+| Keys                   | Action                                                           | Context            |
+| ---------------------- | ---------------------------------------------------------------- | ------------------ |
+| `?` / `Shift + /`      | Open the keyboard shortcut guide                                 | Viewer, grids      |
+| `Escape`               | Exit the viewer or clear the current selection                   | Viewer, grids      |
+| `← / →`                | Navigate between media items                                     | Full-screen viewer |
+| `← / →`                | Move between sibling directories                                 | Media grids        |
+| `Home / End`           | Jump to the first or last item                                   | Full-screen viewer |
+| `Page Up / Page Down`  | Move ten items at a time                                         | Full-screen viewer |
+| `Cmd/Ctrl + Alt + 1–0` | Assign/remove the matching shortcut tag                          | Full-screen viewer |
+| `F` / `I`              | Toggle favorite / show item details                              | Full-screen viewer |
+| `Space` / `M` / `L`    | Play-pause / mute / loop                                         | Full-screen viewer |
+| `Cmd + A`              | Select all visible media (macOS)                                 | Media grids        |
+| `Cmd + R` / `Ctrl + R` | Re-read the folder from disk                                     | Media grids        |
+| `Cmd + M` / `Cmd + D`  | Move / copy the current item (macOS)                             | Full-screen viewer |
+| `Delete` / `Backspace` | Move item(s) to the Trash (macOS; requires "Delete From Source") | Viewer, grids      |
 
 ## Supported Formats
 
@@ -97,6 +116,8 @@ lib/
 │   ├── favorites/
 │   ├── full_screen/
 │   ├── profiles/
+│   ├── duplicates/
+│   ├── thumbnails/    # Native generation adapter, queue, cache, batch flow, UI
 │   └── settings/
 ├── shared/
 │   ├── providers/   # Dependency injection wiring shared across features
@@ -104,7 +125,9 @@ lib/
 └── main.dart        # App bootstrap, database/profile resolution, top-level wiring
 ```
 
-Each feature contains `data`, `domain`, and `presentation` layers. Riverpod `StateNotifier` view models orchestrate use cases and repositories, while shared provider modules (`lib/shared/providers`) centralize dependency injection for navigation and data access, keeping the UI reactive and testable. Isar is the persistence layer; data sources are bound to the active profile, and the database (and its migrations) are resolved before the first frame in `main.dart` so every profile-scoped provider can read it synchronously.
+Each feature contains `data`, `domain`, and `presentation` layers. Riverpod `StateNotifier`/`Notifier` view models orchestrate use cases and repositories, while shared provider modules (`lib/shared/providers`) centralize dependency injection for navigation and data access, keeping the UI reactive and testable. Isar is the persistence layer; data sources are bound to the active profile, and the database (and its migrations) are resolved before the first frame in `main.dart` so every profile-scoped provider can read it synchronously.
+
+Thumbnail requests flow from auto-disposing Riverpod families into a shared coordinator that checks the content-addressed disk cache, deduplicates work, applies visible/background priorities, and invokes the Apple-native method channel. Platform implementations live in `macos/Runner/ThumbnailHandler.swift` and `ios/Runner/ThumbnailHandler.swift`; macOS bookmark lifetimes are coordinated by `SecurityScopedAccessRegistry.swift`.
 
 ## Getting Started
 
@@ -135,11 +158,9 @@ Widget and integration test scaffolds live under `test/`. Add coverage for new v
 
 - **Perceptual matching for video** and near-duplicate audio, extending duplicate detection beyond images.
 - **Portable, sidecar tag metadata** (e.g. XMP export/import) so tags travel with files between machines.
-- **Video thumbnail generation** with hover/scrub previews in the grid.
+- **Timeline scrub previews and selectable poster frames** for videos.
 - **Video chapter tagging** so viewers can jump between tagged segments inside long clips.
 - **Metadata display & filtering** (EXIF: date taken, dimensions, camera, GPS) with date/timeline-based browsing.
-- **Star ratings** alongside binary favorites, and rating-aware filters.
-- **Configurable keyboard shortcuts** and a customizable shortcut-tag mapping.
 - **Batch rename** and other bulk file utilities.
 - **Windows/Linux desktop support**, extending the current macOS/iOS focus.
 
