@@ -1,16 +1,19 @@
+import 'sidecar_backup.dart';
+
 /// Summary of an export run, surfaced to the user as a one-line result.
 class SidecarExportResult {
   const SidecarExportResult({
-    this.foldersWritten = 0,
+    this.rootsSaved = 0,
+    this.manifestsSaved = 0,
     this.filesCovered = 0,
     this.favoritesCovered = 0,
-    this.foldersSkippedMissing = 0,
     this.failures = const <String>[],
   });
 
-  /// Number of `.mediafastview.json` files written (folders with no tags and no
-  /// favorites are skipped and not counted).
-  final int foldersWritten;
+  final int rootsSaved;
+
+  /// Number of embedded folder manifests in the portable backup.
+  final int manifestsSaved;
 
   /// Number of per-file entries written across all manifests.
   final int filesCovered;
@@ -18,46 +21,50 @@ class SidecarExportResult {
   /// Number of favorite entries written (media + folder).
   final int favoritesCovered;
 
-  /// Folders that had cached tags/favorites but no longer exist on disk (deleted
-  /// or moved outside the app), so nothing could be written there. Benign — the
-  /// cache is simply stale — but reported so the count is not mistaken for a
-  /// genuine failure.
-  final int foldersSkippedMissing;
-
-  /// Human-readable reasons for folders that exist but could not be written
-  /// (permission/IO). Never silently dropped.
+  /// Cached folders that could not be assigned to a tracked library root.
   final List<String> failures;
 
   bool get hasFailures => failures.isNotEmpty;
 
   /// The one-line summary shown after a run.
   String describe() {
-    if (foldersWritten == 0 &&
-        foldersSkippedMissing == 0 &&
-        !hasFailures) {
+    if (manifestsSaved == 0 && !hasFailures) {
       return 'No tagged or favorited items to save.';
     }
+    if (manifestsSaved == 0) {
+      return 'No backup was saved. ${failures.length} '
+          'folder${failures.length == 1 ? '' : 's'} could not be assigned to '
+          'a tracked library root.';
+    }
     final buffer = StringBuffer(
-      'Saved $foldersWritten '
-      'manifest${foldersWritten == 1 ? '' : 's'} covering $filesCovered '
-      'tagged file${filesCovered == 1 ? '' : 's'}',
+      'Saved one backup with $manifestsSaved '
+      'folder record${manifestsSaved == 1 ? '' : 's'} covering $filesCovered '
+      'file${filesCovered == 1 ? '' : 's'}',
     );
     if (favoritesCovered > 0) {
-      buffer.write(' and $favoritesCovered '
-          'favorite${favoritesCovered == 1 ? '' : 's'}');
+      buffer.write(
+        ' and $favoritesCovered '
+        'favorite${favoritesCovered == 1 ? '' : 's'}',
+      );
     }
     buffer.write('.');
-    if (foldersSkippedMissing > 0) {
-      buffer.write(' $foldersSkippedMissing '
-          'folder${foldersSkippedMissing == 1 ? '' : 's'} in the cache no '
-          'longer exist on disk and were skipped.');
-    }
     if (hasFailures) {
-      buffer.write(' ${failures.length} '
-          'folder${failures.length == 1 ? '' : 's'} could not be written.');
+      buffer.write(
+        ' ${failures.length} '
+        'folder${failures.length == 1 ? '' : 's'} could not be assigned to '
+        'a tracked library root.',
+      );
     }
     return buffer.toString();
   }
+}
+
+/// Backup payload and counts produced before the user chooses a save location.
+class SidecarExportPreparation {
+  const SidecarExportPreparation({required this.backup, required this.result});
+
+  final SidecarBackup backup;
+  final SidecarExportResult result;
 }
 
 /// Summary of an import run, surfaced to the user as a one-line result.
@@ -68,6 +75,7 @@ class SidecarImportResult {
     this.tagsCreated = 0,
     this.favoritesApplied = 0,
     this.filesNotFound = 0,
+    this.rootsSkipped = 0,
     this.failures = const <String>[],
   });
 
@@ -88,40 +96,57 @@ class SidecarImportResult {
   /// away, or its metadata changed) and were skipped.
   final int filesNotFound;
 
-  /// Human-readable reasons for manifests that could not be read/applied.
+  /// Saved roots the user explicitly left unmapped.
+  final int rootsSkipped;
+
+  /// Folder paths that could not be read or applied.
   final List<String> failures;
 
   bool get hasFailures => failures.isNotEmpty;
 
   bool get foundNothing =>
-      manifestsRead == 0 && !hasFailures;
+      manifestsRead == 0 && rootsSkipped == 0 && !hasFailures;
 
   /// The one-line summary shown after a run.
   String describe() {
     if (foundNothing) {
-      return 'No .mediafastview.json files found in your library folders.';
+      return 'The backup contains no tags or favorites to load.';
     }
     final buffer = StringBuffer(
       'Imported tags for $filesLinked '
       'file${filesLinked == 1 ? '' : 's'}',
     );
     if (tagsCreated > 0) {
-      buffer.write(' ($tagsCreated new tag${tagsCreated == 1 ? '' : 's'} '
-          'created)');
+      buffer.write(
+        ' ($tagsCreated new tag${tagsCreated == 1 ? '' : 's'} '
+        'created)',
+      );
     }
     if (favoritesApplied > 0) {
-      buffer.write(', $favoritesApplied '
-          'favorite${favoritesApplied == 1 ? '' : 's'} restored');
+      buffer.write(
+        ', $favoritesApplied '
+        'favorite${favoritesApplied == 1 ? '' : 's'} restored',
+      );
     }
     buffer.write('.');
     if (filesNotFound > 0) {
-      buffer.write(' $filesNotFound '
-          'file${filesNotFound == 1 ? '' : 's'} in manifests were not found '
-          'on disk and were skipped.');
+      buffer.write(
+        ' $filesNotFound '
+        'file${filesNotFound == 1 ? '' : 's'} in manifests were not found '
+        'on disk and were skipped.',
+      );
+    }
+    if (rootsSkipped > 0) {
+      buffer.write(
+        ' $rootsSkipped saved library '
+        'root${rootsSkipped == 1 ? '' : 's'} skipped.',
+      );
     }
     if (hasFailures) {
-      buffer.write(' ${failures.length} '
-          'manifest${failures.length == 1 ? '' : 's'} could not be read.');
+      buffer.write(
+        ' ${failures.length} '
+        'folder${failures.length == 1 ? '' : 's'} could not be read.',
+      );
     }
     return buffer.toString();
   }

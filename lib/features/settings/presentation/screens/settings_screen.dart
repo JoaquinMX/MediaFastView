@@ -8,6 +8,9 @@ import '../../../../shared/widgets/app_bar.dart';
 import '../../../thumbnails/presentation/thumbnail_batch_controller.dart';
 import '../../../thumbnails/presentation/thumbnail_batch_progress_dialog.dart';
 import '../../../thumbnails/presentation/thumbnail_providers.dart';
+import '../../../sidecar/domain/entities/sidecar_import_preparation.dart';
+import '../../../sidecar/domain/entities/sidecar_result.dart';
+import '../../../sidecar/presentation/widgets/sidecar_root_mapping_dialog.dart';
 import '../../../../core/utils/file_size_formatter.dart';
 import '../../domain/entities/app_settings.dart';
 import '../view_models/settings_view_model.dart';
@@ -106,7 +109,7 @@ class SettingsScreen extends ConsumerWidget {
             settings.navigateToSiblingAfterDirectoryDelete,
             viewModel,
           ),
-          if (Platform.isMacOS) ...[
+          if (Platform.isMacOS || Platform.isIOS) ...[
             _buildExportSidecarsTile(context, viewModel),
             _buildImportSidecarsTile(context, viewModel),
           ],
@@ -472,8 +475,7 @@ class SettingsScreen extends ConsumerWidget {
     return ListTile(
       title: const Text('Save Tags & Favorites to Disk'),
       subtitle: const Text(
-        'Write a .mediafastview.json file into each tagged folder so your tags '
-        'and favorites survive a cache clear and travel with the files.',
+        'Choose a backup file for the current profile\'s tags and favorites.',
       ),
       trailing: const Icon(Icons.save_alt),
       onTap: () => _showExportSidecarsDialog(context, viewModel),
@@ -487,8 +489,7 @@ class SettingsScreen extends ConsumerWidget {
     return ListTile(
       title: const Text('Load Tags & Favorites from Disk'),
       subtitle: const Text(
-        'Read .mediafastview.json files from your library folders and merge '
-        'their tags and favorites into the current profile.',
+        'Choose a Media Fast View backup and merge it into the current profile.',
       ),
       trailing: const Icon(Icons.file_download_outlined),
       onTap: () => _showImportSidecarsDialog(context, viewModel),
@@ -594,9 +595,9 @@ class SettingsScreen extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('Save Tags & Favorites to Disk'),
         content: const Text(
-          'This writes a hidden .mediafastview.json file into each folder that '
-          'has tagged or favorited items. It only overwrites Media Fast View\'s '
-          'own manifests and never changes your media files.',
+          'This creates one portable JSON backup containing the current '
+          'profile\'s tags and favorites. It never copies or changes your '
+          'media files.',
         ),
         actions: [
           TextButton(
@@ -620,18 +621,31 @@ class SettingsScreen extends ConsumerWidget {
     final progress = ValueNotifier<double?>(null);
     _showSidecarProgressDialog(context, 'Saving tags & favorites…', progress);
 
-    final result = await viewModel.exportSidecars(
-      onProgress: (done, total) {
-        progress.value = total > 0 ? done / total : null;
-      },
-    );
+    SidecarExportResult? result;
+    Object? failure;
+    try {
+      result = await viewModel.exportSidecars(
+        onProgress: (done, total) {
+          progress.value = total > 0 ? done / total : null;
+        },
+      );
+    } catch (error) {
+      failure = error;
+    } finally {
+      rootNavigator.pop();
+      progress.dispose();
+    }
 
-    rootNavigator.pop();
-    progress.dispose();
+    if (result == null && failure == null) {
+      return;
+    }
     _showSidecarSummary(
       messenger,
-      result?.describe() ?? 'Failed to save tags & favorites.',
-      isError: result == null || result.hasFailures,
+      failure == null
+          ? result!.describe()
+          : 'Failed to save tags & favorites: '
+                '${_sidecarErrorMessage(failure)}',
+      isError: failure != null || result!.hasFailures,
     );
   }
 
@@ -644,9 +658,8 @@ class SettingsScreen extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('Load Tags & Favorites from Disk'),
         content: const Text(
-          'This reads .mediafastview.json files from your library folders and '
-          'merges their tags and favorites into the current profile. Existing '
-          'tags are never deleted — only added to.',
+          'Choose a Media Fast View backup to merge into the current profile. '
+          'Existing tags and favorites are never deleted.',
         ),
         actions: [
           TextButton(
@@ -665,23 +678,66 @@ class SettingsScreen extends ConsumerWidget {
       return;
     }
 
-    final rootNavigator = Navigator.of(context, rootNavigator: true);
     final messenger = ScaffoldMessenger.of(context);
+    SidecarImportPreparation? preparation;
+    try {
+      preparation = await viewModel.prepareSidecarImport();
+    } catch (error) {
+      _showSidecarSummary(
+        messenger,
+        'Failed to load tags & favorites: ${_sidecarErrorMessage(error)}',
+        isError: true,
+      );
+      return;
+    }
+    if (preparation == null || !context.mounted) {
+      return;
+    }
+    if (!preparation.hasTrackedRoots && preparation.backup.roots.isNotEmpty) {
+      _showSidecarSummary(
+        messenger,
+        'Add your media folders to the library before loading this backup.',
+        isError: true,
+      );
+      return;
+    }
+
+    final rootMappings = await showSidecarRootMappingDialog(
+      context,
+      preparation,
+    );
+    if (rootMappings == null || !context.mounted) {
+      return;
+    }
+
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
     final progress = ValueNotifier<double?>(null);
     _showSidecarProgressDialog(context, 'Loading tags & favorites…', progress);
 
-    final result = await viewModel.importSidecars(
-      onProgress: (done, total) {
-        progress.value = total > 0 ? done / total : null;
-      },
-    );
+    SidecarImportResult? result;
+    Object? failure;
+    try {
+      result = await viewModel.importSidecars(
+        preparation: preparation,
+        rootMappings: rootMappings,
+        onProgress: (done, total) {
+          progress.value = total > 0 ? done / total : null;
+        },
+      );
+    } catch (error) {
+      failure = error;
+    } finally {
+      rootNavigator.pop();
+      progress.dispose();
+    }
 
-    rootNavigator.pop();
-    progress.dispose();
     _showSidecarSummary(
       messenger,
-      result?.describe() ?? 'Failed to load tags & favorites.',
-      isError: result == null || result.hasFailures,
+      failure == null
+          ? result!.describe()
+          : 'Failed to load tags & favorites: '
+                '${_sidecarErrorMessage(failure)}',
+      isError: failure != null || result!.hasFailures,
     );
   }
 
@@ -725,6 +781,13 @@ class SettingsScreen extends ConsumerWidget {
         duration: const Duration(seconds: 5),
       ),
     );
+  }
+
+  String _sidecarErrorMessage(Object error) {
+    if (error case FormatException(:final message)) {
+      return message;
+    }
+    return '$error';
   }
 
   Future<void> _showRescanLibraryDialog(

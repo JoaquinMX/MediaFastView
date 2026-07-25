@@ -2,10 +2,8 @@ import 'package:isar/isar.dart';
 
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/isar_database.dart';
-import '../../../media_library/data/isar/directory_collection.dart';
 import '../../../media_library/data/isar/isar_directory_data_source.dart';
 import '../../../media_library/data/isar/isar_media_data_source.dart';
-import '../../../media_library/data/isar/media_collection.dart';
 import '../../domain/entities/favorite_item_type.dart';
 import '../models/favorite_model.dart';
 import 'favorite_collection.dart';

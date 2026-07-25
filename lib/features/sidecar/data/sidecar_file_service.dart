@@ -1,14 +1,10 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../../../core/services/bookmark_service.dart';
 import '../../../core/services/logging_service.dart';
 import '../domain/entities/sidecar_file_stat.dart';
-import '../domain/entities/sidecar_manifest.dart';
 
-/// Reads and writes `.mediafastview.json` manifests inside sandboxed library
-/// folders.
+/// Reads live media metadata inside sandboxed library folders.
 ///
 /// Every filesystem call must happen while the enclosing tracked root's
 /// security-scoped bookmark is being accessed. Callers wrap a batch of reads or
@@ -20,42 +16,23 @@ abstract interface class SidecarFileService {
   /// A null [bookmarkData] runs [body] with no scope (useful in tests and on the
   /// rare path with no bookmark). Access is always released, even if [body]
   /// throws.
-  Future<T> withAccess<T>(
-    String? bookmarkData,
-    Future<T> Function() body,
-  );
-
-  /// Writes [contents] to `<folderPath>/.mediafastview.json`, overwriting any
-  /// existing manifest. Requires scope held via [withAccess].
-  Future<void> writeManifest(String folderPath, String contents);
-
-  /// Reads `<folderPath>/.mediafastview.json`, or returns null when absent.
-  /// Requires scope held via [withAccess].
-  Future<String?> readManifest(String folderPath);
-
-  /// Returns the folder paths under [rootPath] (inclusive) that contain a
-  /// manifest. Requires scope held via [withAccess].
-  Future<List<String>> findManifestFolders(String rootPath);
+  Future<T> withAccess<T>(String? bookmarkData, Future<T> Function() body);
 
   /// Stats [filePath], or returns null when the file does not exist. Requires
   /// scope held via [withAccess].
   Future<SidecarFileStat?> statFile(String filePath);
-
-  /// Whether [folderPath] still exists on disk. Requires scope held via
-  /// [withAccess]. Used to tell a stale cache entry (folder deleted or moved
-  /// outside the app) apart from a genuine write failure.
-  Future<bool> folderExists(String folderPath);
 }
 
 /// Production [SidecarFileService] backed by [BookmarkService] scoped access and
 /// `dart:io`.
 class BookmarkSidecarFileService implements SidecarFileService {
   const BookmarkSidecarFileService({BookmarkService? bookmarkService})
-      : _bookmarkService = bookmarkService;
+    : _bookmarkService = bookmarkService;
 
   final BookmarkService? _bookmarkService;
 
-  BookmarkService get _bookmarks => _bookmarkService ?? BookmarkService.instance;
+  BookmarkService get _bookmarks =>
+      _bookmarkService ?? BookmarkService.instance;
 
   @override
   Future<T> withAccess<T>(
@@ -87,52 +64,6 @@ class BookmarkSidecarFileService implements SidecarFileService {
   }
 
   @override
-  Future<void> writeManifest(String folderPath, String contents) async {
-    final file = File(p.join(folderPath, kSidecarManifestFileName));
-    await file.writeAsString(contents, flush: true);
-  }
-
-  @override
-  Future<String?> readManifest(String folderPath) async {
-    final file = File(p.join(folderPath, kSidecarManifestFileName));
-    if (!await file.exists()) {
-      return null;
-    }
-    return file.readAsString();
-  }
-
-  @override
-  Future<List<String>> findManifestFolders(String rootPath) async {
-    final root = Directory(rootPath);
-    if (!await root.exists()) {
-      return const <String>[];
-    }
-
-    // A set, not a list: a recursive walk yields the root's own manifest as a
-    // direct child, and nested tracked roots can overlap, so a folder must never
-    // be collected — and later processed — twice.
-    final folders = <String>{};
-
-    try {
-      await for (final entity
-          in root.list(recursive: true, followLinks: false)) {
-        if (entity is File &&
-            p.basename(entity.path) == kSidecarManifestFileName) {
-          folders.add(p.dirname(entity.path));
-        }
-      }
-    } on FileSystemException catch (error) {
-      // A permission hiccup partway through a large tree should still yield the
-      // folders found so far rather than nothing.
-      LoggingService.instance.warning(
-        '[Sidecar] Stopped walking "$rootPath" early: ${error.message}',
-      );
-    }
-
-    return folders.toList();
-  }
-
-  @override
   Future<SidecarFileStat?> statFile(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
@@ -144,8 +75,4 @@ class BookmarkSidecarFileService implements SidecarFileService {
       mtimeMs: stat.modified.millisecondsSinceEpoch,
     );
   }
-
-  @override
-  Future<bool> folderExists(String folderPath) =>
-      Directory(folderPath).exists();
 }

@@ -15,21 +15,20 @@ import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/domain/repositories/tag_repository.dart';
 import '../../../tagging/domain/use_cases/assign_tag_use_case.dart';
 import '../../../tagging/domain/use_cases/create_tag_use_case.dart';
+import '../entities/sidecar_backup.dart';
 import '../entities/sidecar_folder_data.dart';
+import '../entities/sidecar_import_preparation.dart';
 import '../entities/sidecar_result.dart';
 import '../repositories/sidecar_repository.dart';
 
 /// Resolves a file path to the media type the app would assign it, or null when
-/// the extension is not a supported media type. Injectable for testing.
+/// the extension is unsupported. Injectable for testing.
 typedef MediaTypeResolver = MediaType? Function(String path);
 
-/// Reads per-folder `.mediafastview.json` manifests back into the active profile.
+/// Restores a portable sidecar backup into the active profile.
 ///
-/// The merge is strictly additive: tags are matched to existing profile tags by
-/// name (creating any that are missing), assignments are unioned onto whatever a
-/// file already carries, and favorites are restored. Each file is re-linked by
-/// recomputing the scanner's media id from its **live** size/mtime/name, so the
-/// import works even against an empty cache (e.g. right after "Clear cache").
+/// Import remains additive: tags are matched by name, assignments are unioned,
+/// and favorites are restored without deleting existing profile data.
 class ImportSidecarsUseCase {
   ImportSidecarsUseCase({
     required this.directoryRepository,
@@ -51,41 +50,117 @@ class ImportSidecarsUseCase {
   final SidecarRepository sidecarRepository;
   final MediaTypeResolver mediaTypeResolver;
 
-  /// Colour used for a tag a manifest references but does not define.
   static const int _defaultTagColor = 0xFF9E9E9E;
 
+  /// Matches unchanged saved roots and identifies roots requiring user mapping.
+  Future<SidecarImportPreparation> prepare(SidecarBackup backup) async {
+    final currentRoots = await directoryRepository.getDirectories();
+    final automaticMappings = <String, String>{};
+    final unmatchedRoots = <SidecarBackupRoot>[];
+    final usedCurrentRootIds = <String>{};
+
+    for (final savedRoot in backup.roots) {
+      DirectoryEntity? match;
+      for (final currentRoot in currentRoots) {
+        if (!usedCurrentRootIds.contains(currentRoot.id) &&
+            p.equals(savedRoot.originalPath, currentRoot.path)) {
+          match = currentRoot;
+          break;
+        }
+      }
+      if (match == null) {
+        unmatchedRoots.add(savedRoot);
+      } else {
+        automaticMappings[savedRoot.originalPath] = match.id;
+        usedCurrentRootIds.add(match.id);
+      }
+    }
+
+    return SidecarImportPreparation(
+      backup: backup,
+      currentRoots: currentRoots,
+      automaticRootMappings: automaticMappings,
+      unmatchedRoots: unmatchedRoots,
+    );
+  }
+
   Future<SidecarImportResult> call({
+    required SidecarBackup backup,
+    required Map<String, String?> rootMappings,
     void Function(int done, int total)? onProgress,
   }) async {
     final directories = await directoryRepository.getDirectories();
-    if (directories.isEmpty) {
-      return const SidecarImportResult();
+    final currentRootsById = <String, DirectoryEntity>{
+      for (final directory in directories) directory.id: directory,
+    };
+    _validateMappings(backup, rootMappings, currentRootsById);
+
+    final folderDataByPath = <String, SidecarFolderData>{};
+    final failures = <String>[];
+    final total = backup.manifestCount;
+    var processed = 0;
+    var rootsSkipped = 0;
+
+    void advanceProgress([int amount = 1]) {
+      processed += amount;
+      onProgress?.call(processed, total);
     }
 
-    // Read every manifest across all roots, deduped by folder (nested roots can
-    // surface the same subtree twice).
-    final folderDataByPath = <String, SidecarFolderData>{};
-    for (final root in directories) {
-      final datas = await sidecarRepository.readManifestsUnderRoot(root);
-      for (final data in datas) {
-        folderDataByPath.putIfAbsent(
-          p.normalize(data.folderPath),
-          () => data,
+    for (final savedRoot in backup.roots) {
+      final currentRootId = rootMappings[savedRoot.originalPath];
+      if (currentRootId == null) {
+        rootsSkipped++;
+        advanceProgress(savedRoot.manifestsByRelativeFolder.length);
+        continue;
+      }
+
+      final currentRoot = currentRootsById[currentRootId];
+      if (currentRoot == null) {
+        failures.add(savedRoot.originalPath);
+        advanceProgress(savedRoot.manifestsByRelativeFolder.length);
+        continue;
+      }
+
+      var rootProcessed = 0;
+      try {
+        final report = await sidecarRepository.resolveBackupRoot(
+          savedRoot,
+          currentRoot,
+          onFolderProcessed: () {
+            rootProcessed++;
+            advanceProgress();
+          },
+        );
+        failures.addAll(report.failures);
+        for (final data in report.folders) {
+          folderDataByPath.putIfAbsent(
+            p.normalize(data.folderPath),
+            () => data,
+          );
+        }
+      } catch (error) {
+        LoggingService.instance.warning(
+          '[Sidecar] Failed to access mapped root "${currentRoot.path}": $error',
+        );
+        failures.add(currentRoot.path);
+        advanceProgress(
+          savedRoot.manifestsByRelativeFolder.length - rootProcessed,
         );
       }
     }
+
     if (folderDataByPath.isEmpty) {
-      return const SidecarImportResult();
+      return SidecarImportResult(
+        rootsSkipped: rootsSkipped,
+        failures: failures,
+      );
     }
 
-    // Existing profile tags, indexed by normalized name for find-or-create.
     final existingTags = await tagRepository.getTags();
     final tagByName = <String, TagEntity>{
       for (final tag in existingTags) tag.name.trim().toLowerCase(): tag,
     };
 
-    // Current per-media tags (this profile), so assignments union rather than
-    // replace. Empty after a cache clear, which is fine — union with nothing.
     final allMedia = await mediaRepository.getAllMedia();
     final currentTagIdsByMedia = <String, Set<String>>{
       for (final media in allMedia) media.id: media.tagIds.toSet(),
@@ -93,7 +168,6 @@ class ImportSidecarsUseCase {
     final existingMediaById = <String, MediaEntity>{
       for (final media in allMedia) media.id: media,
     };
-
     final rootByFolder = <String, DirectoryEntity>{
       for (final directory in directories)
         p.normalize(directory.path): directory,
@@ -104,14 +178,10 @@ class ImportSidecarsUseCase {
     var filesLinked = 0;
     var filesNotFound = 0;
     var favoritesApplied = 0;
-    final failures = <String>[];
-
     final mediaToUpsert = <MediaEntity>[];
     final favoritesToAdd = <FavoriteEntity>[];
     final directoryTagAssignments = <String, List<String>>{};
 
-    // Resolves a tag name to an id in the active profile, creating it (with the
-    // manifest's colour) when absent. Returns null for an invalid/rejected name.
     Future<String?> resolveTagId(String name, int color) async {
       final key = name.trim().toLowerCase();
       if (key.isEmpty) {
@@ -122,8 +192,10 @@ class ImportSidecarsUseCase {
         return existing.id;
       }
       try {
-        final created =
-            await createTagUseCase.createTag(name: name.trim(), color: color);
+        final created = await createTagUseCase.createTag(
+          name: name.trim(),
+          color: color,
+        );
         tagByName[key] = created;
         tagsCreated++;
         return created.id;
@@ -135,9 +207,6 @@ class ImportSidecarsUseCase {
       }
     }
 
-    final total = folderDataByPath.length;
-    var processed = 0;
-
     for (final data in folderDataByPath.values) {
       final manifest = data.manifest;
       filesNotFound += data.missingFileNames.length;
@@ -147,17 +216,16 @@ class ImportSidecarsUseCase {
         final fileEntry = entry.value;
         final stat = data.liveStats[fileName];
         if (stat == null) {
-          continue; // Already counted in missingFileNames.
+          continue;
         }
 
         final filePath = p.join(data.folderPath, fileName);
         final mediaType = mediaTypeResolver(filePath);
         if (mediaType == null) {
-          continue; // Not a media type the app can represent.
+          continue;
         }
 
-        final lastModified =
-            DateTime.fromMillisecondsSinceEpoch(stat.mtimeMs);
+        final lastModified = DateTime.fromMillisecondsSinceEpoch(stat.mtimeMs);
         final mediaId = generateMediaIdFromMetadata(
           size: stat.size,
           lastModified: lastModified,
@@ -201,8 +269,6 @@ class ImportSidecarsUseCase {
         }
       }
 
-      // Folder-level tags/favorite apply only to tracked roots (the only folders
-      // that carry a directory row); subfolders never export folder tags.
       final root = rootByFolder[p.normalize(data.folderPath)];
       if (root != null &&
           (manifest.folderTags.isNotEmpty || manifest.folderFavorite)) {
@@ -227,14 +293,8 @@ class ImportSidecarsUseCase {
           );
         }
       }
-
-      processed++;
-      onProgress?.call(processed, total);
     }
 
-    // Apply. Upsert creates missing media rows and merges tags while preserving
-    // other profiles' assignments; directory tags and favorites go through their
-    // own merge-aware paths.
     if (mediaToUpsert.isNotEmpty) {
       await mediaRepository.upsertMedia(mediaToUpsert);
     }
@@ -252,8 +312,36 @@ class ImportSidecarsUseCase {
       tagsCreated: tagsCreated,
       favoritesApplied: favoritesApplied,
       filesNotFound: filesNotFound,
+      rootsSkipped: rootsSkipped,
       failures: failures,
     );
+  }
+
+  void _validateMappings(
+    SidecarBackup backup,
+    Map<String, String?> rootMappings,
+    Map<String, DirectoryEntity> currentRootsById,
+  ) {
+    final usedCurrentRootIds = <String>{};
+    for (final savedRoot in backup.roots) {
+      if (!rootMappings.containsKey(savedRoot.originalPath)) {
+        throw ArgumentError(
+          'Missing mapping for saved root ${savedRoot.originalPath}.',
+        );
+      }
+      final currentRootId = rootMappings[savedRoot.originalPath];
+      if (currentRootId == null) {
+        continue;
+      }
+      if (!currentRootsById.containsKey(currentRootId)) {
+        throw ArgumentError('Mapped library root is no longer available.');
+      }
+      if (!usedCurrentRootIds.add(currentRootId)) {
+        throw ArgumentError(
+          'Each current library root can be mapped only once.',
+        );
+      }
+    }
   }
 }
 

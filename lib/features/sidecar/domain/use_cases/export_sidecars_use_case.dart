@@ -8,39 +8,38 @@ import '../../../media_library/domain/repositories/directory_repository.dart';
 import '../../../media_library/domain/repositories/media_repository.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../tagging/domain/repositories/tag_repository.dart';
+import '../entities/sidecar_backup.dart';
 import '../entities/sidecar_file_entry.dart';
 import '../entities/sidecar_manifest.dart';
 import '../entities/sidecar_result.dart';
-import '../repositories/sidecar_repository.dart';
 
-/// Writes the active profile's tags and favorites into per-folder
-/// `.mediafastview.json` manifests.
+/// Builds a portable backup of the active profile's tags and favorites.
 ///
-/// Reads entirely from the cache (no disk scan): a folder's per-file tags come
-/// from the media rows, folder-level tags from the tracked-root directory rows,
-/// and favorites from the favorites store. Folders with nothing to record are
-/// skipped so the library is never littered with empty manifests.
+/// The existing per-folder manifest shape remains embedded in the backup, while
+/// library roots and root-relative folder paths make it possible to restore
+/// from a separately selected file.
 class ExportSidecarsUseCase {
   const ExportSidecarsUseCase({
     required this.mediaRepository,
     required this.directoryRepository,
     required this.favoritesRepository,
     required this.tagRepository,
-    required this.sidecarRepository,
   });
 
   final MediaRepository mediaRepository;
   final DirectoryRepository directoryRepository;
   final FavoritesRepository favoritesRepository;
   final TagRepository tagRepository;
-  final SidecarRepository sidecarRepository;
 
-  Future<SidecarExportResult> call({
+  Future<SidecarExportPreparation> call({
     void Function(int done, int total)? onProgress,
   }) async {
     final directories = await directoryRepository.getDirectories();
     if (directories.isEmpty) {
-      return const SidecarExportResult();
+      return SidecarExportPreparation(
+        backup: SidecarBackup(generatedAt: DateTime.now()),
+        result: const SidecarExportResult(),
+      );
     }
 
     final allMedia = await mediaRepository.getAllMedia();
@@ -83,9 +82,12 @@ class ExportSidecarsUseCase {
       }
     }
 
+    final generatedAt = DateTime.now();
     final manifestsByFolder = <String, SidecarManifest>{};
+    final sortedCandidateFolders = candidateFolders.toList()..sort();
+    var processed = 0;
 
-    for (final folder in candidateFolders) {
+    for (final folder in sortedCandidateFolders) {
       final vocab = <String, SidecarTagDef>{};
       final files = <String, SidecarFileEntry>{};
 
@@ -127,20 +129,25 @@ class ExportSidecarsUseCase {
       }
 
       final manifest = SidecarManifest(
-        generatedAt: DateTime.now(),
+        generatedAt: generatedAt,
         folderTags: folderTagNames,
         folderFavorite: folderFavorite,
         tags: vocab,
         files: files,
       );
       if (manifest.isEmpty) {
+        processed++;
+        onProgress?.call(processed, sortedCandidateFolders.length);
         continue;
       }
       manifestsByFolder[folder] = manifest;
+      processed++;
+      onProgress?.call(processed, sortedCandidateFolders.length);
     }
 
-    // Assign each manifest folder to the deepest tracked root that can grant it
-    // write access, and write per root so scope is opened once per root.
+    // Assign each manifest folder to the deepest tracked root and store a
+    // root-relative path. No media-root filesystem access is needed to create a
+    // metadata-only backup, so stale cached entries remain recoverable.
     final manifestsByRootId = <String, Map<String, SidecarManifest>>{};
     final rootsById = <String, DirectoryEntity>{};
     final failures = <String>[];
@@ -151,70 +158,68 @@ class ExportSidecarsUseCase {
         continue;
       }
       rootsById[root.id] = root;
-      manifestsByRootId
-          .putIfAbsent(root.id, () => <String, SidecarManifest>{})[entry.key] =
-          entry.value;
+      final relativeFolder = p.relative(entry.key, from: root.path);
+      final portableRelativeFolder = relativeFolder == '.'
+          ? '.'
+          : relativeFolder.split(p.separator).join('/');
+      manifestsByRootId.putIfAbsent(
+        root.id,
+        () => <String, SidecarManifest>{},
+      )[portableRelativeFolder] = entry.value;
     }
 
-    final total = manifestsByFolder.length;
-    var processed = 0;
-    final writtenFolders = <String>[];
-    var foldersSkippedMissing = 0;
-    for (final rootEntry in manifestsByRootId.entries) {
-      final root = rootsById[rootEntry.key]!;
-      final report = await sidecarRepository.writeManifestsUnderRoot(
-        root,
-        rootEntry.value,
-        onFolderProcessed: () {
-          processed++;
-          onProgress?.call(processed, total);
-        },
-      );
-      writtenFolders.addAll(report.written);
-      foldersSkippedMissing += report.missingFolders.length;
-      failures.addAll(report.failures);
-    }
+    final backupRoots = <SidecarBackupRoot>[
+      for (final entry in manifestsByRootId.entries)
+        SidecarBackupRoot(
+          originalPath: rootsById[entry.key]!.path,
+          name: rootsById[entry.key]!.name,
+          manifestsByRelativeFolder: entry.value,
+        ),
+    ];
 
-    // Count only what actually reached disk, so the summary never claims a file
-    // was saved when its folder was missing or its write failed.
-    var filesCovered = 0;
-    var favoritesCovered = 0;
-    for (final folder in writtenFolders) {
-      final manifest = manifestsByFolder[folder]!;
-      filesCovered += manifest.files.length;
-      favoritesCovered += _favoritesIn(manifest);
-    }
+    // Count only manifests that made it into a saved-root record.
+    final embeddedManifests = <SidecarManifest>[
+      for (final root in backupRoots) ...root.manifestsByRelativeFolder.values,
+    ];
+    final filesCovered = embeddedManifests.fold<int>(
+      0,
+      (count, manifest) => count + manifest.files.length,
+    );
+    final favoritesCovered = embeddedManifests.fold<int>(
+      0,
+      (count, manifest) => count + _favoritesIn(manifest),
+    );
 
-    return SidecarExportResult(
-      foldersWritten: writtenFolders.length,
-      filesCovered: filesCovered,
-      favoritesCovered: favoritesCovered,
-      foldersSkippedMissing: foldersSkippedMissing,
-      failures: failures,
+    return SidecarExportPreparation(
+      backup: SidecarBackup(generatedAt: generatedAt, roots: backupRoots),
+      result: SidecarExportResult(
+        rootsSaved: backupRoots.length,
+        manifestsSaved: embeddedManifests.length,
+        filesCovered: filesCovered,
+        favoritesCovered: favoritesCovered,
+        failures: failures,
+      ),
     );
   }
 
   /// Number of favorite entries a manifest records: favorited files plus the
   /// folder itself when favorited.
   int _favoritesIn(SidecarManifest manifest) {
-    final favoriteFiles =
-        manifest.files.values.where((entry) => entry.favorite).length;
+    final favoriteFiles = manifest.files.values
+        .where((entry) => entry.favorite)
+        .length;
     return favoriteFiles + (manifest.folderFavorite ? 1 : 0);
   }
 
-  /// The tracked root with a bookmark whose scope covers [folder], preferring
-  /// the deepest (longest path) when roots are nested. Mirrors
-  /// `resolveBookmarkForPath` but returns the entity so its scope can be reused.
+  /// The tracked root covering [folder], preferring the deepest nested root.
   DirectoryEntity? _deepestRootCovering(
     String folder,
     List<DirectoryEntity> directories,
   ) {
     DirectoryEntity? best;
     for (final directory in directories) {
-      if (directory.bookmarkData == null) {
-        continue;
-      }
-      final covers = p.equals(directory.path, folder) ||
+      final covers =
+          p.equals(directory.path, folder) ||
           p.isWithin(directory.path, folder);
       if (!covers) {
         continue;

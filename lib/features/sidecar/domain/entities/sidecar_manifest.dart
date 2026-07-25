@@ -1,5 +1,4 @@
-/// The on-disk `.mediafastview.json` manifest that carries a folder's tags and
-/// favorites so they survive a cache clear and travel with the files.
+/// The per-folder payload embedded in a portable Media Fast View backup.
 ///
 /// One manifest describes exactly one folder: the folder's own directory tags
 /// ([folderTags] / [folderFavorite]) plus a per-file entry for every media file
@@ -18,9 +17,6 @@ const String kSidecarManifestSchema = 'media-fast-view/tags';
 
 /// The current manifest format version. Bumped only on a breaking change.
 const int kSidecarManifestVersion = 1;
-
-/// The file name written into each folder.
-const String kSidecarManifestFileName = '.mediafastview.json';
 
 /// A tag definition as stored in a manifest: just the portable colour, keyed by
 /// name in [SidecarManifest.tags].
@@ -65,22 +61,21 @@ class SidecarManifest {
 
   /// Whether this manifest carries anything worth writing. An empty manifest is
   /// never written to disk (no litter) and is treated as absent on read.
-  bool get isEmpty =>
-      folderTags.isEmpty && !folderFavorite && files.isEmpty;
+  bool get isEmpty => folderTags.isEmpty && !folderFavorite && files.isEmpty;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'schema': kSidecarManifestSchema,
-        'version': kSidecarManifestVersion,
-        'generatedAt': generatedAt.toUtc().toIso8601String(),
-        'folderTags': folderTags,
-        'folderFavorite': folderFavorite,
-        'tags': <String, dynamic>{
-          for (final entry in tags.entries) entry.key: entry.value.toJson(),
-        },
-        'files': <String, dynamic>{
-          for (final entry in files.entries) entry.key: entry.value.toJson(),
-        },
-      };
+    'schema': kSidecarManifestSchema,
+    'version': kSidecarManifestVersion,
+    'generatedAt': generatedAt.toUtc().toIso8601String(),
+    'folderTags': folderTags,
+    'folderFavorite': folderFavorite,
+    'tags': <String, dynamic>{
+      for (final entry in tags.entries) entry.key: entry.value.toJson(),
+    },
+    'files': <String, dynamic>{
+      for (final entry in files.entries) entry.key: entry.value.toJson(),
+    },
+  };
 
   /// Parses [json], tolerating missing or malformed optional fields rather than
   /// throwing — a manifest hand-edited or written by an older version should
@@ -108,8 +103,9 @@ class SidecarManifest {
     if (filesRaw is Map) {
       filesRaw.forEach((key, value) {
         if (key is String && value is Map) {
-          files[key] =
-              SidecarFileEntry.fromJson(Map<String, dynamic>.from(value));
+          files[key] = SidecarFileEntry.fromJson(
+            Map<String, dynamic>.from(value),
+          );
         }
       });
     }
@@ -117,7 +113,7 @@ class SidecarManifest {
     return SidecarManifest(
       generatedAt:
           DateTime.tryParse(json['generatedAt'] as String? ?? '') ??
-              DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       folderTags: _stringList(json['folderTags']),
       folderFavorite: json['folderFavorite'] == true,
       tags: tags,

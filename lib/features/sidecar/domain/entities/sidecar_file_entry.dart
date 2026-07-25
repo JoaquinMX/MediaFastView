@@ -27,11 +27,11 @@ class SidecarFileEntry {
   final bool favorite;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'size': size,
-        'mtimeMs': mtimeMs,
-        if (tags.isNotEmpty) 'tags': tags,
-        if (favorite) 'favorite': true,
-      };
+    'size': size,
+    'mtimeMs': mtimeMs,
+    if (tags.isNotEmpty) 'tags': tags,
+    if (favorite) 'favorite': true,
+  };
 
   static SidecarFileEntry fromJson(Map<String, dynamic> json) {
     final tagsRaw = json['tags'];

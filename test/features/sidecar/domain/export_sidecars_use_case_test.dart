@@ -17,14 +17,13 @@ MediaEntity _media({
   int size = 100,
   int mtimeMs = 1000,
 }) {
-  final path = '$folder/$name';
   return MediaEntity(
     id: generateMediaIdFromMetadata(
       size: size,
       lastModified: DateTime.fromMillisecondsSinceEpoch(mtimeMs),
       fileName: name,
     ),
-    path: path,
+    path: '$folder/$name',
     name: name,
     type: MediaType.image,
     size: size,
@@ -60,111 +59,130 @@ void main() {
     createdAt: DateTime(2020),
   );
 
-  test('writes one manifest per folder and skips folders with nothing to say',
-      () async {
-    final root = _root('/lib', tagIds: <String>['t-family']);
-    final tagged = _media(
-      folder: '/lib/a',
-      name: 'IMG1.jpg',
+  test(
+    'embeds one manifest per meaningful folder in a portable root',
+    () async {
+      final root = _root('/lib', tagIds: <String>['t-family']);
+      final tagged = _media(
+        folder: '/lib/a',
+        name: 'IMG1.jpg',
+        tagIds: <String>['t-family'],
+      );
+      final untagged = _media(
+        folder: '/lib/a',
+        name: 'IMG2.jpg',
+        tagIds: const <String>[],
+      );
+      final both = _media(
+        folder: '/lib/b',
+        name: 'IMG3.jpg',
+        tagIds: <String>['t-family', 't-2024'],
+      );
+
+      final useCase = ExportSidecarsUseCase(
+        mediaRepository: FakeMediaRepository(<MediaEntity>[
+          tagged,
+          untagged,
+          both,
+        ]),
+        directoryRepository: FakeDirectoryRepository(<DirectoryEntity>[root]),
+        favoritesRepository: FakeFavoritesRepository(<FavoriteEntity>[
+          FavoriteEntity(
+            itemId: both.id,
+            itemType: FavoriteItemType.media,
+            addedAt: DateTime(2021),
+          ),
+        ]),
+        tagRepository: FakeTagRepository(<TagEntity>[family, year]),
+      );
+
+      final preparation = await useCase();
+
+      expect(preparation.backup.roots, hasLength(1));
+      final manifests =
+          preparation.backup.roots.single.manifestsByRelativeFolder;
+      expect(manifests.keys, containsAll(<String>['.', 'a', 'b']));
+      expect(manifests, hasLength(3));
+
+      expect(manifests['a']!.files.keys, <String>['IMG1.jpg']);
+      expect(manifests['a']!.files['IMG1.jpg']!.tags, <String>['Family']);
+      expect(manifests['a']!.tags['Family']!.color, 0xFFFF0000);
+      expect(manifests['b']!.files['IMG3.jpg']!.tags, <String>[
+        'Family',
+        '2024',
+      ]);
+      expect(manifests['b']!.files['IMG3.jpg']!.favorite, isTrue);
+      expect(manifests['.']!.folderTags, <String>['Family']);
+
+      expect(preparation.result.rootsSaved, 1);
+      expect(preparation.result.manifestsSaved, 3);
+      expect(preparation.result.filesCovered, 2);
+      expect(preparation.result.favoritesCovered, 1);
+      expect(preparation.result.hasFailures, isFalse);
+    },
+  );
+
+  test(
+    'keeps cached metadata for folders that may be temporarily offline',
+    () async {
+      final root = _root('/lib');
+      final stale = _media(
+        folder: '/lib/offline',
+        name: 'IMG3.jpg',
+        tagIds: <String>['t-family'],
+      );
+      final useCase = ExportSidecarsUseCase(
+        mediaRepository: FakeMediaRepository(<MediaEntity>[stale]),
+        directoryRepository: FakeDirectoryRepository(<DirectoryEntity>[root]),
+        favoritesRepository: FakeFavoritesRepository(),
+        tagRepository: FakeTagRepository(<TagEntity>[family]),
+      );
+
+      final preparation = await useCase();
+
+      expect(
+        preparation
+            .backup
+            .roots
+            .single
+            .manifestsByRelativeFolder['offline']!
+            .files,
+        contains('IMG3.jpg'),
+      );
+      expect(preparation.result.filesCovered, 1);
+    },
+  );
+
+  test('assigns a folder to the deepest nested tracked root', () async {
+    final outer = _root('/lib');
+    final inner = _root('/lib/photos');
+    final media = _media(
+      folder: '/lib/photos/trip',
+      name: 'IMG.jpg',
       tagIds: <String>['t-family'],
     );
-    final untagged = _media(
-      folder: '/lib/a',
-      name: 'IMG2.jpg',
-      tagIds: const <String>[],
-    );
-    final both = _media(
-      folder: '/lib/b',
-      name: 'IMG3.jpg',
-      tagIds: <String>['t-family', 't-2024'],
-    );
-
-    final sidecar = FakeSidecarRepository();
     final useCase = ExportSidecarsUseCase(
-      mediaRepository: FakeMediaRepository(<MediaEntity>[tagged, untagged, both]),
-      directoryRepository: FakeDirectoryRepository(<DirectoryEntity>[root]),
-      favoritesRepository: FakeFavoritesRepository(<FavoriteEntity>[
-        FavoriteEntity(
-          itemId: both.id,
-          itemType: FavoriteItemType.media,
-          addedAt: DateTime(2021),
-        ),
+      mediaRepository: FakeMediaRepository(<MediaEntity>[media]),
+      directoryRepository: FakeDirectoryRepository(<DirectoryEntity>[
+        outer,
+        inner,
       ]),
-      tagRepository: FakeTagRepository(<TagEntity>[family, year]),
-      sidecarRepository: sidecar,
+      favoritesRepository: FakeFavoritesRepository(),
+      tagRepository: FakeTagRepository(<TagEntity>[family]),
     );
 
-    final result = await useCase();
+    final preparation = await useCase();
 
-    // /lib (folder tags only), /lib/a (IMG1), /lib/b (IMG3). No manifest that
-    // is empty — /lib/a's IMG2 carried nothing, but IMG1 keeps the folder alive.
-    expect(sidecar.written.keys, containsAll(<String>['/lib', '/lib/a', '/lib/b']));
-    expect(sidecar.written.length, 3);
-
-    final folderA = sidecar.written['/lib/a']!;
-    expect(folderA.files.keys, <String>['IMG1.jpg']); // IMG2 skipped
-    expect(folderA.files['IMG1.jpg']!.tags, <String>['Family']);
-    expect(folderA.tags['Family']!.color, 0xFFFF0000);
-
-    final folderB = sidecar.written['/lib/b']!;
-    expect(folderB.files['IMG3.jpg']!.tags, <String>['Family', '2024']);
-    expect(folderB.files['IMG3.jpg']!.favorite, isTrue);
-
-    final rootManifest = sidecar.written['/lib']!;
-    expect(rootManifest.folderTags, <String>['Family']);
-    expect(rootManifest.files, isEmpty);
-
-    expect(result.foldersWritten, 3);
-    expect(result.filesCovered, 2); // IMG1, IMG3
-    expect(result.favoritesCovered, 1); // IMG3
-    expect(result.hasFailures, isFalse);
+    expect(preparation.backup.roots, hasLength(1));
+    expect(preparation.backup.roots.single.originalPath, inner.path);
+    expect(
+      preparation.backup.roots.single.manifestsByRelativeFolder,
+      contains('trip'),
+    );
   });
 
-  test('skips folders missing on disk without counting them as failures',
-      () async {
-    final root = _root('/lib', tagIds: <String>['t-family']);
-    final present = _media(
-      folder: '/lib/a',
-      name: 'IMG1.jpg',
-      tagIds: <String>['t-family'],
-    );
-    // Cached tagged+favorited media in a folder that no longer exists on disk.
-    final stale = _media(
-      folder: '/lib/gone',
-      name: 'IMG3.jpg',
-      tagIds: <String>['t-family', 't-2024'],
-    );
-
-    final sidecar = FakeSidecarRepository(missingFolders: <String>{'/lib/gone'});
-    final useCase = ExportSidecarsUseCase(
-      mediaRepository: FakeMediaRepository(<MediaEntity>[present, stale]),
-      directoryRepository: FakeDirectoryRepository(<DirectoryEntity>[root]),
-      favoritesRepository: FakeFavoritesRepository(<FavoriteEntity>[
-        FavoriteEntity(
-          itemId: stale.id,
-          itemType: FavoriteItemType.media,
-          addedAt: DateTime(2021),
-        ),
-      ]),
-      tagRepository: FakeTagRepository(<TagEntity>[family, year]),
-      sidecarRepository: sidecar,
-    );
-
-    final result = await useCase();
-
-    // The stale folder is skipped, not failed, and its file/favorite are not
-    // counted as saved.
-    expect(sidecar.written.keys, isNot(contains('/lib/gone')));
-    expect(result.foldersSkippedMissing, 1);
-    expect(result.hasFailures, isFalse);
-    expect(result.filesCovered, 1); // only IMG1 reached disk
-    expect(result.favoritesCovered, 0); // IMG3's favorite was in the stale folder
-    expect(result.describe(), contains('no longer exist on disk'));
-  });
-
-  test('writes nothing when there are no tags or favorites', () async {
+  test('creates an empty backup when there are no tags or favorites', () async {
     final root = _root('/lib');
-    final sidecar = FakeSidecarRepository();
     final useCase = ExportSidecarsUseCase(
       mediaRepository: FakeMediaRepository(<MediaEntity>[
         _media(folder: '/lib/a', name: 'IMG1.jpg', tagIds: const <String>[]),
@@ -172,12 +190,11 @@ void main() {
       directoryRepository: FakeDirectoryRepository(<DirectoryEntity>[root]),
       favoritesRepository: FakeFavoritesRepository(),
       tagRepository: FakeTagRepository(),
-      sidecarRepository: sidecar,
     );
 
-    final result = await useCase();
+    final preparation = await useCase();
 
-    expect(sidecar.written, isEmpty);
-    expect(result.foldersWritten, 0);
+    expect(preparation.backup.isEmpty, isTrue);
+    expect(preparation.result.manifestsSaved, 0);
   });
 }

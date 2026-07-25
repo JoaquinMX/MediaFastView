@@ -1,19 +1,22 @@
 import 'dart:convert';
 
+import '../domain/entities/sidecar_backup.dart';
 import '../domain/entities/sidecar_manifest.dart';
 
-/// Converts a [SidecarManifest] to and from the JSON text stored on disk.
+/// Converts sidecar manifests and portable backups to and from JSON.
 ///
-/// Encoding is pretty-printed so a `.mediafastview.json` stays human-readable
-/// and diffs cleanly. Decoding is tolerant: anything that is not valid JSON, not
-/// a JSON object, or not a Media Fast View manifest yields null rather than
-/// throwing, so a stray or corrupt file is simply ignored.
+/// Encoding is pretty-printed so backups stay human-readable and diff cleanly.
+/// Decoding is tolerant: malformed or foreign JSON yields null.
 class SidecarSerializer {
   const SidecarSerializer();
 
   static const JsonEncoder _encoder = JsonEncoder.withIndent('  ');
 
-  String encode(SidecarManifest manifest) => _encoder.convert(manifest.toJson());
+  String encode(SidecarManifest manifest) =>
+      _encoder.convert(manifest.toJson());
+
+  String encodeBackup(SidecarBackup backup) =>
+      _encoder.convert(backup.toJson());
 
   SidecarManifest? decode(String contents) {
     dynamic decoded;
@@ -26,5 +29,18 @@ class SidecarSerializer {
       return null;
     }
     return SidecarManifest.fromJson(Map<String, dynamic>.from(decoded));
+  }
+
+  SidecarBackup? decodeBackup(String contents) {
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(contents);
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map) {
+      return null;
+    }
+    return SidecarBackup.fromJson(Map<String, dynamic>.from(decoded));
   }
 }

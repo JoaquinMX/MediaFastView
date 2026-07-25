@@ -22,6 +22,9 @@ import '../../../../shared/utils/tag_cache_refresher.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
 import '../../../media_library/presentation/view_models/directory_grid_view_model.dart';
 import '../../../sidecar/domain/entities/sidecar_result.dart';
+import '../../../sidecar/domain/entities/sidecar_import_preparation.dart';
+import '../../../sidecar/data/sidecar_backup_file_service.dart';
+import '../../../sidecar/data/sidecar_serializer.dart';
 import '../../../sidecar/domain/use_cases/export_sidecars_use_case.dart';
 import '../../../sidecar/domain/use_cases/import_sidecars_use_case.dart';
 import '../../../../core/services/logging_service.dart';
@@ -82,6 +85,12 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
   );
   late final ImportSidecarsUseCase _importSidecarsUseCase = ref.read(
     importSidecarsUseCaseProvider,
+  );
+  late final SidecarBackupFileService _sidecarBackupFileService = ref.read(
+    sidecarBackupFileServiceProvider,
+  );
+  late final SidecarSerializer _sidecarSerializer = ref.read(
+    sidecarSerializerProvider,
   );
 
   @override
@@ -244,36 +253,72 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
     }
   }
 
-  /// Writes the active profile's tags and favorites into per-folder sidecar
-  /// manifests. Returns null only on an unexpected top-level failure; ordinary
-  /// per-folder write failures are reported inside the result.
+  /// Builds a portable backup and lets the user choose where to save it.
+  ///
+  /// Returns null when the native picker is cancelled. Failures are rethrown so
+  /// the presentation layer can distinguish them from cancellation.
   Future<SidecarExportResult?> exportSidecars({
     void Function(int done, int total)? onProgress,
   }) async {
     try {
-      return await _exportSidecarsUseCase(onProgress: onProgress);
+      final preparation = await _exportSidecarsUseCase(onProgress: onProgress);
+      if (preparation.backup.isEmpty) {
+        return preparation.result;
+      }
+      final saved = await _sidecarBackupFileService.saveBackup(
+        _sidecarSerializer.encodeBackup(preparation.backup),
+        suggestedName: _sidecarBackupFileName(DateTime.now()),
+      );
+      return saved ? preparation.result : null;
     } catch (error, stackTrace) {
       LoggingService.instance.error('Failed to export sidecars: $error');
       LoggingService.instance.debug('$stackTrace');
-      return null;
+      rethrow;
     }
   }
 
-  /// Reads sidecar manifests from disk and merges their tags and favorites into
-  /// the active profile, then refreshes the tag and favorite caches so the UI
-  /// reflects the imported data. Returns null on an unexpected failure.
-  Future<SidecarImportResult?> importSidecars({
+  /// Selects and parses a backup, then computes automatic root mappings.
+  ///
+  /// Returns null when the native picker is cancelled.
+  Future<SidecarImportPreparation?> prepareSidecarImport() async {
+    try {
+      final contents = await _sidecarBackupFileService.pickBackup();
+      if (contents == null) {
+        return null;
+      }
+      final backup = _sidecarSerializer.decodeBackup(contents);
+      if (backup == null) {
+        throw const FormatException(
+          'This is not a supported Media Fast View backup.',
+        );
+      }
+      return _importSidecarsUseCase.prepare(backup);
+    } catch (error, stackTrace) {
+      LoggingService.instance.error('Failed to prepare sidecar import: $error');
+      LoggingService.instance.debug('$stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Applies a prepared backup using saved-root to current-root mappings.
+  Future<SidecarImportResult> importSidecars({
+    required SidecarImportPreparation preparation,
+    required Map<String, String?> rootMappings,
     void Function(int done, int total)? onProgress,
   }) async {
     try {
-      final result = await _importSidecarsUseCase(onProgress: onProgress);
+      final result = await _importSidecarsUseCase(
+        backup: preparation.backup,
+        rootMappings: rootMappings,
+        onProgress: onProgress,
+      );
       await _tagCacheRefresher.refresh();
       await ref.read(favoritesViewModelProvider.notifier).loadFavorites();
       return result;
     } catch (error, stackTrace) {
       LoggingService.instance.error('Failed to import sidecars: $error');
       LoggingService.instance.debug('$stackTrace');
-      return null;
+      rethrow;
     }
   }
 
@@ -313,4 +358,11 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
       state = AsyncValue.data(current);
     }
   }
+}
+
+String _sidecarBackupFileName(DateTime date) {
+  final year = date.year.toString().padLeft(4, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return 'media-fast-view-backup-$year-$month-$day.json';
 }
