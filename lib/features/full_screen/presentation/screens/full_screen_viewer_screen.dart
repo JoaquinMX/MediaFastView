@@ -109,10 +109,6 @@ class _FullScreenViewerScreenState
     final state = ref.watch(fullScreenViewModelProvider);
     final colorScheme = Theme.of(context).colorScheme;
 
-    debugPrint(
-      'FullScreenViewerScreen: Building with theme-aware UI elements, current theme brightness: ${Theme.of(context).brightness}',
-    );
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
@@ -188,10 +184,7 @@ class _FullScreenViewerScreenState
                         ),
                         tooltip: 'Move (⌘M) or copy (⌘D)',
                         onSelected: (mode) => unawaited(
-                          _handleTransferCurrentMedia(
-                            state.currentMedia,
-                            mode,
-                          ),
+                          _handleTransferCurrentMedia(state.currentMedia, mode),
                         ),
                         itemBuilder: (context) => const [
                           PopupMenuItem(
@@ -209,7 +202,10 @@ class _FullScreenViewerScreenState
                     ? IconButton(
                         onPressed: () =>
                             _handleDeleteCurrentMedia(state.currentMedia),
-                        icon: Icon(Icons.delete_outline, color: colorScheme.error),
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: colorScheme.error,
+                        ),
                         tooltip: 'Delete (Del)',
                       )
                     : null,
@@ -917,18 +913,12 @@ class _FullScreenViewerScreenState
       switch (event.logicalKey) {
         case LogicalKeyboardKey.keyM:
           unawaited(
-            _handleTransferCurrentMedia(
-              state.currentMedia,
-              TransferMode.move,
-            ),
+            _handleTransferCurrentMedia(state.currentMedia, TransferMode.move),
           );
           return KeyEventResult.handled;
         case LogicalKeyboardKey.keyD:
           unawaited(
-            _handleTransferCurrentMedia(
-              state.currentMedia,
-              TransferMode.copy,
-            ),
+            _handleTransferCurrentMedia(state.currentMedia, TransferMode.copy),
           );
           return KeyEventResult.handled;
       }
