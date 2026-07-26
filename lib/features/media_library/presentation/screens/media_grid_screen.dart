@@ -30,10 +30,13 @@ import '../../../tagging/presentation/widgets/tag_filter_chips.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
 import '../../domain/entities/media_entity.dart';
 import '../models/directory_navigation_target.dart';
+import '../providers/directory_cover_controller.dart';
+import '../providers/directory_cover_providers.dart';
 import '../view_models/directory_grid_view_model.dart';
 import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
+import '../widgets/directory_cover_picker_dialog.dart';
 
 /// How long a revealed item stays called out. Long enough for the eye to land on
 /// it after the scroll, short enough not to be mistaken for a selection.
@@ -153,6 +156,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(directoryCoverControllerProvider(widget.directoryPath));
     final screenSize = MediaQuery.of(context).size;
     if (_shouldLogBuild(screenSize)) {
       _logMediaDebug(
@@ -444,6 +448,9 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
     MediaSortOption sortOption,
     MediaViewModel viewModel,
   ) {
+    final hasCustomCover =
+        ref.watch(directoryCoverProvider(widget.directoryPath)).valueOrNull !=
+        null;
     return AppBar(
       title: Text(widget.directoryName),
       actions: [
@@ -451,6 +458,22 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           icon: const Icon(Icons.tag),
           tooltip: 'Manage Tags',
           onPressed: () => TagManagementDialog.show(context),
+        ),
+        PopupMenuButton<_CurrentDirectoryCoverAction>(
+          icon: const Icon(Icons.image_outlined),
+          tooltip: 'Directory cover',
+          onSelected: _handleCurrentDirectoryCoverAction,
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: _CurrentDirectoryCoverAction.choose,
+              child: Text('Choose Cover…'),
+            ),
+            if (hasCustomCover)
+              const PopupMenuItem(
+                value: _CurrentDirectoryCoverAction.reset,
+                child: Text('Reset Cover'),
+              ),
+          ],
         ),
         PopupMenuButton<MediaSortOption>(
           icon: const Icon(Icons.sort),
@@ -1456,6 +1479,11 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           child: const Text('Info'),
           onTap: () => _onMediaLongPress(context, media),
         ),
+        if (media.type == MediaType.image || media.type == MediaType.video)
+          PopupMenuItem(
+            child: const Text('Use as Folder Cover'),
+            onTap: () => unawaited(_useAsFolderCover(media)),
+          ),
         if (_isMacOS) ...[
           PopupMenuItem(
             child: const Text('Move to…'),
@@ -1477,6 +1505,51 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
   /// is nothing to do here afterwards.
   Future<void> _transferMedia(MediaEntity media, TransferMode mode) {
     return pickDestinationAndTransferMedia(context, media, mode: mode);
+  }
+
+  Future<void> _handleCurrentDirectoryCoverAction(
+    _CurrentDirectoryCoverAction action,
+  ) async {
+    switch (action) {
+      case _CurrentDirectoryCoverAction.choose:
+        await DirectoryCoverPickerDialog.show(
+          context,
+          directoryPath: widget.directoryPath,
+          directoryName: widget.directoryName,
+          bookmarkData: widget.bookmarkData,
+        );
+      case _CurrentDirectoryCoverAction.reset:
+        await ref
+            .read(
+              directoryCoverControllerProvider(widget.directoryPath).notifier,
+            )
+            .resetCover();
+    }
+  }
+
+  Future<void> _useAsFolderCover(MediaEntity media) async {
+    await ref
+        .read(directoryCoverControllerProvider(widget.directoryPath).notifier)
+        .setCover(media);
+    if (!mounted) {
+      return;
+    }
+    final result = ref.read(
+      directoryCoverControllerProvider(widget.directoryPath),
+    );
+    result.when(
+      data: (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${media.name} is now the folder cover.')),
+        );
+      },
+      loading: () {},
+      error: (error, _) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not set folder cover: $error')),
+        );
+      },
+    );
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -1521,6 +1594,8 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
 class _ClearMediaSelectionIntent extends Intent {
   const _ClearMediaSelectionIntent();
 }
+
+enum _CurrentDirectoryCoverAction { choose, reset }
 
 class _SelectAllMediaIntent extends Intent {
   const _SelectAllMediaIntent();

@@ -1,6 +1,7 @@
 import '../../../core/services/isar_database.dart';
 import '../../favorites/data/isar/isar_favorites_data_source.dart';
 import '../../media_library/data/isar/isar_directory_data_source.dart';
+import '../../media_library/data/isar/isar_directory_cover_data_source.dart';
 import '../../media_library/data/isar/isar_media_data_source.dart';
 import '../../tagging/data/isar/isar_saved_filter_data_source.dart';
 import '../../tagging/data/isar/isar_tag_data_source.dart';
@@ -19,6 +20,7 @@ class ProfileScopedSources {
     required this.tags,
     required this.favorites,
     required this.filters,
+    this.covers,
   });
 
   /// The production binding: real Isar-backed sources for [profileId].
@@ -32,6 +34,7 @@ class ProfileScopedSources {
       tags: IsarTagDataSource(database, profileId: profileId),
       favorites: IsarFavoritesDataSource(database, profileId: profileId),
       filters: IsarSavedFilterDataSource(database, profileId: profileId),
+      covers: IsarDirectoryCoverDataSource(database, profileId: profileId),
     );
   }
 
@@ -40,9 +43,9 @@ class ProfileScopedSources {
   final IsarTagDataSource tags;
   final IsarFavoritesDataSource favorites;
   final IsarSavedFilterDataSource filters;
+  final IsarDirectoryCoverDataSource? covers;
 }
 
 /// Binds a fresh set of data sources to [profileId].
-typedef ProfileScopedSourcesBuilder = ProfileScopedSources Function(
-  String profileId,
-);
+typedef ProfileScopedSourcesBuilder =
+    ProfileScopedSources Function(String profileId);

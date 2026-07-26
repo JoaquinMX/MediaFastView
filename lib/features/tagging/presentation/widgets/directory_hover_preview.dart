@@ -1,8 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../shared/providers/repository_providers.dart';
+import '../../../media_library/presentation/models/directory_preview.dart';
+import '../../../media_library/presentation/providers/directory_cover_controller.dart';
+import '../../../media_library/presentation/providers/directory_preview_providers.dart';
 import '../../../thumbnails/presentation/file_thumbnail.dart';
+import '../../../thumbnails/presentation/media_thumbnail.dart';
 
 /// Shows a floating strip of thumbnails from [directoryPath] while the pointer
 /// hovers over [child].
@@ -110,6 +115,7 @@ class _DirectoryPreviewStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(directoryCoverControllerProvider(directoryPath));
     final previewAsync = ref.watch(
       directoryPreviewStripProvider(directoryPath),
     );
@@ -118,8 +124,17 @@ class _DirectoryPreviewStrip extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.all(12),
       child: previewAsync.when(
-        data: (paths) {
-          if (paths.isEmpty) {
+        data: (resolution) {
+          if (resolution.hasStaleCustomCover) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              ref
+                  .read(
+                    directoryCoverControllerProvider(directoryPath).notifier,
+                  )
+                  .clearStaleCover();
+            });
+          }
+          if (resolution.previews.isEmpty) {
             return _buildMessage(theme, 'No previews available');
           }
 
@@ -128,10 +143,10 @@ class _DirectoryPreviewStrip extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                for (final path in paths)
+                for (final preview in resolution.previews)
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
-                    child: _PreviewThumbnail(path: path),
+                    child: _PreviewThumbnail(preview: preview),
                   ),
               ],
             ),
@@ -161,9 +176,9 @@ class _DirectoryPreviewStrip extends ConsumerWidget {
 }
 
 class _PreviewThumbnail extends StatelessWidget {
-  const _PreviewThumbnail({required this.path});
+  const _PreviewThumbnail({required this.preview});
 
-  final String path;
+  final DirectoryPreview preview;
 
   @override
   Widget build(BuildContext context) {
@@ -174,21 +189,43 @@ class _PreviewThumbnail extends StatelessWidget {
       borderRadius: borderRadius,
       child: AspectRatio(
         aspectRatio: 1,
-        child: FileThumbnail(
-          path: path,
-          fit: BoxFit.cover,
-          placeholderBuilder: (_) => Container(
-            color: theme.colorScheme.surfaceContainerHighest,
-            child: const Center(child: CircularProgressIndicator()),
+        child: switch (preview) {
+          DirectoryCustomPreview(:final media) => MediaThumbnail(
+            media: media,
+            fit: BoxFit.cover,
+            placeholderBuilder: (_) => _placeholder(theme),
+            errorBuilder: (_) => _error(theme),
           ),
-          errorBuilder: (_) => Container(
-            color: theme.colorScheme.surfaceContainerHighest,
-            child: Icon(
-              Icons.broken_image,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          DirectoryImagePreview(:final sourcePath) => FileThumbnail(
+            path: sourcePath,
+            fit: BoxFit.cover,
+            placeholderBuilder: (_) => _placeholder(theme),
+            errorBuilder: (_) => _error(theme),
           ),
-        ),
+          DirectoryVideoPreview(:final thumbnailPath) => Image.file(
+            File(thumbnailPath),
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _error(theme),
+          ),
+          DirectoryEmptyPreview() => _error(theme),
+        },
+      ),
+    );
+  }
+
+  Widget _placeholder(ThemeData theme) {
+    return Container(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _error(ThemeData theme) {
+    return Container(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Icon(
+        Icons.broken_image,
+        color: theme.colorScheme.onSurfaceVariant,
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:media_fast_view/features/favorites/data/isar/isar_favorites_data
 import 'package:media_fast_view/features/favorites/data/models/favorite_model.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/media_library/data/isar/directory_collection.dart';
+import 'package:media_fast_view/features/media_library/data/isar/isar_directory_cover_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/media_collection.dart';
@@ -11,6 +12,7 @@ import 'package:media_fast_view/features/media_library/data/models/directory_mod
 import 'package:media_fast_view/features/media_library/data/models/media_model.dart';
 import 'package:media_fast_view/features/media_library/data/models/tag_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/directory_cover_entity.dart';
 import 'package:media_fast_view/features/profiles/domain/entities/profile_entity.dart';
 import 'package:media_fast_view/features/profiles/domain/profile_scoped_sources.dart';
 import 'package:media_fast_view/features/profiles/domain/profile_validation.dart';
@@ -47,16 +49,17 @@ class _FakeProfileRepository implements ProfileRepository {
 }
 
 ProfileEntity _profile(String id) => ProfileEntity(
-      id: id,
-      name: id,
-      sortOrder: 0,
-      createdAt: DateTime(2024, 1, 1),
-    );
+  id: id,
+  name: id,
+  sortOrder: 0,
+  createdAt: DateTime(2024, 1, 1),
+);
 
 void main() {
   late FakeIsarDatabase database;
   late InMemoryDirectoryCollectionStore directoryStore;
   late InMemoryMediaCollectionStore mediaStore;
+  late InMemoryDirectoryCoverCollectionStore coverStore;
   late InMemoryTagCollectionStore tagStore;
   late InMemoryFavoriteCollectionStore favoriteStore;
   late InMemorySavedFilterCollectionStore filterStore;
@@ -96,6 +99,11 @@ void main() {
         database,
         profileId: profileId,
         storeBuilder: (_) => filterStore,
+      ),
+      covers: IsarDirectoryCoverDataSource(
+        database,
+        profileId: profileId,
+        storeBuilder: (_) => coverStore,
       ),
     );
   }
@@ -149,6 +157,7 @@ void main() {
     database = FakeIsarDatabase();
     directoryStore = InMemoryDirectoryCollectionStore();
     mediaStore = InMemoryMediaCollectionStore();
+    coverStore = InMemoryDirectoryCoverCollectionStore();
     tagStore = InMemoryTagCollectionStore();
     favoriteStore = InMemoryFavoriteCollectionStore();
     filterStore = InMemorySavedFilterCollectionStore();
@@ -180,95 +189,126 @@ void main() {
     expect(report.directoriesKept, 0);
   });
 
-  test('keeps a shared directory whole, with its bookmark and scan cache',
-      () async {
-    await seedTag('tag-mine', _doomed);
-    await seedTag('tag-theirs', _survivor);
-    await seedDirectory(
-      'shared',
-      profileIds: <String>[_doomed, _survivor],
-      tagIds: <String>['tag-mine', 'tag-theirs'],
-    );
-    await seedMedia('media-1', 'shared');
+  test(
+    'keeps a shared directory whole, with its bookmark and scan cache',
+    () async {
+      await seedTag('tag-mine', _doomed);
+      await seedTag('tag-theirs', _survivor);
+      await seedDirectory(
+        'shared',
+        profileIds: <String>[_doomed, _survivor],
+        tagIds: <String>['tag-mine', 'tag-theirs'],
+      );
+      await seedMedia('media-1', 'shared');
 
-    final report = await deleteProfile(_doomed);
+      final report = await deleteProfile(_doomed);
 
-    final survivor = await directoryStore.getByDirectoryId('shared');
-    expect(survivor, isNotNull);
-    expect(survivor!.profileIds, equals(<String>[_survivor]));
-    expect(survivor.bookmarkData, 'bookmark-shared');
-    expect(
-      survivor.lastScanAt,
-      DateTime(2024, 2, 1),
-      reason: 'the surviving profile should not have to rescan',
-    );
-    expect(
-      survivor.tagIds,
-      equals(<String>['tag-theirs']),
-      reason: "the deleted profile's tags go; the survivor's stay",
-    );
-    expect(
-      await mediaStore.getAll(),
-      hasLength(1),
-      reason: 'the scan cache is shared, so it survives with the directory',
-    );
+      final survivor = await directoryStore.getByDirectoryId('shared');
+      expect(survivor, isNotNull);
+      expect(survivor!.profileIds, equals(<String>[_survivor]));
+      expect(survivor.bookmarkData, 'bookmark-shared');
+      expect(
+        survivor.lastScanAt,
+        DateTime(2024, 2, 1),
+        reason: 'the surviving profile should not have to rescan',
+      );
+      expect(
+        survivor.tagIds,
+        equals(<String>['tag-theirs']),
+        reason: "the deleted profile's tags go; the survivor's stay",
+      );
+      expect(
+        await mediaStore.getAll(),
+        hasLength(1),
+        reason: 'the scan cache is shared, so it survives with the directory',
+      );
 
-    expect(report.directoriesDropped, 0);
-    expect(report.directoriesKept, 1);
-  });
+      expect(report.directoriesDropped, 0);
+      expect(report.directoriesKept, 1);
+    },
+  );
 
-  test("deletes the profile's tags, favorites and filters, and no others",
-      () async {
-    await seedTag('tag-mine', _doomed);
-    await seedTag('tag-theirs', _survivor);
-    await favoriteStore.put(
-      FavoriteModel(
-        itemId: 'media-1',
-        profileId: _doomed,
-        itemType: FavoriteItemType.media,
-        addedAt: DateTime(2024, 1, 1),
-      ).toCollection(),
+  test(
+    "deletes the profile's tags, favorites and filters, and no others",
+    () async {
+      await seedTag('tag-mine', _doomed);
+      await seedTag('tag-theirs', _survivor);
+      await favoriteStore.put(
+        FavoriteModel(
+          itemId: 'media-1',
+          profileId: _doomed,
+          itemType: FavoriteItemType.media,
+          addedAt: DateTime(2024, 1, 1),
+        ).toCollection(),
+      );
+      await favoriteStore.put(
+        FavoriteModel(
+          itemId: 'media-1',
+          profileId: _survivor,
+          itemType: FavoriteItemType.media,
+          addedAt: DateTime(2024, 1, 1),
+        ).toCollection(),
+      );
+      await filterStore.put(
+        SavedFilterModel(
+          id: 'filter-mine',
+          profileId: _doomed,
+          name: 'mine',
+          createdAt: DateTime(2024, 1, 1),
+          updatedAt: DateTime(2024, 1, 1),
+        ).toCollection(),
+      );
+      await filterStore.put(
+        SavedFilterModel(
+          id: 'filter-theirs',
+          profileId: _survivor,
+          name: 'theirs',
+          createdAt: DateTime(2024, 1, 1),
+          updatedAt: DateTime(2024, 1, 1),
+        ).toCollection(),
+      );
+
+      await deleteProfile(_doomed);
+
+      expect(await tagStore.getByProfileId(_doomed), isEmpty);
+      expect(await tagStore.getByProfileId(_survivor), hasLength(1));
+      expect(await favoriteStore.getByProfileId(_doomed), isEmpty);
+      expect(
+        await favoriteStore.getByProfileId(_survivor),
+        hasLength(1),
+        reason:
+            'the same media favorited in both profiles is two separate rows',
+      );
+      expect(await filterStore.getByProfileId(_doomed), isEmpty);
+      expect(await filterStore.getByProfileId(_survivor), hasLength(1));
+
+      expect(profiles.removed, equals(<String>[_doomed]));
+    },
+  );
+
+  test("deletes only the removed profile's directory covers", () async {
+    final doomedCovers = IsarDirectoryCoverDataSource(
+      database,
+      profileId: _doomed,
+      storeBuilder: (_) => coverStore,
     );
-    await favoriteStore.put(
-      FavoriteModel(
-        itemId: 'media-1',
-        profileId: _survivor,
-        itemType: FavoriteItemType.media,
-        addedAt: DateTime(2024, 1, 1),
-      ).toCollection(),
+    final survivorCovers = IsarDirectoryCoverDataSource(
+      database,
+      profileId: _survivor,
+      storeBuilder: (_) => coverStore,
     );
-    await filterStore.put(
-      SavedFilterModel(
-        id: 'filter-mine',
-        profileId: _doomed,
-        name: 'mine',
-        createdAt: DateTime(2024, 1, 1),
-        updatedAt: DateTime(2024, 1, 1),
-      ).toCollection(),
+    final cover = DirectoryCoverEntity.media(
+      directoryPath: '/library/photos',
+      sourceFileName: 'cover.jpg',
+      mediaType: MediaType.image,
+      updatedAt: DateTime(2025),
     );
-    await filterStore.put(
-      SavedFilterModel(
-        id: 'filter-theirs',
-        profileId: _survivor,
-        name: 'theirs',
-        createdAt: DateTime(2024, 1, 1),
-        updatedAt: DateTime(2024, 1, 1),
-      ).toCollection(),
-    );
+    await doomedCovers.saveCover(cover);
+    await survivorCovers.saveCover(cover);
 
     await deleteProfile(_doomed);
 
-    expect(await tagStore.getByProfileId(_doomed), isEmpty);
-    expect(await tagStore.getByProfileId(_survivor), hasLength(1));
-    expect(await favoriteStore.getByProfileId(_doomed), isEmpty);
-    expect(
-      await favoriteStore.getByProfileId(_survivor),
-      hasLength(1),
-      reason: 'the same media favorited in both profiles is two separate rows',
-    );
-    expect(await filterStore.getByProfileId(_doomed), isEmpty);
-    expect(await filterStore.getByProfileId(_survivor), hasLength(1));
-
-    expect(profiles.removed, equals(<String>[_doomed]));
+    expect(await doomedCovers.getCover('/library/photos'), isNull);
+    expect(await survivorCovers.getCover('/library/photos'), isNotNull);
   });
 }

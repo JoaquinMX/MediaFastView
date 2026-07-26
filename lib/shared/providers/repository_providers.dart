@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,13 +16,17 @@ import '../../core/services/isar_schemas.dart';
 import 'active_profile_provider.dart';
 import '../../features/media_library/data/data_sources/filesystem_media_data_source.dart';
 import '../../features/media_library/data/data_sources/local_directory_data_source.dart';
+import '../../features/media_library/data/isar/isar_directory_cover_data_source.dart';
 import '../../features/media_library/data/repositories/directory_repository_impl.dart';
+import '../../features/media_library/data/repositories/directory_cover_repository_impl.dart';
 import '../../features/media_library/data/repositories/file_operations_repository_impl.dart';
 import '../../features/media_library/data/repositories/filesystem_media_repository_impl.dart';
 import '../../features/media_library/data/isar/isar_directory_data_source.dart';
 import '../../features/media_library/data/isar/isar_media_data_source.dart';
 import '../../features/media_library/domain/entities/directory_media_counts.dart';
+import '../../features/media_library/domain/entities/directory_cover_entity.dart';
 import '../../features/media_library/domain/repositories/directory_repository.dart';
+import '../../features/media_library/domain/repositories/directory_cover_repository.dart';
 import '../../features/media_library/domain/repositories/file_operations_repository.dart';
 import '../../features/media_library/domain/repositories/media_repository.dart';
 import '../../features/media_library/domain/use_cases/add_directory_use_case.dart';
@@ -35,7 +38,10 @@ import '../../features/media_library/domain/use_cases/rescan_library_use_case.da
 import '../../features/media_library/domain/use_cases/get_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/get_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/remove_directory_use_case.dart';
+import '../../features/media_library/domain/use_cases/reset_directory_cover_use_case.dart';
 import '../../features/media_library/domain/use_cases/search_directories_use_case.dart';
+import '../../features/media_library/domain/use_cases/set_directory_cover_use_case.dart';
+import '../../features/media_library/domain/use_cases/set_directory_no_cover_use_case.dart';
 import '../../features/media_library/domain/entities/directory_entity.dart';
 import '../../features/media_library/domain/use_cases/reconcile_transferred_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/transfer_media_use_case.dart';
@@ -129,6 +135,14 @@ final isarMediaDataSourceProvider = Provider<IsarMediaDataSource>(
   ),
 );
 
+final isarDirectoryCoverDataSourceProvider =
+    Provider<IsarDirectoryCoverDataSource>(
+      (ref) => IsarDirectoryCoverDataSource(
+        ref.watch(isarDatabaseProvider),
+        profileId: ref.watch(activeProfileIdProvider),
+      ),
+    );
+
 final filesystemMediaDataSourceProvider = Provider<FilesystemMediaDataSource>(
   (ref) => FilesystemMediaDataSource(
     ref.watch(bookmarkServiceProvider),
@@ -208,6 +222,24 @@ final mediaRepositoryProvider =
       },
     );
 
+/// Changes whenever the active profile's directory-cover records are mutated.
+final directoryCoverRevisionProvider = StateProvider<int>((ref) => 0);
+
+final directoryCoverRepositoryProvider = Provider<DirectoryCoverRepository>((
+  ref,
+) {
+  return _NotifyingDirectoryCoverRepository(
+    _DeferredDirectoryCoverRepository(
+      () => DirectoryCoverRepositoryImpl(
+        ref.read(isarDirectoryCoverDataSourceProvider),
+      ),
+    ),
+    () {
+      ref.read(directoryCoverRevisionProvider.notifier).state += 1;
+    },
+  );
+});
+
 final directoryMediaCountsProvider =
     FutureProvider.autoDispose<Map<String, DirectoryMediaCounts>>((ref) async {
       return ref.watch(mediaRepositoryProvider).getDirectoryMediaCounts();
@@ -285,6 +317,124 @@ class FavoritesRepositoryNotifier extends StateNotifier<FavoritesRepository> {
     : super(repository);
 }
 
+class _NotifyingDirectoryCoverRepository implements DirectoryCoverRepository {
+  const _NotifyingDirectoryCoverRepository(this._delegate, this._onChanged);
+
+  final DirectoryCoverRepository _delegate;
+  final void Function() _onChanged;
+
+  @override
+  Future<void> clearCovers() {
+    return _mutate(_delegate.clearCovers);
+  }
+
+  @override
+  Future<DirectoryCoverEntity?> getCover(String directoryPath) {
+    return _delegate.getCover(directoryPath);
+  }
+
+  @override
+  Future<void> rebaseDirectoryTree({
+    required String oldRootPath,
+    required String newRootPath,
+  }) {
+    return _mutate(
+      () => _delegate.rebaseDirectoryTree(
+        oldRootPath: oldRootPath,
+        newRootPath: newRootPath,
+      ),
+    );
+  }
+
+  @override
+  Future<void> reconcileMediaMove({
+    required String oldPath,
+    required String newPath,
+  }) {
+    return _mutate(
+      () => _delegate.reconcileMediaMove(oldPath: oldPath, newPath: newPath),
+    );
+  }
+
+  @override
+  Future<void> removeCover(String directoryPath) {
+    return _mutate(() => _delegate.removeCover(directoryPath));
+  }
+
+  @override
+  Future<void> removeCoverForSource(String sourcePath) {
+    return _mutate(() => _delegate.removeCoverForSource(sourcePath));
+  }
+
+  @override
+  Future<void> removeCoversUnder(String directoryPath) {
+    return _mutate(() => _delegate.removeCoversUnder(directoryPath));
+  }
+
+  @override
+  Future<void> saveCover(DirectoryCoverEntity cover) {
+    return _mutate(() => _delegate.saveCover(cover));
+  }
+
+  Future<void> _mutate(Future<void> Function() action) async {
+    await action();
+    _onChanged();
+  }
+}
+
+class _DeferredDirectoryCoverRepository implements DirectoryCoverRepository {
+  const _DeferredDirectoryCoverRepository(this._resolve);
+
+  final DirectoryCoverRepository Function() _resolve;
+
+  @override
+  Future<void> clearCovers() => _resolve().clearCovers();
+
+  @override
+  Future<DirectoryCoverEntity?> getCover(String directoryPath) {
+    return _resolve().getCover(directoryPath);
+  }
+
+  @override
+  Future<void> rebaseDirectoryTree({
+    required String oldRootPath,
+    required String newRootPath,
+  }) {
+    return _resolve().rebaseDirectoryTree(
+      oldRootPath: oldRootPath,
+      newRootPath: newRootPath,
+    );
+  }
+
+  @override
+  Future<void> reconcileMediaMove({
+    required String oldPath,
+    required String newPath,
+  }) {
+    return _resolve().reconcileMediaMove(oldPath: oldPath, newPath: newPath);
+  }
+
+  @override
+  Future<void> removeCover(String directoryPath) {
+    return _resolve().removeCover(directoryPath);
+  }
+
+  @override
+  Future<void> removeCoverForSource(String sourcePath) {
+    return _resolve().removeCoverForSource(sourcePath);
+  }
+
+  @override
+  Future<void> removeCoversUnder(String directoryPath) {
+    return _resolve().removeCoversUnder(directoryPath);
+  }
+
+  @override
+  Future<void> saveCover(DirectoryCoverEntity cover) {
+    return _resolve().saveCover(cover);
+  }
+}
+
 // Use case providers
 final getDirectoriesUseCaseProvider = Provider<GetDirectoriesUseCase>((ref) {
   return GetDirectoriesUseCase(ref.watch(directoryRepositoryProvider));
@@ -309,6 +459,7 @@ final removeDirectoryUseCaseProvider = Provider<RemoveDirectoryUseCase>((ref) {
     ref.watch(directoryRepositoryProvider),
     ref.watch(mediaRepositoryProvider),
     ref.watch(favoritesRepositoryProvider),
+    ref.watch(directoryCoverRepositoryProvider),
   );
 });
 
@@ -322,7 +473,10 @@ final updateDirectoryAccessUseCaseProvider =
 final clearDirectoriesUseCaseProvider = Provider<ClearDirectoriesUseCase>((
   ref,
 ) {
-  return ClearDirectoriesUseCase(ref.watch(directoryRepositoryProvider));
+  return ClearDirectoriesUseCase(
+    ref.watch(directoryRepositoryProvider),
+    ref.watch(directoryCoverRepositoryProvider),
+  );
 });
 
 final clearMediaCacheUseCaseProvider = Provider<ClearMediaCacheUseCase>((ref) {
@@ -334,11 +488,17 @@ final rescanLibraryUseCaseProvider = Provider<RescanLibraryUseCase>((ref) {
 });
 
 final deleteFileUseCaseProvider = Provider<DeleteFileUseCase>((ref) {
-  return DeleteFileUseCase(ref.watch(fileOperationsRepositoryProvider));
+  return DeleteFileUseCase(
+    ref.watch(fileOperationsRepositoryProvider),
+    directoryCoverRepository: ref.watch(directoryCoverRepositoryProvider),
+  );
 });
 
 final deleteDirectoryUseCaseProvider = Provider<DeleteDirectoryUseCase>((ref) {
-  return DeleteDirectoryUseCase(ref.watch(fileOperationsRepositoryProvider));
+  return DeleteDirectoryUseCase(
+    ref.watch(fileOperationsRepositoryProvider),
+    directoryCoverRepository: ref.watch(directoryCoverRepositoryProvider),
+  );
 });
 
 final validatePathUseCaseProvider = Provider<ValidatePathUseCase>((ref) {
@@ -360,8 +520,31 @@ final reconcileTransferredMediaUseCaseProvider =
         ref.watch(favoritesRepositoryProvider),
         ref.watch(directoryRepositoryProvider),
         ref.watch(bookmarkServiceProvider),
+        directoryCoverRepository: ref.watch(directoryCoverRepositoryProvider),
       );
     });
+
+final setDirectoryCoverUseCaseProvider = Provider<SetDirectoryCoverUseCase>((
+  ref,
+) {
+  return SetDirectoryCoverUseCase(ref.watch(directoryCoverRepositoryProvider));
+});
+
+final setDirectoryNoCoverUseCaseProvider = Provider<SetDirectoryNoCoverUseCase>(
+  (ref) {
+    return SetDirectoryNoCoverUseCase(
+      ref.watch(directoryCoverRepositoryProvider),
+    );
+  },
+);
+
+final resetDirectoryCoverUseCaseProvider = Provider<ResetDirectoryCoverUseCase>(
+  (ref) {
+    return ResetDirectoryCoverUseCase(
+      ref.watch(directoryCoverRepositoryProvider),
+    );
+  },
+);
 
 /// The tracked library roots.
 ///
@@ -617,53 +800,3 @@ final loadMediaForViewingUseCaseProvider = Provider<LoadMediaForViewingUseCase>(
     return LoadMediaForViewingUseCase(ref.watch(isarMediaDataSourceProvider));
   },
 );
-
-// Directory preview provider
-const Duration _previewProviderKeepAliveDuration = Duration(milliseconds: 500);
-
-void _configurePreviewProviderKeepAlive<T>(
-  AutoDisposeFutureProviderRef<T> ref,
-) {
-  final keepAliveLink = ref.keepAlive();
-  Timer? disposeTimer;
-
-  ref.onCancel(() {
-    disposeTimer = Timer(
-      _previewProviderKeepAliveDuration,
-      keepAliveLink.close,
-    );
-  });
-
-  ref.onResume(() {
-    disposeTimer?.cancel();
-    disposeTimer = null;
-  });
-
-  ref.onDispose(() {
-    disposeTimer?.cancel();
-    disposeTimer = null;
-  });
-}
-
-final directoryPreviewStripProvider = FutureProvider.autoDispose
-    .family<List<String>, String>((ref, directoryPath) async {
-      _configurePreviewProviderKeepAlive(ref);
-      debugPrint('Getting directory preview strip for: $directoryPath');
-      final fileService = ref.watch(fileServiceProvider);
-      try {
-        final contents = await fileService.getDirectoryContents(directoryPath);
-        final imageFiles = contents
-            .whereType<File>()
-            .where(
-              (entity) =>
-                  fileService.getMediaTypeFromExtension(entity.path) == 'image',
-            )
-            .take(5)
-            .map((entity) => entity.path)
-            .toList();
-        return imageFiles;
-      } catch (e) {
-        debugPrint('Error getting preview strip for $directoryPath: $e');
-      }
-      return const <String>[];
-    });

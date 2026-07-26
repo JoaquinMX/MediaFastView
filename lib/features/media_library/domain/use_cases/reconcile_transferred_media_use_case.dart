@@ -14,6 +14,7 @@ import '../../data/isar/isar_media_data_source.dart';
 import '../../data/models/media_model.dart';
 import '../entities/media_entity.dart';
 import '../repositories/directory_repository.dart';
+import '../repositories/directory_cover_repository.dart';
 
 /// What the reconciler did, from the caller's point of view.
 class ReconciledTransfer {
@@ -46,13 +47,15 @@ class ReconcileTransferredMediaUseCase {
     this._mediaDataSource,
     this._favoritesRepository,
     this._directoryRepository,
-    this._bookmarkService,
-  );
+    this._bookmarkService, {
+    DirectoryCoverRepository? directoryCoverRepository,
+  }) : _directoryCoverRepository = directoryCoverRepository;
 
   final IsarMediaDataSource _mediaDataSource;
   final FavoritesRepository _favoritesRepository;
   final DirectoryRepository _directoryRepository;
   final BookmarkService _bookmarkService;
+  final DirectoryCoverRepository? _directoryCoverRepository;
 
   Future<ReconciledTransfer> call({
     required MediaEntity source,
@@ -67,19 +70,31 @@ class ReconcileTransferredMediaUseCase {
     final scopedPath = await _beginAccess(destinationBookmarkData);
     try {
       if (source.type == MediaType.directory) {
-        return await _reconcileDirectory(
+        final reconciled = await _reconcileDirectory(
           source: source,
           transfer: transfer,
           destinationDirectoryPath: destinationDirectoryPath,
         );
+        await _directoryCoverRepository?.rebaseDirectoryTree(
+          oldRootPath: source.path,
+          newRootPath: transfer.destinationPath,
+        );
+        return reconciled;
       }
-      return await _reconcileFile(
+      final reconciled = await _reconcileFile(
         source: source,
         transfer: transfer,
         destinationDirectoryPath: destinationDirectoryPath,
         mode: mode,
         copyInheritsTags: copyInheritsTags,
       );
+      if (mode == TransferMode.move) {
+        await _directoryCoverRepository?.reconcileMediaMove(
+          oldPath: source.path,
+          newPath: transfer.destinationPath,
+        );
+      }
+      return reconciled;
     } finally {
       await _endAccess(scopedPath);
     }
@@ -138,10 +153,7 @@ class ReconcileTransferredMediaUseCase {
       // The copy deliberately does not inherit the favorite: a favorite is a
       // curated pointer to an item, and duplicating the item shouldn't duplicate
       // the entry in the favorites grid.
-      return ReconciledTransfer(
-        media: _toEntity(copy),
-        identityChanged: false,
-      );
+      return ReconciledTransfer(media: _toEntity(copy), identityChanged: false);
     }
 
     // A move keeps the id only when the size, modification time and name all
@@ -181,20 +193,14 @@ class ReconcileTransferredMediaUseCase {
       tagIds: List<String>.from(source.tagIds),
       directoryId: newDirectoryId,
     );
-    await _mediaDataSource.replaceMedia(
-      oldMediaId: source.id,
-      newMedia: moved,
-    );
+    await _mediaDataSource.replaceMedia(oldMediaId: source.id, newMedia: moved);
     await _remapFavorite(
       oldId: source.id,
       newId: newId,
       type: FavoriteItemType.media,
     );
 
-    return ReconciledTransfer(
-      media: _toEntity(moved),
-      identityChanged: true,
-    );
+    return ReconciledTransfer(media: _toEntity(moved), identityChanged: true);
   }
 
   // MARK: directories
@@ -289,8 +295,9 @@ class ReconcileTransferredMediaUseCase {
     };
     for (final row in descendants) {
       if (row.type != MediaType.directory) continue;
-      directoryIdRemap[generateDirectoryId(row.path)] =
-          generateDirectoryId(_rebase(row.path, oldPath, newPath));
+      directoryIdRemap[generateDirectoryId(row.path)] = generateDirectoryId(
+        _rebase(row.path, oldPath, newPath),
+      );
     }
 
     final entries = <({String oldMediaId, MediaModel newMedia})>[];
@@ -299,8 +306,8 @@ class ReconcileTransferredMediaUseCase {
     for (final row in descendants) {
       final rebased = _rebase(row.path, oldPath, newPath);
       final name = p.basename(rebased);
-      final directoryId = directoryIdRemap[row.directoryId] ??
-          generateDirectoryId(newPath);
+      final directoryId =
+          directoryIdRemap[row.directoryId] ?? generateDirectoryId(newPath);
 
       final String newId;
       int size = row.size;

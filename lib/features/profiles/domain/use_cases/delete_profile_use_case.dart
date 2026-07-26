@@ -17,7 +17,8 @@ class DeleteProfileReport {
   final int directoriesKept;
 
   @override
-  String toString() => 'DeleteProfileReport(dropped: $directoriesDropped, '
+  String toString() =>
+      'DeleteProfileReport(dropped: $directoriesDropped, '
       'kept: $directoriesKept)';
 }
 
@@ -81,6 +82,7 @@ class DeleteProfileUseCase {
     await sources.filters.clearFilters();
     await sources.favorites.clearFavorites();
     await sources.tags.clearTags();
+    await sources.covers?.clearCovers();
 
     await _profiles.removeProfile(profileId);
 

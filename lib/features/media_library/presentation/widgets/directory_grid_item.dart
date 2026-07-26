@@ -1,11 +1,12 @@
-import 'dart:io';
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+
 import '../../../../core/constants/ui_constants.dart';
 import '../../../profiles/presentation/widgets/directory_profile_dialog.dart';
 import '../../domain/entities/directory_entity.dart';
+import 'directory_cover_picker_dialog.dart';
 import 'directory_tag_assignment_dialog.dart';
+import 'directory_thumbnail.dart';
 
 /// Grid item widget for displaying a directory with hover effects.
 class DirectoryGridItem extends StatefulWidget {
@@ -54,19 +55,27 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(
-      begin: UiAnimations.scaleNormal,
-      end: UiAnimations.scaleHover,
-    ).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
+    _scaleAnimation =
+        Tween<double>(
+          begin: UiAnimations.scaleNormal,
+          end: UiAnimations.scaleHover,
+        ).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeInOut,
+          ),
+        );
 
-    _elevationAnimation = Tween<double>(
-      begin: UiAnimations.elevationNormal,
-      end: UiAnimations.elevationHover,
-    ).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
+    _elevationAnimation =
+        Tween<double>(
+          begin: UiAnimations.elevationNormal,
+          end: UiAnimations.elevationHover,
+        ).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeInOut,
+          ),
+        );
   }
 
   @override
@@ -88,10 +97,12 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
     return LayoutBuilder(
       builder: (context, constraints) {
         // Responsive padding: smaller on small heights
-        final double paddingValue = constraints.maxHeight < UiSizing.responsiveHeightThreshold
+        final double paddingValue =
+            constraints.maxHeight < UiSizing.responsiveHeightThreshold
             ? UiSpacing.extraSmallGap
             : UiSpacing.verticalGap;
-        final double iconSize = constraints.maxHeight < UiSizing.responsiveHeightThreshold
+        final double iconSize =
+            constraints.maxHeight < UiSizing.responsiveHeightThreshold
             ? UiSizing.iconExtraSmall
             : UiSizing.iconSmall;
 
@@ -114,9 +125,14 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                   elevation: _elevationAnimation.value,
                   clipBehavior: Clip.antiAlias,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(UiSizing.borderRadiusMedium),
+                    borderRadius: BorderRadius.circular(
+                      UiSizing.borderRadiusMedium,
+                    ),
                     side: widget.isSelected
-                        ? BorderSide(color: selectionHighlightColor, width: UiSizing.borderWidth)
+                        ? BorderSide(
+                            color: selectionHighlightColor,
+                            width: UiSizing.borderWidth,
+                          )
                         : BorderSide.none,
                   ),
                   child: InkWell(
@@ -134,16 +150,17 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                             Expanded(
                               flex: UiGrid.thumbnailFlex,
                               child: Container(
-                                color:
-                                    Theme.of(context).colorScheme.surfaceContainerHighest,
-                                child: widget.directory.thumbnailPath != null
-                                    ? Image.file(
-                                        File(widget.directory.thumbnailPath!),
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) =>
-                                            _buildPlaceholder(),
-                                      )
-                                    : _buildPlaceholder(),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
+                                child: DirectoryThumbnail(
+                                  directoryPath: widget.directory.path,
+                                  bookmarkData: widget.directory.bookmarkData,
+                                  placeholderBuilder: (_) =>
+                                      _buildPlaceholder(),
+                                  emptyBuilder: (_) => _buildPlaceholder(),
+                                  errorBuilder: (_) => _buildPlaceholder(),
+                                ),
                               ),
                             ),
                             // Directory info
@@ -156,17 +173,22 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                                   children: [
                                     Text(
                                       widget.directory.name,
-                                      style: Theme.of(context).textTheme.titleMedium,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
                                       maxLines: UiContent.maxLinesTitle,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     SizedBox(height: UiSpacing.extraSmallGap),
                                     Text(
                                       '${widget.directory.tagIds.length} tags',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
                                           ),
                                     ),
                                     if (widget.showTaggedMediaCounts) ...[
@@ -178,9 +200,9 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                                             .textTheme
                                             .bodySmall
                                             ?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
                                             ),
                                       ),
                                     ],
@@ -189,11 +211,15 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                                       children: [
                                         IconButton(
                                           icon: Icon(Icons.tag, size: iconSize),
-                                          onPressed: () => _showTagAssignmentDialog(context),
-                                          color: Theme.of(context).colorScheme.primary,
+                                          onPressed: () =>
+                                              _showTagAssignmentDialog(context),
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                           padding: EdgeInsets.zero,
-                                          constraints:
-                                              BoxConstraints.tight(Size(iconSize, iconSize)),
+                                          constraints: BoxConstraints.tight(
+                                            Size(iconSize, iconSize),
+                                          ),
                                           tooltip: 'Assign tags',
                                         ),
                                         IconButton(
@@ -203,24 +229,47 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                                           ),
                                           onPressed: () =>
                                               DirectoryProfileDialog.show(
+                                                context,
+                                                widget.directory,
+                                              ),
+                                          color: Theme.of(
                                             context,
-                                            widget.directory,
-                                          ),
-                                          color:
-                                              Theme.of(context).colorScheme.primary,
+                                          ).colorScheme.primary,
                                           padding: EdgeInsets.zero,
-                                          constraints:
-                                              BoxConstraints.tight(Size(iconSize, iconSize)),
+                                          constraints: BoxConstraints.tight(
+                                            Size(iconSize, iconSize),
+                                          ),
                                           tooltip: 'Profiles',
+                                        ),
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.image_outlined,
+                                            size: iconSize,
+                                          ),
+                                          onPressed: _showCoverPicker,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                          tooltip: 'Choose directory cover',
+                                          padding: EdgeInsets.zero,
+                                          constraints: BoxConstraints.tight(
+                                            Size(iconSize, iconSize),
+                                          ),
                                         ),
                                         const Spacer(),
                                         IconButton(
-                                          icon: Icon(Icons.delete, size: iconSize),
+                                          icon: Icon(
+                                            Icons.delete,
+                                            size: iconSize,
+                                          ),
                                           onPressed: widget.onDelete,
-                                          color: Theme.of(context).colorScheme.error,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.error,
                                           padding: EdgeInsets.zero,
-                                          constraints:
-                                              BoxConstraints.tight(Size(iconSize, iconSize)),
+                                          constraints: BoxConstraints.tight(
+                                            Size(iconSize, iconSize),
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -244,8 +293,9 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                                 color: Colors.transparent,
                                 child: InkWell(
                                   onTap: widget.onSelectionToggle,
-                                  borderRadius:
-                                      BorderRadius.circular(UiSizing.borderRadiusSmall),
+                                  borderRadius: BorderRadius.circular(
+                                    UiSizing.borderRadiusSmall,
+                                  ),
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: widget.isSelected
@@ -261,7 +311,9 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
                                         width: UiSizing.borderWidth / 1.5,
                                       ),
                                     ),
-                                    padding: EdgeInsets.all(UiSpacing.extraSmallGap / 2),
+                                    padding: EdgeInsets.all(
+                                      UiSpacing.extraSmallGap / 2,
+                                    ),
                                     child: Icon(
                                       widget.isSelected
                                           ? Icons.check
@@ -293,6 +345,15 @@ class _DirectoryGridItemState extends State<DirectoryGridItem>
       context,
       directory: widget.directory,
       onTagsAssigned: widget.onAssignTags,
+    );
+  }
+
+  Future<void> _showCoverPicker() {
+    return DirectoryCoverPickerDialog.show(
+      context,
+      directoryPath: widget.directory.path,
+      directoryName: widget.directory.name,
+      bookmarkData: widget.directory.bookmarkData,
     );
   }
 

@@ -22,6 +22,7 @@ pubspec.lock
 **/*.freezed.dart
 **/**/**/**/**/*.g.dart
 **/**/**/**/**/*.freezed.dart
+!lib/features/media_library/data/isar/directory_cover_collection.g.dart
 
 # iOS build artifacts
 ios/Pods

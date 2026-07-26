@@ -4,6 +4,8 @@ import 'package:media_fast_view/features/favorites/data/isar/favorite_collection
 import 'package:media_fast_view/features/favorites/data/isar/isar_favorites_data_source.dart';
 import 'package:media_fast_view/features/favorites/domain/entities/favorite_item_type.dart';
 import 'package:media_fast_view/features/media_library/data/isar/directory_collection.dart';
+import 'package:media_fast_view/features/media_library/data/isar/directory_cover_collection.dart';
+import 'package:media_fast_view/features/media_library/data/isar/isar_directory_cover_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_media_data_source.dart';
 import 'package:media_fast_view/features/media_library/data/isar/media_collection.dart';
@@ -15,7 +17,6 @@ import 'package:media_fast_view/features/tagging/data/isar/saved_filter_collecti
 import 'package:media_fast_view/features/tagging/data/isar/tag_collection.dart';
 
 import 'isar_id.dart';
-
 
 /// An [IsarDatabase] that reports itself open but is never actually touched —
 /// the in-memory stores below stand in for every collection.
@@ -104,6 +105,67 @@ class InMemoryDirectoryCollectionStore implements DirectoryCollectionStore {
 
   DirectoryCollection _clone(DirectoryCollection directory) {
     return directory.toModel().toCollection();
+  }
+}
+
+class InMemoryDirectoryCoverCollectionStore
+    implements DirectoryCoverCollectionStore {
+  final Map<Id, DirectoryCoverCollection> data =
+      <Id, DirectoryCoverCollection>{};
+
+  @override
+  Future<void> deleteById(Id id) async {
+    data.remove(id);
+  }
+
+  @override
+  Future<void> deleteByIds(List<Id> ids) async {
+    for (final id in ids) {
+      data.remove(id);
+    }
+  }
+
+  @override
+  Future<void> deleteByProfileId(String profileId) async {
+    data.removeWhere((_, cover) => cover.profileId == profileId);
+  }
+
+  @override
+  Future<DirectoryCoverCollection?> getByCoverKey(String coverKey) async {
+    final cover = data[directoryCoverCollectionId(coverKey)];
+    return cover == null ? null : _clone(cover);
+  }
+
+  @override
+  Future<List<DirectoryCoverCollection>> getByProfileId(
+    String profileId,
+  ) async {
+    return data.values
+        .where((cover) => cover.profileId == profileId)
+        .map(_clone)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<void> put(DirectoryCoverCollection cover) async {
+    data[cover.id] = _clone(cover);
+  }
+
+  @override
+  Future<T> writeTxn<T>(Future<T> Function() action) {
+    return action();
+  }
+
+  DirectoryCoverCollection _clone(DirectoryCoverCollection cover) {
+    return DirectoryCoverCollection(
+      coverKey: cover.coverKey,
+      profileId: cover.profileId,
+      directoryPath: cover.directoryPath,
+      sourceFileName: cover.sourceFileName,
+      mediaType: cover.mediaType,
+      mode: cover.mode,
+      updatedAt: cover.updatedAt,
+    );
   }
 }
 
@@ -383,8 +445,7 @@ class InMemoryFavoriteCollectionStore implements FavoriteCollectionStore {
 }
 
 /// In-memory [SavedFilterCollectionStore]. See [InMemoryTagCollectionStore].
-class InMemorySavedFilterCollectionStore
-    implements SavedFilterCollectionStore {
+class InMemorySavedFilterCollectionStore implements SavedFilterCollectionStore {
   final Map<Id, SavedFilterCollection> data = <Id, SavedFilterCollection>{};
 
   @override

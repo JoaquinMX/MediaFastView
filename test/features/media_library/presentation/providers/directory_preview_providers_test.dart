@@ -5,11 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/core/services/file_service.dart';
 import 'package:media_fast_view/features/media_library/presentation/models/directory_preview.dart';
 import 'package:media_fast_view/features/media_library/presentation/providers/directory_preview_providers.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/directory_cover_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
+import 'package:media_fast_view/features/media_library/domain/repositories/directory_cover_repository.dart';
 import 'package:media_fast_view/features/thumbnails/data/thumbnail_disk_cache.dart';
 import 'package:media_fast_view/features/thumbnails/domain/thumbnail_request.dart';
 import 'package:media_fast_view/features/thumbnails/presentation/thumbnail_providers.dart';
 import 'package:media_fast_view/shared/providers/repository_providers.dart';
 import 'package:media_fast_view/shared/providers/settings_providers.dart';
+import 'package:media_fast_view/shared/providers/active_profile_provider.dart';
 
 class _FakeFileService extends FileService {
   _FakeFileService(this._contentsByPath);
@@ -44,21 +48,163 @@ class _FakeThumbnailDiskCache extends ThumbnailDiskCache {
   }
 }
 
+class _FakeDirectoryCoverRepository implements DirectoryCoverRepository {
+  _FakeDirectoryCoverRepository([this.cover]);
+
+  DirectoryCoverEntity? cover;
+
+  @override
+  Future<void> clearCovers() async => cover = null;
+
+  @override
+  Future<DirectoryCoverEntity?> getCover(String directoryPath) async {
+    return cover?.directoryPath == directoryPath ? cover : null;
+  }
+
+  @override
+  Future<void> rebaseDirectoryTree({
+    required String oldRootPath,
+    required String newRootPath,
+  }) async {}
+
+  @override
+  Future<void> reconcileMediaMove({
+    required String oldPath,
+    required String newPath,
+  }) async {}
+
+  @override
+  Future<void> removeCover(String directoryPath) async => cover = null;
+
+  @override
+  Future<void> removeCoverForSource(String sourcePath) async => cover = null;
+
+  @override
+  Future<void> removeCoversUnder(String directoryPath) async => cover = null;
+
+  @override
+  Future<void> saveCover(DirectoryCoverEntity cover) async {
+    this.cover = cover;
+  }
+}
+
 ProviderContainer _createContainer({
   required FileService fileService,
   required ThumbnailDiskCache thumbnailDiskCache,
   bool diskCacheEnabled = true,
+  DirectoryCoverRepository? directoryCoverRepository,
 }) {
   return ProviderContainer(
     overrides: <Override>[
       fileServiceProvider.overrideWithValue(fileService),
       thumbnailDiskCacheProvider.overrideWithValue(thumbnailDiskCache),
       thumbnailDiskCacheEnabledProvider.overrideWithValue(diskCacheEnabled),
+      directoryCoverRepositoryProvider.overrideWithValue(
+        directoryCoverRepository ?? _FakeDirectoryCoverRepository(),
+      ),
+      activeProfileIdProvider.overrideWith(
+        () => ActiveProfileIdNotifier('test-profile'),
+      ),
     ],
   );
 }
 
 void main() {
+  test('prefers a custom video even when disk caching is disabled', () async {
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'media-fast-view-custom-cover-',
+    );
+    addTearDown(() => temporaryDirectory.delete(recursive: true));
+    final video = File('${temporaryDirectory.path}/chosen.mp4');
+    await video.writeAsBytes(<int>[1, 2, 3]);
+    final cover = DirectoryCoverEntity.media(
+      directoryPath: temporaryDirectory.path,
+      sourceFileName: 'chosen.mp4',
+      mediaType: MediaType.video,
+      updatedAt: DateTime(2025),
+    );
+    final container = _createContainer(
+      fileService: _FakeFileService(<String, List<FileSystemEntity>>{
+        temporaryDirectory.path: <FileSystemEntity>[
+          File('${temporaryDirectory.path}/automatic.jpg'),
+          video,
+        ],
+      }),
+      thumbnailDiskCache: _FakeThumbnailDiskCache(<String, String>{}),
+      diskCacheEnabled: false,
+      directoryCoverRepository: _FakeDirectoryCoverRepository(cover),
+    );
+    addTearDown(container.dispose);
+
+    final preview = await container.read(
+      directoryPreviewProvider(temporaryDirectory.path).future,
+    );
+
+    expect(preview, isA<DirectoryCustomPreview>());
+    expect((preview as DirectoryCustomPreview).media.path, video.path);
+    expect(preview.media.type, MediaType.video);
+  });
+
+  test('suppresses automatic previews when no cover is selected', () async {
+    const directoryPath = '/tmp/no-cover-directory';
+    final fileService = _FakeFileService(<String, List<FileSystemEntity>>{
+      directoryPath: <FileSystemEntity>[File('$directoryPath/automatic.jpg')],
+    });
+    final container = _createContainer(
+      fileService: fileService,
+      thumbnailDiskCache: _FakeThumbnailDiskCache(<String, String>{}),
+      directoryCoverRepository: _FakeDirectoryCoverRepository(
+        DirectoryCoverEntity.none(
+          directoryPath: directoryPath,
+          updatedAt: DateTime(2025),
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+
+    final preview = await container.read(
+      directoryPreviewProvider(directoryPath).future,
+    );
+    final strip = await container.read(
+      directoryPreviewStripProvider(directoryPath).future,
+    );
+
+    expect(preview, isNull);
+    expect(strip.previews, isEmpty);
+    expect(fileService.readCountForPath(directoryPath), 0);
+  });
+
+  test(
+    'marks a missing custom cover stale and uses automatic fallback',
+    () async {
+      const directoryPath = '/tmp/missing-custom-cover';
+      final cover = DirectoryCoverEntity.media(
+        directoryPath: directoryPath,
+        sourceFileName: 'missing.jpg',
+        mediaType: MediaType.image,
+        updatedAt: DateTime(2025),
+      );
+      final container = _createContainer(
+        fileService: _FakeFileService(<String, List<FileSystemEntity>>{
+          directoryPath: <FileSystemEntity>[
+            File('$directoryPath/automatic.jpg'),
+          ],
+        }),
+        thumbnailDiskCache: _FakeThumbnailDiskCache(<String, String>{}),
+        directoryCoverRepository: _FakeDirectoryCoverRepository(cover),
+      );
+      addTearDown(container.dispose);
+
+      final preview = await container.read(
+        directoryPreviewProvider(directoryPath).future,
+      );
+
+      expect(preview, isA<DirectoryImagePreview>());
+      expect(preview!.sourcePath, '$directoryPath/automatic.jpg');
+      expect(preview.hasStaleCustomCover, isTrue);
+    },
+  );
+
   test('prefers the first image without reading video thumbnails', () async {
     const directoryPath = '/tmp/image-first-directory';
     final fileService = _FakeFileService(<String, List<FileSystemEntity>>{

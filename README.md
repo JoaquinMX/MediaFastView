@@ -18,6 +18,7 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 - Scan directories for images, videos, audio, and text documents with lazy metadata caching (`lib/features/media_library/data/data_sources`).
 - Adjustable column density and multiple sort options for both directory and media grids.
 - Marquee (rubber-band) and keyboard multi-select, with bulk tag assignment and bulk favorite toggling.
+- Choose a profile-specific directory cover from any direct-child image or video, explicitly show no cover, or reset the choice to resume automatic previews.
 - Perceptual duplicate-image detection with a dedicated review UI (see **Duplicate management**).
 
 ### Media grid & file operations
@@ -65,7 +66,7 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 
 ### Profiles
 
-- Named, switchable scopes over the whole library (`lib/features/profiles`). Each profile owns its own directories, tags, favorites, and saved filters; switching re-scopes the entire app.
+- Named, switchable scopes over the whole library (`lib/features/profiles`). Each profile owns its own directories, tags, favorites, saved filters, and custom directory covers; switching re-scopes the entire app.
 - App-wide preferences (theme, playback, grid columns) deliberately live outside profiles.
 - A profile switcher lives in the Library and Tags app bars; create, rename, reorder, and delete profiles from the management dialog.
 
@@ -159,7 +160,6 @@ Widget and integration test scaffolds live under `test/`. Add coverage for new v
 - **Perceptual matching for video** and near-duplicate audio, extending duplicate detection beyond images.
 - **Portable, sidecar tag metadata** (e.g. XMP export/import) so tags travel with files between machines.
 - **Directory thumbnail collages** built from representative images and cached video frames.
-- **Custom directory covers** selected from an image, video, or specific video frame.
 - **Directory hover preview carousels** that cycle through cached thumbnails.
 - **Directory preview navigation controls** for browsing previous and next thumbnails without opening the folder.
 - **Timeline scrub previews and selectable poster frames** for videos.

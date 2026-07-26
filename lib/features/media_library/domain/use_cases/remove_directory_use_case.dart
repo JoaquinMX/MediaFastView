@@ -1,6 +1,7 @@
 import 'package:media_fast_view/core/services/logging_service.dart';
 import 'package:media_fast_view/features/favorites/domain/repositories/favorites_repository.dart';
 import '../repositories/directory_repository.dart';
+import '../repositories/directory_cover_repository.dart';
 import '../repositories/media_repository.dart';
 
 /// Use case for removing a directory.
@@ -9,12 +10,14 @@ class RemoveDirectoryUseCase {
   const RemoveDirectoryUseCase(
     this._directoryRepository,
     this._mediaRepository,
-    this._favoritesRepository,
-  );
+    this._favoritesRepository, [
+    this._directoryCoverRepository,
+  ]);
 
   final DirectoryRepository _directoryRepository;
   final MediaRepository _mediaRepository;
   final FavoritesRepository _favoritesRepository;
+  final DirectoryCoverRepository? _directoryCoverRepository;
 
   /// Executes the use case to remove a directory by ID.
   /// Cascades deletion by removing associated media from favorites and clearing tags.
@@ -23,11 +26,15 @@ class RemoveDirectoryUseCase {
       // Get the directory entity to access path and bookmark data
       final directory = await _directoryRepository.getDirectoryById(id);
       if (directory == null) {
-        LoggingService.instance.warning('Directory with ID $id not found, skipping removal');
+        LoggingService.instance.warning(
+          'Directory with ID $id not found, skipping removal',
+        );
         return;
       }
 
-      LoggingService.instance.info('Starting cascading removal for directory: ${directory.path}');
+      LoggingService.instance.info(
+        'Starting cascading removal for directory: ${directory.path}',
+      );
 
       // Get all media in the directory
       List mediaList = [];
@@ -36,10 +43,15 @@ class RemoveDirectoryUseCase {
           directory.path,
           bookmarkData: directory.bookmarkData,
         );
-        LoggingService.instance.debug('Found ${mediaList.length} media items in directory');
+        LoggingService.instance.debug(
+          'Found ${mediaList.length} media items in directory',
+        );
       } catch (e) {
-        if (e.toString().contains('bookmark') || e.toString().contains('Bookmark')) {
-          LoggingService.instance.warning('Failed to access directory media due to invalid bookmark, skipping cleanup for directory: ${directory.path}');
+        if (e.toString().contains('bookmark') ||
+            e.toString().contains('Bookmark')) {
+          LoggingService.instance.warning(
+            'Failed to access directory media due to invalid bookmark, skipping cleanup for directory: ${directory.path}',
+          );
           mediaList = []; // Skip cleanup
         } else {
           rethrow;
@@ -53,7 +65,9 @@ class RemoveDirectoryUseCase {
           final isFavorite = await _favoritesRepository.isFavorite(media.id);
           if (isFavorite) {
             await _favoritesRepository.removeFavorite(media.id);
-            LoggingService.instance.debug('Removed media ${media.id} from favorites');
+            LoggingService.instance.debug(
+              'Removed media ${media.id} from favorites',
+            );
           }
 
           // Clear all tags from the media
@@ -62,7 +76,9 @@ class RemoveDirectoryUseCase {
             LoggingService.instance.debug('Cleared tags for media ${media.id}');
           }
         } catch (e) {
-          LoggingService.instance.error('Failed to clean up media ${media.id}: $e');
+          LoggingService.instance.error(
+            'Failed to clean up media ${media.id}: $e',
+          );
           // Continue with other media items
         }
       }
@@ -70,7 +86,10 @@ class RemoveDirectoryUseCase {
       // Finally, remove the directory itself
       await _directoryRepository.removeDirectory(id);
       await _mediaRepository.removeMediaForDirectory(directory.id);
-      LoggingService.instance.info('Successfully removed directory: ${directory.path}');
+      await _directoryCoverRepository?.removeCoversUnder(directory.path);
+      LoggingService.instance.info(
+        'Successfully removed directory: ${directory.path}',
+      );
     } catch (e) {
       LoggingService.instance.error('Failed to remove directory $id: $e');
       rethrow;

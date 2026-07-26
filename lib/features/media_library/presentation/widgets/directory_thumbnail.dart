@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../thumbnails/presentation/file_thumbnail.dart';
+import '../../../thumbnails/presentation/media_thumbnail.dart';
 import '../models/directory_preview.dart';
+import '../providers/directory_cover_controller.dart';
 import '../providers/directory_preview_providers.dart';
 
-/// Renders the selected preview for a directory without generating video work.
-class DirectoryThumbnail extends ConsumerWidget {
+/// Renders the custom or automatic preview selected for a directory.
+class DirectoryThumbnail extends ConsumerStatefulWidget {
   const DirectoryThumbnail({
     super.key,
     required this.directoryPath,
@@ -27,27 +29,61 @@ class DirectoryThumbnail extends ConsumerWidget {
   final WidgetBuilder errorBuilder;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final preview = ref.watch(directoryPreviewProvider(directoryPath));
+  ConsumerState<DirectoryThumbnail> createState() => _DirectoryThumbnailState();
+}
+
+class _DirectoryThumbnailState extends ConsumerState<DirectoryThumbnail> {
+  bool _cleanupScheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(directoryCoverControllerProvider(widget.directoryPath));
+    final preview = ref.watch(directoryPreviewProvider(widget.directoryPath));
     return preview.when(
-      data: (value) => switch (value) {
-        DirectoryImagePreview(:final sourcePath) => FileThumbnail(
-          path: sourcePath,
-          bookmarkData: bookmarkData,
-          fit: fit,
-          placeholderBuilder: placeholderBuilder,
-          errorBuilder: emptyBuilder,
-        ),
-        DirectoryVideoPreview(:final thumbnailPath) => Image.file(
-          File(thumbnailPath),
-          fit: fit,
-          gaplessPlayback: true,
-          errorBuilder: (_, __, ___) => emptyBuilder(context),
-        ),
-        null => emptyBuilder(context),
+      data: (value) {
+        _scheduleStaleCleanup(value?.hasStaleCustomCover ?? false);
+        return switch (value) {
+          DirectoryCustomPreview(:final media) => MediaThumbnail(
+            media: media,
+            bookmarkData: widget.bookmarkData,
+            fit: widget.fit,
+            placeholderBuilder: widget.placeholderBuilder,
+            errorBuilder: widget.emptyBuilder,
+          ),
+          DirectoryImagePreview(:final sourcePath) => FileThumbnail(
+            path: sourcePath,
+            bookmarkData: widget.bookmarkData,
+            fit: widget.fit,
+            placeholderBuilder: widget.placeholderBuilder,
+            errorBuilder: widget.emptyBuilder,
+          ),
+          DirectoryVideoPreview(:final thumbnailPath) => Image.file(
+            File(thumbnailPath),
+            fit: widget.fit,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => widget.emptyBuilder(context),
+          ),
+          DirectoryEmptyPreview() => widget.emptyBuilder(context),
+          null => widget.emptyBuilder(context),
+        };
       },
-      loading: () => placeholderBuilder(context),
-      error: (_, __) => errorBuilder(context),
+      loading: () => widget.placeholderBuilder(context),
+      error: (_, __) => widget.errorBuilder(context),
     );
+  }
+
+  void _scheduleStaleCleanup(bool isStale) {
+    if (!isStale || _cleanupScheduled) {
+      return;
+    }
+    _cleanupScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      ref
+          .read(directoryCoverControllerProvider(widget.directoryPath).notifier)
+          .clearStaleCover();
+    });
   }
 }
