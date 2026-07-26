@@ -158,6 +158,10 @@ Widget and integration test scaffolds live under `test/`. Add coverage for new v
 
 - **Perceptual matching for video** and near-duplicate audio, extending duplicate detection beyond images.
 - **Portable, sidecar tag metadata** (e.g. XMP export/import) so tags travel with files between machines.
+- **Directory thumbnail collages** built from representative images and cached video frames.
+- **Custom directory covers** selected from an image, video, or specific video frame.
+- **Directory hover preview carousels** that cycle through cached thumbnails.
+- **Directory preview navigation controls** for browsing previous and next thumbnails without opening the folder.
 - **Timeline scrub previews and selectable poster frames** for videos.
 - **Video chapter tagging** so viewers can jump between tagged segments inside long clips.
 - **Metadata display & filtering** (EXIF: date taken, dimensions, camera, GPS) with date/timeline-based browsing.

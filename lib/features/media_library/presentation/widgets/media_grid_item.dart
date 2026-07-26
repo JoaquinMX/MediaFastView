@@ -16,10 +16,10 @@ import '../../../../shared/widgets/file_operation_button.dart';
 import '../../../../shared/widgets/move_copy_button.dart';
 import '../../../favorites/presentation/widgets/favorite_toggle_button.dart';
 import '../../../tagging/presentation/widgets/tag_management_dialog.dart';
-import '../../../thumbnails/presentation/file_thumbnail.dart';
 import '../../../thumbnails/presentation/media_thumbnail.dart';
 import '../../domain/entities/directory_media_counts.dart';
 import '../../domain/entities/media_entity.dart';
+import 'directory_thumbnail.dart';
 
 /// Widget for displaying a media item in the grid.
 class MediaGridItem extends StatefulWidget {
@@ -464,7 +464,6 @@ class _MediaGridItemState extends State<MediaGridItem> {
   }
 
   Widget _buildDirectoryContent(WidgetRef ref) {
-    final previewAsync = ref.watch(directoryPreviewProvider(widget.media.path));
     final showTaggedMediaCounts = ref.watch(
       showDirectoryTaggedMediaCountsProvider,
     );
@@ -474,77 +473,54 @@ class _MediaGridItemState extends State<MediaGridItem> {
           widget.media.path,
         )] ??
         const DirectoryMediaCounts();
-    return previewAsync.when(
-      data: (String? previewPath) {
-        return Column(
-          children: [
-            Expanded(
-              flex: UiGrid.directoryPreviewFlex,
-              child: previewPath != null
-                  ? FileThumbnail(
-                      path: previewPath,
-                      bookmarkData: widget.bookmarkData,
-                      fit: BoxFit.cover,
-                      placeholderBuilder: (_) => _buildLoadingContent(),
-                      errorBuilder: (_) => _buildDirectoryPlaceholder(),
-                    )
-                  : Container(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      child: Center(
-                        child: Icon(
-                          Icons.folder,
-                          size: UiSizing.iconExtraLarge,
-                          color: UiColors.whiteOverlay,
-                        ),
-                      ),
-                    ),
-            ),
-            Expanded(
-              flex: UiGrid.directoryNameFlex,
-              child: Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                padding: UiSpacing.horizontalSmall,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      widget.media.name,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      maxLines: UiContent.maxLinesSingle,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                    ),
-                    if (showTaggedMediaCounts) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        '${directoryCounts.taggedMediaCount} / '
-                        '${directoryCounts.totalMediaCount} tagged',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        maxLines: UiContent.maxLinesSingle,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ],
+    return Column(
+      children: [
+        Expanded(
+          flex: UiGrid.directoryPreviewFlex,
+          child: DirectoryThumbnail(
+            directoryPath: widget.media.path,
+            bookmarkData: widget.bookmarkData,
+            fit: BoxFit.cover,
+            placeholderBuilder: (_) => _buildLoadingContent(),
+            emptyBuilder: (_) => _buildDirectoryPlaceholder(),
+            errorBuilder: (_) => _buildErrorContent(),
+          ),
+        ),
+        Expanded(
+          flex: UiGrid.directoryNameFlex,
+          child: Container(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            padding: UiSpacing.horizontalSmall,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  widget.media.name,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: UiContent.maxLinesSingle,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                 ),
-              ),
+                if (showTaggedMediaCounts) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${directoryCounts.taggedMediaCount} / '
+                    '${directoryCounts.totalMediaCount} tagged',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: UiContent.maxLinesSingle,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ],
             ),
-          ],
-        );
-      },
-      loading: () {
-        return _buildLoadingContent();
-      },
-      error: (error, stack) {
-        if (kDebugMode) {
-          debugPrint('Error getting preview for ${widget.media.name}: $error');
-        }
-        return _buildErrorContent();
-      },
+          ),
+        ),
+      ],
     );
   }
 

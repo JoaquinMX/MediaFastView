@@ -645,27 +645,6 @@ void _configurePreviewProviderKeepAlive<T>(
   });
 }
 
-final directoryPreviewProvider = FutureProvider.autoDispose
-    .family<String?, String>((ref, directoryPath) async {
-      _configurePreviewProviderKeepAlive(ref);
-      debugPrint('Getting directory preview for: $directoryPath');
-      final fileService = ref.watch(fileServiceProvider);
-      try {
-        final contents = await fileService.getDirectoryContents(directoryPath);
-        final imageFiles = contents.where((entity) {
-          return entity is File &&
-              fileService.getMediaTypeFromExtension(entity.path) == 'image';
-        }).toList();
-        debugPrint('Found ${imageFiles.length} image files in $directoryPath');
-        if (imageFiles.isNotEmpty) {
-          return imageFiles.first.path;
-        }
-      } catch (e) {
-        debugPrint('Error getting directory contents for $directoryPath: $e');
-      }
-      return null;
-    });
-
 final directoryPreviewStripProvider = FutureProvider.autoDispose
     .family<List<String>, String>((ref, directoryPath) async {
       _configurePreviewProviderKeepAlive(ref);
