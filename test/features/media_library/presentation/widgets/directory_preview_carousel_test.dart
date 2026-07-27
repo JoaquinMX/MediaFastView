@@ -71,6 +71,57 @@ Future<void> _finishFade(WidgetTester tester) async {
 }
 
 void main() {
+  test('maps iOS touch positions through bounded edge insets', () {
+    expect(
+      DirectoryPreviewCarousel.previewPositionForLocalDx(
+        localDx: 0,
+        width: 160,
+        previewCount: 5,
+      ),
+      0,
+    );
+    expect(
+      DirectoryPreviewCarousel.previewPositionForLocalDx(
+        localDx: 12,
+        width: 160,
+        previewCount: 5,
+      ),
+      0,
+    );
+    expect(
+      DirectoryPreviewCarousel.previewPositionForLocalDx(
+        localDx: 80,
+        width: 160,
+        previewCount: 5,
+      ),
+      2,
+    );
+    expect(
+      DirectoryPreviewCarousel.previewPositionForLocalDx(
+        localDx: 148,
+        width: 160,
+        previewCount: 5,
+      ),
+      4,
+    );
+    expect(
+      DirectoryPreviewCarousel.previewPositionForLocalDx(
+        localDx: 40,
+        width: 80,
+        previewCount: 4,
+      ),
+      1.5,
+    );
+    expect(
+      DirectoryPreviewCarousel.previewPositionForLocalDx(
+        localDx: 160,
+        width: 160,
+        previewCount: 1,
+      ),
+      0,
+    );
+  });
+
   testWidgets('waits for pointer dwell, advances, and wraps previews', (
     tester,
   ) async {
@@ -303,70 +354,241 @@ void main() {
     },
   );
 
-  testWidgets(
-    'on iOS, a tap starts browsing and swipes navigate without wrapping',
-    (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-      try {
-        await tester.pumpWidget(_subject(catalog: _catalog(2)));
+  testWidgets('iOS shows no arrows and scrubs across the bounded catalog', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(_subject(catalog: _catalog(5)));
 
-        // Compact arrows remain available before the tap as accessible alternatives.
-        expect(
-          find.byKey(DirectoryPreviewCarousel.previousButtonKey),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(DirectoryPreviewCarousel.nextButtonKey),
-          findsOneWidget,
-        );
+      expect(find.byKey(DirectoryPreviewCollage.collageKey), findsOneWidget);
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previousButtonKey),
+        findsNothing,
+      );
+      expect(find.byKey(DirectoryPreviewCarousel.nextButtonKey), findsNothing);
 
-        await tester.tap(find.byKey(DirectoryPreviewCarousel.nextButtonKey));
-        await _finishFade(tester);
-        expect(
-          find.byKey(DirectoryPreviewCarousel.previewKey(1)),
-          findsOneWidget,
-        );
+      final rect = tester.getRect(
+        find.byKey(DirectoryPreviewCarousel.interactionKey),
+      );
+      final gesture = await tester.startGesture(
+        Offset(rect.left + 12, rect.center.dy),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(0)),
+        findsOneWidget,
+      );
+      expect(find.text('1 / 5'), findsOneWidget);
 
-        await tester.tap(
-          find.byKey(DirectoryPreviewCarousel.previousButtonKey),
-        );
-        await _finishFade(tester);
-        expect(
-          find.byKey(DirectoryPreviewCarousel.previewKey(0)),
-          findsOneWidget,
-        );
+      await gesture.moveTo(Offset(rect.left + 148, rect.center.dy));
+      await tester.pump();
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(4)),
+        findsOneWidget,
+      );
+      expect(find.text('5 / 5'), findsOneWidget);
 
-        await tester.tap(find.byKey(DirectoryPreviewCarousel.interactionKey));
-        await _finishFade(tester);
-        expect(
-          find.byKey(DirectoryPreviewCarousel.previewKey(0)),
-          findsOneWidget,
-        );
+      await gesture.moveTo(Offset(rect.left - 40, rect.center.dy));
+      await tester.pump();
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(0)),
+        findsOneWidget,
+      );
 
-        await tester.fling(
-          find.byKey(DirectoryPreviewCarousel.interactionKey),
-          const Offset(-120, 0),
-          1000,
-        );
-        await _finishFade(tester);
-        expect(
-          find.byKey(DirectoryPreviewCarousel.previewKey(1)),
-          findsOneWidget,
-        );
+      await gesture.up();
+      await tester.pump(_fade);
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(0)),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previousButtonKey),
+        findsNothing,
+      );
+      expect(find.byKey(DirectoryPreviewCarousel.nextButtonKey), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
-        await tester.fling(
-          find.byKey(DirectoryPreviewCarousel.interactionKey),
-          const Offset(-120, 0),
-          1000,
-        );
-        await tester.pump();
-        expect(
-          find.byKey(DirectoryPreviewCarousel.previewKey(1)),
-          findsOneWidget,
-        );
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
-    },
-  );
+  testWidgets('iOS strip follows a fractional touch and snaps on release', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(_subject(catalog: _catalog(5)));
+      final rect = tester.getRect(
+        find.byKey(DirectoryPreviewCarousel.interactionKey),
+      );
+      final gesture = await tester.startGesture(
+        Offset(rect.left + 12, rect.center.dy),
+      );
+      await tester.pump();
+
+      // Position 2.25 in a five-item, 160-pixel catalog.
+      await gesture.moveTo(Offset(rect.left + 88.5, rect.center.dy));
+      await tester.pump();
+
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(2)),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(3)),
+        findsOneWidget,
+      );
+      expect(find.text('3 / 5'), findsOneWidget);
+      final leading = tester.widget<Positioned>(
+        find.byKey(DirectoryPreviewCarousel.scrubLeadingPreviewKey),
+      );
+      final trailing = tester.widget<Positioned>(
+        find.byKey(DirectoryPreviewCarousel.scrubTrailingPreviewKey),
+      );
+      expect(leading.left, closeTo(-40, 0.001));
+      expect(trailing.left, closeTo(120, 0.001));
+
+      await gesture.up();
+      await tester.pump();
+      await tester.pump(_fade ~/ 2);
+      final snappingLeading = tester.widget<Positioned>(
+        find.byKey(DirectoryPreviewCarousel.scrubLeadingPreviewKey),
+      );
+      expect(snappingLeading.left, greaterThan(-40));
+      expect(snappingLeading.left, lessThanOrEqualTo(0));
+
+      await tester.pump(_fade);
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(2)),
+        findsOneWidget,
+      );
+      expect(find.byKey(DirectoryPreviewCarousel.previewKey(3)), findsNothing);
+      expect(
+        tester
+            .widget<Positioned>(
+              find.byKey(DirectoryPreviewCarousel.scrubLeadingPreviewKey),
+            )
+            .left,
+        0,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('iOS reduced motion switches discretely at mapped positions', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(
+        _subject(catalog: _catalog(5), reduceAnimations: true),
+      );
+      final rect = tester.getRect(
+        find.byKey(DirectoryPreviewCarousel.interactionKey),
+      );
+      final gesture = await tester.startGesture(
+        Offset(rect.left + 88.5, rect.center.dy),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(2)),
+        findsOneWidget,
+      );
+      expect(find.byKey(DirectoryPreviewCarousel.previewKey(3)), findsNothing);
+      expect(find.byKey(DirectoryPreviewCarousel.scrubStripKey), findsNothing);
+
+      await gesture.moveTo(Offset(rect.left + 148, rect.center.dy));
+      await tester.pump();
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(4)),
+        findsOneWidget,
+      );
+      await gesture.up();
+      await tester.pump();
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(4)),
+        findsOneWidget,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('iOS exposes bounded VoiceOver previous and next actions', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final semanticsHandle = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(_subject(catalog: _catalog(3)));
+      expect(find.byKey(DirectoryPreviewCollage.collageKey), findsOneWidget);
+
+      Semantics semanticsWidget() => tester.widget<Semantics>(
+        find.byKey(DirectoryPreviewCarousel.previewSemanticsKey),
+      );
+
+      var actions = semanticsWidget().properties.customSemanticsActions!;
+      expect(actions, contains(DirectoryPreviewCarousel.nextSemanticsAction));
+      expect(
+        actions,
+        isNot(contains(DirectoryPreviewCarousel.previousSemanticsAction)),
+      );
+
+      actions[DirectoryPreviewCarousel.nextSemanticsAction]!();
+      await tester.pump();
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(1)),
+        findsOneWidget,
+      );
+
+      actions = semanticsWidget().properties.customSemanticsActions!;
+      expect(
+        actions,
+        contains(DirectoryPreviewCarousel.previousSemanticsAction),
+      );
+      expect(actions, contains(DirectoryPreviewCarousel.nextSemanticsAction));
+
+      actions[DirectoryPreviewCarousel.nextSemanticsAction]!();
+      await tester.pump();
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(2)),
+        findsOneWidget,
+      );
+      actions = semanticsWidget().properties.customSemanticsActions!;
+      expect(
+        actions,
+        isNot(contains(DirectoryPreviewCarousel.nextSemanticsAction)),
+      );
+    } finally {
+      semanticsHandle.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('stops scrub callbacks when the carousel is disposed', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(_subject(catalog: _catalog(5)));
+      final rect = tester.getRect(
+        find.byKey(DirectoryPreviewCarousel.interactionKey),
+      );
+      final gesture = await tester.startGesture(
+        Offset(rect.left + 88.5, rect.center.dy),
+      );
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+      await tester.pump(_fade ~/ 2);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(_fade * 2);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }

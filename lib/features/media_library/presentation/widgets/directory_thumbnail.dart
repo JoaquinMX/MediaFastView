@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
@@ -226,6 +227,51 @@ class DirectoryPreviewCarousel extends StatefulWidget {
     'directory-preview-carousel-preview-semantics',
   );
 
+  /// Stable key for the iOS finger-following preview strip.
+  static const Key scrubStripKey = Key(
+    'directory-preview-carousel-scrub-strip',
+  );
+
+  /// Stable key for the leading preview positioned in the iOS scrub strip.
+  static const Key scrubLeadingPreviewKey = Key(
+    'directory-preview-carousel-scrub-leading-preview',
+  );
+
+  /// Stable key for the trailing preview positioned in the iOS scrub strip.
+  static const Key scrubTrailingPreviewKey = Key(
+    'directory-preview-carousel-scrub-trailing-preview',
+  );
+
+  /// VoiceOver action that moves to the previous bounded preview.
+  static const CustomSemanticsAction previousSemanticsAction =
+      CustomSemanticsAction(label: 'Previous preview');
+
+  /// VoiceOver action that moves to the next bounded preview.
+  static const CustomSemanticsAction nextSemanticsAction =
+      CustomSemanticsAction(label: 'Next preview');
+
+  /// Maps a local horizontal touch position to a fractional preview position.
+  @visibleForTesting
+  static double previewPositionForLocalDx({
+    required double localDx,
+    required double width,
+    required int previewCount,
+  }) {
+    if (previewCount <= 1 || width <= 0) {
+      return 0;
+    }
+    final edgeInset = (width * 0.1).clamp(0.0, 12.0);
+    final usableWidth = width - (edgeInset * 2);
+    if (usableWidth <= 0) {
+      return localDx < width / 2 ? 0 : (previewCount - 1).toDouble();
+    }
+    final normalizedPosition = ((localDx - edgeInset) / usableWidth).clamp(
+      0.0,
+      1.0,
+    );
+    return normalizedPosition * (previewCount - 1);
+  }
+
   final DirectoryPreviewCatalog catalog;
   final BoxFit fit;
   final WidgetBuilder placeholderBuilder;
@@ -250,13 +296,19 @@ class DirectoryPreviewCarousel extends StatefulWidget {
       _DirectoryPreviewCarouselState();
 }
 
-class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
+class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel>
+    with SingleTickerProviderStateMixin {
   Timer? _hoverDwellTimer;
   Timer? _autoAdvanceTimer;
   final FocusNode _focusNode = FocusNode();
+  late final AnimationController _snapController;
+  Animation<double>? _snapAnimation;
+  bool _isDisposed = false;
   bool _isPointerBrowsing = false;
   bool _hasInteractiveFocus = false;
   bool _isManuallyBrowsing = false;
+  int? _activeScrubPointer;
+  double? _scrubPosition;
   int _currentIndex = 0;
 
   bool get _isBrowsing =>
@@ -269,8 +321,10 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
 
   bool get _hasMultiplePreviews => widget.catalog.previews.length > 1;
 
-  bool get _shouldShowNavigation =>
-      _hasMultiplePreviews && (_isBrowsing || _isIos);
+  bool get _shouldShowBrowsingOverlay =>
+      _isBrowsing &&
+      !widget.catalog.isEmpty &&
+      (_isIos || _hasMultiplePreviews);
 
   bool get _canShowPrevious => _currentIndex > 0;
 
@@ -288,6 +342,10 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
   @override
   void initState() {
     super.initState();
+    _snapController = AnimationController(
+      duration: widget.transitionDuration,
+      vsync: this,
+    )..addListener(_updateSnapPosition);
     _attachController();
     if (widget.isPointerHovering) {
       _startHoverDwell();
@@ -318,6 +376,9 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
 
     if (!_samePreviews(oldWidget.catalog.previews, widget.catalog.previews) ||
         _currentIndex >= widget.catalog.previews.length) {
+      _snapController.stop();
+      _activeScrubPointer = null;
+      _scrubPosition = null;
       _currentIndex = 0;
     }
 
@@ -341,14 +402,21 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
     if (oldWidget.autoAdvanceInterval != widget.autoAdvanceInterval) {
       _stopAutoAdvance();
     }
+    if (oldWidget.transitionDuration != widget.transitionDuration) {
+      _snapController.duration = widget.transitionDuration;
+    }
     _syncAutoAdvance();
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _activeScrubPointer = null;
+    _snapController.removeListener(_updateSnapPosition);
     _cancelHoverDwell();
     _stopAutoAdvance();
     widget.controller?._detach();
+    _snapController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -407,7 +475,10 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
   }
 
   void _advanceAutomatically() {
-    if (!mounted || !_canAutoAdvance) {
+    if (!mounted || _isDisposed) {
+      return;
+    }
+    if (!_canAutoAdvance) {
       _syncAutoAdvance();
       return;
     }
@@ -419,6 +490,9 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
   void _resetToRest() {
     _cancelHoverDwell();
     _stopAutoAdvance();
+    _snapController.stop();
+    _activeScrubPointer = null;
+    _scrubPosition = null;
     _isPointerBrowsing = false;
     _isManuallyBrowsing = false;
     _currentIndex = 0;
@@ -453,12 +527,21 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
   }
 
   void _beginManualBrowsing({required int index}) {
+    if (!mounted || _isDisposed) {
+      return;
+    }
+    if (_isIos) {
+      _snapController.stop();
+    }
     final changed =
         !_isManuallyBrowsing || _currentIndex != index || !_isBrowsing;
     if (changed) {
       setState(() {
         _isManuallyBrowsing = true;
         _currentIndex = index;
+        if (_isIos && !_reduceAnimations) {
+          _scrubPosition = index.toDouble();
+        }
       });
     }
     // A manual key, click, or swipe gives the user a full interval to inspect
@@ -472,7 +555,7 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
   }
 
   void _onFocusChange(bool hasFocus) {
-    if (_hasInteractiveFocus == hasFocus) {
+    if (!mounted || _isDisposed || _hasInteractiveFocus == hasFocus) {
       return;
     }
     setState(() {
@@ -511,27 +594,91 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
     };
   }
 
-  void _onPreviewTap() {
-    if (!_isIos) {
+  void _onIosPointerDown(PointerDownEvent event, double width) {
+    if (!mounted ||
+        _isDisposed ||
+        !_isIos ||
+        _activeScrubPointer != null ||
+        widget.catalog.isEmpty) {
       return;
     }
+    _snapController.stop();
+    _activeScrubPointer = event.pointer;
     _focusNode.requestFocus();
-    _showFirstPreview();
+    _updateIosScrubPosition(event.localPosition.dx, width);
   }
 
-  void _onHorizontalDragEnd(DragEndDetails details) {
-    if (!_isIos) {
+  void _onIosPointerMove(PointerMoveEvent event, double width) {
+    if (!mounted ||
+        _isDisposed ||
+        !_isIos ||
+        _activeScrubPointer != event.pointer) {
       return;
     }
-    final velocity = details.primaryVelocity;
-    if (velocity == null || velocity.abs() < 100) {
+    _updateIosScrubPosition(event.localPosition.dx, width);
+  }
+
+  void _onIosPointerUp(PointerEvent event) {
+    if (!mounted ||
+        _isDisposed ||
+        !_isIos ||
+        _activeScrubPointer != event.pointer) {
       return;
     }
-    if (velocity < 0) {
-      _showNextPreview();
-    } else {
-      _showPreviousPreview();
+    _activeScrubPointer = null;
+    _snapIosScrubPosition();
+  }
+
+  void _updateIosScrubPosition(double localDx, double width) {
+    if (!mounted || _isDisposed || widget.catalog.isEmpty) {
+      return;
     }
+    final position = DirectoryPreviewCarousel.previewPositionForLocalDx(
+      localDx: localDx,
+      width: width,
+      previewCount: widget.catalog.previews.length,
+    );
+    final selectedIndex = position
+        .round()
+        .clamp(0, widget.catalog.previews.length - 1)
+        .toInt();
+    setState(() {
+      _isManuallyBrowsing = true;
+      _currentIndex = selectedIndex;
+      _scrubPosition = _reduceAnimations ? selectedIndex.toDouble() : position;
+    });
+  }
+
+  void _snapIosScrubPosition() {
+    if (!mounted || _isDisposed) {
+      return;
+    }
+    final position = _scrubPosition;
+    if (position == null || widget.catalog.isEmpty) {
+      return;
+    }
+    final targetIndex = position
+        .round()
+        .clamp(0, widget.catalog.previews.length - 1)
+        .toInt();
+    _currentIndex = targetIndex;
+    if (_reduceAnimations || position == targetIndex.toDouble()) {
+      setState(() => _scrubPosition = targetIndex.toDouble());
+      return;
+    }
+    _snapAnimation = Tween<double>(
+      begin: position,
+      end: targetIndex.toDouble(),
+    ).animate(CurvedAnimation(parent: _snapController, curve: Curves.easeOut));
+    _snapController.forward(from: 0);
+  }
+
+  void _updateSnapPosition() {
+    final animation = _snapAnimation;
+    if (!mounted || _isDisposed || animation == null) {
+      return;
+    }
+    setState(() => _scrubPosition = animation.value);
   }
 
   bool _samePreviews(
@@ -564,30 +711,131 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
       focusNode: _focusNode,
       onFocusChange: _onFocusChange,
       onKeyEvent: _onKeyEvent,
-      child: GestureDetector(
-        key: DirectoryPreviewCarousel.interactionKey,
-        behavior: HitTestBehavior.opaque,
-        onTap: _isIos ? _onPreviewTap : null,
-        onHorizontalDragEnd: _isIos ? _onHorizontalDragEnd : null,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            AnimatedSwitcher(
-              key: DirectoryPreviewCarousel.carouselKey,
-              duration: duration,
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-              child: _isBrowsing
-                  ? _buildBrowsingPreview()
-                  : _buildRestingContent(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          return GestureDetector(
+            key: DirectoryPreviewCarousel.interactionKey,
+            behavior: HitTestBehavior.opaque,
+            // Leave a tap to the containing directory card. The preview
+            // still starts browsing on pointer-down, while a horizontal drag
+            // is claimed by this child and therefore cannot activate the card.
+            onTap: null,
+            onLongPress: _isIos ? () {} : null,
+            onHorizontalDragStart: _isIos ? (_) {} : null,
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: _isIos
+                  ? (event) => _onIosPointerDown(event, width)
+                  : null,
+              onPointerMove: _isIos
+                  ? (event) => _onIosPointerMove(event, width)
+                  : null,
+              onPointerUp: _isIos ? _onIosPointerUp : null,
+              onPointerCancel: _isIos ? _onIosPointerUp : null,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedSwitcher(
+                    key: DirectoryPreviewCarousel.carouselKey,
+                    duration: duration,
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    child: _isBrowsing
+                        ? _buildBrowsingPreview()
+                        : _buildRestingContent(),
+                  ),
+                  if (_shouldShowBrowsingOverlay) _buildNavigationOverlay(),
+                  if (_isIos && !_isBrowsing && !widget.catalog.isEmpty)
+                    _buildPreviewSemantics(),
+                ],
+              ),
             ),
-            if (_shouldShowNavigation) _buildNavigationOverlay(),
-          ],
-        ),
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildIosScrubStrip() {
+    final previewCount = widget.catalog.previews.length;
+    final position = (_scrubPosition ?? _currentIndex.toDouble()).clamp(
+      0.0,
+      (previewCount - 1).toDouble(),
+    );
+    final leadingIndex = position.floor();
+    final trailingIndex = position.ceil();
+    final fractionalOffset = position - leadingIndex;
+
+    return KeyedSubtree(
+      key: DirectoryPreviewCarousel.scrubStripKey,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          return ClipRect(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned(
+                  key: DirectoryPreviewCarousel.scrubLeadingPreviewKey,
+                  left: -fractionalOffset * width,
+                  top: 0,
+                  bottom: 0,
+                  width: width,
+                  child: _buildPreviewTile(leadingIndex),
+                ),
+                if (trailingIndex != leadingIndex)
+                  Positioned(
+                    key: DirectoryPreviewCarousel.scrubTrailingPreviewKey,
+                    left: (1 - fractionalOffset) * width,
+                    top: 0,
+                    bottom: 0,
+                    width: width,
+                    child: _buildPreviewTile(trailingIndex),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPreviewTile(int index) {
+    return KeyedSubtree(
+      key: DirectoryPreviewCarousel.previewKey(index),
+      child: DirectoryPreviewTile(
+        preview: widget.catalog.previews[index],
+        fit: widget.fit,
+        placeholderBuilder: widget.placeholderBuilder,
+        errorBuilder: widget.errorBuilder,
+        fallbackBookmarkData: widget.fallbackBookmarkData,
+      ),
+    );
+  }
+
+  Map<CustomSemanticsAction, VoidCallback> _previewSemanticsActions() {
+    return <CustomSemanticsAction, VoidCallback>{
+      if (_canShowPrevious)
+        DirectoryPreviewCarousel.previousSemanticsAction: _showPreviousPreview,
+      if (_canShowNext)
+        DirectoryPreviewCarousel.nextSemanticsAction: _showNextPreview,
+    };
+  }
+
+  Widget _buildPreviewSemantics() {
+    final preview = widget.catalog.previews[_currentIndex];
+    final previewName = path.basename(preview.sourcePath);
+    return Semantics(
+      key: DirectoryPreviewCarousel.previewSemanticsKey,
+      label:
+          '$previewName, preview ${_currentIndex + 1} of '
+          '${widget.catalog.previews.length}',
+      customSemanticsActions: _previewSemanticsActions(),
+      child: const SizedBox.expand(),
     );
   }
 
@@ -600,26 +848,28 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
 
     return Stack(
       children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: _NavigationButton(
-            key: DirectoryPreviewCarousel.previousButtonKey,
-            icon: Icons.chevron_left,
-            tooltip: 'Previous preview',
-            isEnabled: _canShowPrevious,
-            onPressed: _showPreviousPreview,
+        if (!_isIos)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _NavigationButton(
+              key: DirectoryPreviewCarousel.previousButtonKey,
+              icon: Icons.chevron_left,
+              tooltip: 'Previous preview',
+              isEnabled: _canShowPrevious,
+              onPressed: _showPreviousPreview,
+            ),
           ),
-        ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: _NavigationButton(
-            key: DirectoryPreviewCarousel.nextButtonKey,
-            icon: Icons.chevron_right,
-            tooltip: 'Next preview',
-            isEnabled: _canShowNext,
-            onPressed: _showNextPreview,
+        if (!_isIos)
+          Align(
+            alignment: Alignment.centerRight,
+            child: _NavigationButton(
+              key: DirectoryPreviewCarousel.nextButtonKey,
+              icon: Icons.chevron_right,
+              tooltip: 'Next preview',
+              isEnabled: _canShowNext,
+              onPressed: _showNextPreview,
+            ),
           ),
-        ),
         Positioned(
           left: 6,
           right: 6,
@@ -659,13 +909,16 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
             ),
           ),
         ),
-        Semantics(
-          key: DirectoryPreviewCarousel.previewSemanticsKey,
-          label:
-              '$previewName, preview ${_currentIndex + 1} of '
-              '${widget.catalog.previews.length}',
-          child: const SizedBox.expand(),
-        ),
+        if (_isIos)
+          _buildPreviewSemantics()
+        else
+          Semantics(
+            key: DirectoryPreviewCarousel.previewSemanticsKey,
+            label:
+                '$previewName, preview ${_currentIndex + 1} of '
+                '${widget.catalog.previews.length}',
+            child: const SizedBox.expand(),
+          ),
       ],
     );
   }
@@ -709,17 +962,10 @@ class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
       );
     }
 
-    final preview = widget.catalog.previews[_currentIndex];
-    return KeyedSubtree(
-      key: DirectoryPreviewCarousel.previewKey(_currentIndex),
-      child: DirectoryPreviewTile(
-        preview: preview,
-        fit: widget.fit,
-        placeholderBuilder: widget.placeholderBuilder,
-        errorBuilder: widget.errorBuilder,
-        fallbackBookmarkData: widget.fallbackBookmarkData,
-      ),
-    );
+    if (_isIos && !_reduceAnimations) {
+      return _buildIosScrubStrip();
+    }
+    return _buildPreviewTile(_currentIndex);
   }
 }
 

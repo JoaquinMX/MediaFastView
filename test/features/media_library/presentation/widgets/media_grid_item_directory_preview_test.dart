@@ -190,7 +190,7 @@ void main() {
   );
 
   testWidgets(
-    'on iOS, a nested preview tap browses while its information opens',
+    'on iOS, a nested preview tap opens while a scrub stays isolated',
     (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       try {
@@ -207,6 +207,7 @@ void main() {
           ],
         );
         var openCount = 0;
+        var selectionCount = 0;
         await tester.pumpWidget(
           ProviderScope(
             overrides: <Override>[
@@ -229,7 +230,7 @@ void main() {
                   child: MediaGridItem(
                     media: _nestedDirectory(),
                     onTap: () => openCount += 1,
-                    onSelectionToggle: () {},
+                    onSelectionToggle: () => selectionCount += 1,
                     isSelected: false,
                     isSelectionMode: false,
                   ),
@@ -243,10 +244,24 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 180));
         expect(
-          find.byKey(DirectoryPreviewCarousel.previewKey(0)),
+          find.byKey(DirectoryPreviewCarousel.previewKey(1)),
           findsOneWidget,
         );
+        expect(openCount, 1);
+
+        openCount = 0;
+        final rect = tester.getRect(
+          find.byKey(DirectoryPreviewCarousel.interactionKey),
+        );
+        final gesture = await tester.startGesture(
+          Offset(rect.left + 8, rect.center.dy),
+        );
+        await gesture.moveTo(Offset(rect.right - 8, rect.center.dy));
+        await tester.pump();
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 180));
         expect(openCount, 0);
+        expect(selectionCount, 0);
 
         await tester.tap(find.text('nested'));
         await tester.pump();

@@ -186,8 +186,6 @@ class _MediaGridItemState extends State<MediaGridItem> {
     return Consumer(
       builder: (context, ref, child) {
         final isDirectory = widget.media.type == MediaType.directory;
-        final shouldInterceptDirectoryPreviewTap =
-            isDirectory && defaultTargetPlatform == TargetPlatform.iOS;
         final gridItem = VisibilityDetector(
           key: Key('media-grid-${widget.media.id}'),
           onVisibilityChanged: (info) {
@@ -213,13 +211,11 @@ class _MediaGridItemState extends State<MediaGridItem> {
               await _disposeVideoController();
             },
             child: GestureDetector(
-              // Only iOS turns a preview tap into browsing. Desktop retains
-              // the established card/background activation while child arrow
-              // controls still win their own gesture arenas.
-              onTap: shouldInterceptDirectoryPreviewTap ? null : widget.onTap,
-              onDoubleTap: shouldInterceptDirectoryPreviewTap
-                  ? null
-                  : widget.onDoubleTap,
+              // The preview child claims horizontal drags and long presses,
+              // but leaves a simple tap to this card so a single touch still
+              // opens a directory on iOS.
+              onTap: widget.onTap,
+              onDoubleTap: widget.onDoubleTap,
               onLongPress: () {
                 _ensureSelected();
                 widget.onLongPress?.call();

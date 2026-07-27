@@ -234,75 +234,101 @@ void main() {
     },
   );
 
-  testWidgets(
-    'on iOS, a root preview tap browses instead of opening its card',
-    (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-      try {
-        const catalog = DirectoryPreviewCatalog(
-          previews: <DirectoryPreview>[
-            DirectoryVideoPreview(
-              sourcePath: '/library/root/one.mp4',
-              thumbnailPath: '/cache/one.jpg',
-            ),
-            DirectoryVideoPreview(
-              sourcePath: '/library/root/two.mp4',
-              thumbnailPath: '/cache/two.jpg',
+  testWidgets('on iOS, a preview tap opens while a scrub stays isolated', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      const catalog = DirectoryPreviewCatalog(
+        previews: <DirectoryPreview>[
+          DirectoryVideoPreview(
+            sourcePath: '/library/root/one.mp4',
+            thumbnailPath: '/cache/one.jpg',
+          ),
+          DirectoryVideoPreview(
+            sourcePath: '/library/root/two.mp4',
+            thumbnailPath: '/cache/two.jpg',
+          ),
+        ],
+      );
+      var openCount = 0;
+      var selectionCount = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            directoryCoverProvider.overrideWith((ref, path) => null),
+            directoryPreviewCatalogProvider.overrideWith(
+              (ref, query) => catalog,
             ),
           ],
-        );
-        var openCount = 0;
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: <Override>[
-              directoryCoverProvider.overrideWith((ref, path) => null),
-              directoryPreviewCatalogProvider.overrideWith(
-                (ref, query) => catalog,
-              ),
-            ],
-            child: MaterialApp(
-              home: Scaffold(
-                body: SizedBox(
-                  width: 240,
-                  height: 320,
-                  child: DirectoryGridItem(
-                    directory: DirectoryEntity(
-                      id: 'root',
-                      path: '/library/root',
-                      name: 'Root',
-                      thumbnailPath: null,
-                      tagIds: const [],
-                      lastModified: DateTime(2025),
-                    ),
-                    onTap: () => openCount += 1,
-                    onDelete: () {},
-                    onAssignTags: (_) async {},
-                    onSelectionToggle: () {},
-                    isSelected: false,
-                    isSelectionMode: false,
-                    showTaggedMediaCounts: false,
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 240,
+                height: 320,
+                child: DirectoryGridItem(
+                  directory: DirectoryEntity(
+                    id: 'root',
+                    path: '/library/root',
+                    name: 'Root',
+                    thumbnailPath: null,
+                    tagIds: const [],
+                    lastModified: DateTime(2025),
                   ),
+                  onTap: () => openCount += 1,
+                  onDelete: () {},
+                  onAssignTags: (_) async {},
+                  onSelectionToggle: () => selectionCount += 1,
+                  isSelected: false,
+                  isSelectionMode: false,
+                  showTaggedMediaCounts: false,
                 ),
               ),
             ),
           ),
-        );
+        ),
+      );
 
-        await tester.tap(find.byKey(DirectoryPreviewCarousel.interactionKey));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 180));
-        expect(
-          find.byKey(DirectoryPreviewCarousel.previewKey(0)),
-          findsOneWidget,
-        );
-        expect(openCount, 0);
+      await tester.tap(find.byKey(DirectoryPreviewCarousel.interactionKey));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(1)),
+        findsOneWidget,
+      );
+      expect(openCount, 1);
 
-        await tester.tap(find.text('Root'));
-        await tester.pump();
-        expect(openCount, 1);
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
-    },
-  );
+      openCount = 0;
+      final rect = tester.getRect(
+        find.byKey(DirectoryPreviewCarousel.interactionKey),
+      );
+      final gesture = await tester.startGesture(
+        Offset(rect.left + 8, rect.center.dy),
+      );
+      await tester.pump();
+      await gesture.moveTo(Offset(rect.right - 8, rect.center.dy));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(
+        find.byKey(DirectoryPreviewCarousel.previewKey(1)),
+        findsOneWidget,
+      );
+      expect(openCount, 0);
+      expect(selectionCount, 0);
+
+      await tester.longPress(
+        find.byKey(DirectoryPreviewCarousel.interactionKey),
+      );
+      await tester.pump();
+      expect(openCount, 0);
+      expect(selectionCount, 0);
+
+      await tester.tap(find.text('Root'));
+      await tester.pump();
+      expect(openCount, 1);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../core/utils/file_utils.dart';
 import '../../../../core/utils/file_size_formatter.dart';
 import '../../../../core/services/directory_picker_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
@@ -37,10 +38,36 @@ import '../view_models/media_grid_view_model.dart';
 import '../widgets/media_grid_item.dart';
 import '../widgets/column_selector_popup.dart';
 import '../widgets/directory_cover_picker_dialog.dart';
+import '../widgets/directory_cover_selection_action.dart';
 
 /// How long a revealed item stays called out. Long enough for the eye to land on
 /// it after the scroll, short enough not to be mistaken for a selection.
 const Duration _revealHighlightDuration = Duration(milliseconds: 2500);
+
+/// Returns a valid cover selection in the current visible grid order.
+///
+/// An empty result means the complete selection cannot be used as a cover.
+@visibleForTesting
+List<MediaEntity> directoryCoverImagesForSelection({
+  required List<MediaEntity> visibleMedia,
+  required Set<String> selectedMediaIds,
+}) {
+  if (selectedMediaIds.isEmpty || selectedMediaIds.length > 4) {
+    return const <MediaEntity>[];
+  }
+
+  final selectedImages = visibleMedia
+      .where((item) => selectedMediaIds.contains(item.id))
+      .toList(growable: false);
+  if (selectedImages.length != selectedMediaIds.length ||
+      selectedImages.any(
+        (item) =>
+            item.type != MediaType.image || isExcludedMediaFileName(item.name),
+      )) {
+    return const <MediaEntity>[];
+  }
+  return selectedImages;
+}
 
 /// Screen for displaying media in a customizable grid layout.
 class MediaGridScreen extends ConsumerStatefulWidget {
@@ -670,6 +697,10 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
       favoritesState,
       selectedMediaIds,
     );
+    final selectedCoverImages = directoryCoverImagesForSelection(
+      visibleMedia: state.media,
+      selectedMediaIds: selectedMediaIds,
+    );
 
     return AppBar(
       leading: IconButton(
@@ -685,6 +716,14 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
         ),
       ),
       actions: [
+        if (selectedCoverImages.isNotEmpty) ...[
+          DirectoryCoverSelectionAction(
+            directoryPath: widget.directoryPath,
+            selectedImages: selectedCoverImages,
+            onSaved: viewModel.clearMediaSelection,
+          ),
+          const SizedBox(width: 8),
+        ],
         FilledButton.icon(
           onPressed: () => unawaited(_assignTagsToSelectedMedia(viewModel)),
           icon: const Icon(Icons.tag),
