@@ -3,7 +3,7 @@ import 'package:media_fast_view/features/thumbnails/data/thumbnail_coordinator.d
 import 'package:media_fast_view/features/thumbnails/domain/generate_thumbnails_use_case.dart';
 import 'package:media_fast_view/features/thumbnails/domain/thumbnail_batch_progress.dart';
 import 'package:media_fast_view/features/thumbnails/presentation/thumbnail_providers.dart';
-import 'package:media_fast_view/features/media_library/presentation/providers/directory_preview_providers.dart';
+import 'package:media_fast_view/features/media_library/presentation/providers/directory_preview_catalog_invalidator.dart';
 import 'package:media_fast_view/shared/providers/active_profile_provider.dart';
 import 'package:media_fast_view/shared/providers/repository_providers.dart';
 import 'package:media_fast_view/shared/providers/settings_providers.dart';
@@ -86,7 +86,7 @@ class ThumbnailBatchController extends Notifier<ThumbnailBatchProgress> {
     } finally {
       if (identical(_cancellationToken, cancellationToken)) {
         _cancellationToken = null;
-        ref.invalidate(directoryPreviewProvider);
+        ref.read(directoryPreviewCatalogInvalidatorProvider).invalidateAll();
         ref.invalidate(thumbnailCacheUsageProvider);
       }
     }
@@ -107,7 +107,7 @@ class ThumbnailBatchController extends Notifier<ThumbnailBatchProgress> {
     try {
       await ref.read(thumbnailDiskCacheProvider).clear();
       ref.invalidate(thumbnailProvider);
-      ref.invalidate(directoryPreviewProvider);
+      ref.read(directoryPreviewCatalogInvalidatorProvider).invalidateAll();
       ref.invalidate(thumbnailCacheUsageProvider);
       return true;
     } catch (_) {

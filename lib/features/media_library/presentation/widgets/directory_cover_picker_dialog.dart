@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../../core/utils/file_utils.dart';
 import '../../../thumbnails/presentation/media_thumbnail.dart';
 import '../../domain/entities/directory_cover_entity.dart';
 import '../../domain/entities/media_entity.dart';
@@ -45,7 +46,8 @@ class DirectoryCoverPickerDialog extends ConsumerStatefulWidget {
 
 class _DirectoryCoverPickerDialogState
     extends ConsumerState<DirectoryCoverPickerDialog> {
-  MediaEntity? _selectedMedia;
+  List<MediaEntity> _selectedImages = <MediaEntity>[];
+  bool _isNoCoverSelected = false;
   bool _selectionChanged = false;
   bool _isSaving = false;
   String? _errorMessage;
@@ -77,8 +79,9 @@ class _DirectoryCoverPickerDialogState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Choose an image or video directly inside this folder, or '
-              'select No cover to display the folder icon.',
+              'Choose one to four images directly inside this folder. '
+              'Tap a selected image to remove it, or select No cover to '
+              'display the folder icon.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             if (_errorMessage != null) ...[
@@ -118,7 +121,7 @@ class _DirectoryCoverPickerDialogState
         FilledButton(
           onPressed: _isSaving || !_hasEffectiveChange(cover.valueOrNull)
               ? null
-              : () => _saveSelection(cover.valueOrNull),
+              : _saveSelection,
           child: _isSaving
               ? const SizedBox.square(
                   dimension: 18,
@@ -134,60 +137,129 @@ class _DirectoryCoverPickerDialogState
     List<MediaEntity> items,
     DirectoryCoverEntity? currentCover,
   ) {
-    final currentFileName = currentCover?.sourceFileName;
-    final effectivePath = _selectionChanged
-        ? _selectedMedia?.path
-        : items
-              .where(
-                (item) =>
-                    item.name.toLowerCase() == currentFileName?.toLowerCase(),
-              )
-              .firstOrNull
-              ?.path;
+    final images = items
+        .where(
+          (item) =>
+              item.type == MediaType.image &&
+              !isExcludedMediaFileName(item.name),
+        )
+        .toList(growable: false);
+    final effectiveSelections = _effectiveSelections(images, currentCover);
     final isNoCoverSelected = _selectionChanged
-        ? _selectedMedia == null
+        ? _isNoCoverSelected
         : currentCover?.mode == DirectoryCoverMode.none;
 
-    return GridView.builder(
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: MediaQuery.sizeOf(context).width < 600 ? 2 : 4,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.9,
-      ),
-      itemCount: items.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return _NoCoverCandidate(
-            isSelected: isNoCoverSelected,
-            onTap: () {
-              setState(() {
-                _selectedMedia = null;
-                _selectionChanged = true;
-                _errorMessage = null;
-              });
-            },
-          );
-        }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '${effectiveSelections.length} of '
+          '${DirectoryCoverEntity.maximumSelectionCount} images selected',
+          key: const Key('directory-cover-selection-count'),
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: GridView.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: MediaQuery.sizeOf(context).width < 600 ? 2 : 4,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.9,
+            ),
+            itemCount: images.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return _NoCoverCandidate(
+                  isSelected: isNoCoverSelected,
+                  onTap: () {
+                    setState(() {
+                      _selectedImages = <MediaEntity>[];
+                      _isNoCoverSelected = true;
+                      _selectionChanged = true;
+                      _errorMessage = null;
+                    });
+                  },
+                );
+              }
 
-        final item = items[index - 1];
-        final isSelected =
-            p.normalize(item.path).toLowerCase() ==
-            p.normalize(effectivePath ?? '').toLowerCase();
-        return _CoverCandidate(
-          media: item,
-          bookmarkData: widget.bookmarkData,
-          isSelected: isSelected,
-          onTap: () {
-            setState(() {
-              _selectedMedia = item;
-              _selectionChanged = true;
-              _errorMessage = null;
-            });
-          },
-        );
-      },
+              final item = images[index - 1];
+              final selectedIndex = effectiveSelections.indexWhere(
+                (selected) => _samePath(selected.path, item.path),
+              );
+              return _CoverCandidate(
+                media: item,
+                bookmarkData: widget.bookmarkData,
+                selectionPosition: selectedIndex < 0 ? null : selectedIndex + 1,
+                onTap: () =>
+                    _toggleSelection(item, effectiveSelections, selectedIndex),
+              );
+            },
+          ),
+        ),
+      ],
     );
+  }
+
+  List<MediaEntity> _effectiveSelections(
+    List<MediaEntity> items,
+    DirectoryCoverEntity? currentCover,
+  ) {
+    if (_selectionChanged) {
+      return _selectedImages;
+    }
+    if (currentCover?.mode != DirectoryCoverMode.media) {
+      return const <MediaEntity>[];
+    }
+
+    final selections = <MediaEntity>[];
+    for (final coverSelection in currentCover!.selections) {
+      if (coverSelection.mediaType != MediaType.image) {
+        continue;
+      }
+      final match = items
+          .where(
+            (item) =>
+                item.name.toLowerCase() ==
+                coverSelection.sourceFileName.toLowerCase(),
+          )
+          .firstOrNull;
+      if (match != null) {
+        selections.add(match);
+      }
+    }
+    return selections;
+  }
+
+  void _toggleSelection(
+    MediaEntity item,
+    List<MediaEntity> effectiveSelections,
+    int selectedIndex,
+  ) {
+    if (selectedIndex < 0 &&
+        effectiveSelections.length >=
+            DirectoryCoverEntity.maximumSelectionCount) {
+      setState(() {
+        _errorMessage =
+            'You can select up to '
+            '${DirectoryCoverEntity.maximumSelectionCount} images. '
+            'Remove one before choosing another.';
+      });
+      return;
+    }
+
+    final updatedSelections = List<MediaEntity>.of(effectiveSelections);
+    if (selectedIndex >= 0) {
+      updatedSelections.removeAt(selectedIndex);
+    } else {
+      updatedSelections.add(item);
+    }
+    setState(() {
+      _selectedImages = updatedSelections;
+      _isNoCoverSelected = false;
+      _selectionChanged = true;
+      _errorMessage = null;
+    });
   }
 
   Widget _buildError(Object error) {
@@ -203,41 +275,37 @@ class _DirectoryCoverPickerDialogState
     if (!_selectionChanged) {
       return false;
     }
-    final selectedMedia = _selectedMedia;
-    if (selectedMedia == null) {
+    if (_isNoCoverSelected) {
       return currentCover?.mode != DirectoryCoverMode.none;
     }
-    return currentCover?.mode != DirectoryCoverMode.media ||
-        selectedMedia.name.toLowerCase() !=
-            currentCover?.sourceFileName?.toLowerCase();
+    if (_selectedImages.isEmpty) {
+      return false;
+    }
+    if (currentCover?.mode != DirectoryCoverMode.media ||
+        currentCover!.selections.length != _selectedImages.length) {
+      return true;
+    }
+    for (var index = 0; index < _selectedImages.length; index += 1) {
+      final currentSelection = currentCover.selections[index];
+      if (currentSelection.mediaType != MediaType.image ||
+          currentSelection.sourceFileName.toLowerCase() !=
+              _selectedImages[index].name.toLowerCase()) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  Future<void> _saveSelection(DirectoryCoverEntity? currentCover) async {
-    if (_selectionChanged && _selectedMedia == null) {
+  Future<void> _saveSelection() async {
+    if (_selectionChanged && _isNoCoverSelected) {
       await _setNoCover();
       return;
     }
 
-    final candidates = ref.read(
-      directoryCoverCandidatesProvider(
-        DirectoryCoverCandidatesQuery(
-          directoryPath: widget.directoryPath,
-          bookmarkData: widget.bookmarkData,
-        ),
-      ),
-    );
-    final items = candidates.valueOrNull ?? const <MediaEntity>[];
-    final media = _selectionChanged
-        ? _selectedMedia
-        : items
-              .where(
-                (item) =>
-                    item.name.toLowerCase() ==
-                    currentCover?.sourceFileName?.toLowerCase(),
-              )
-              .firstOrNull;
-    if (media == null) {
-      setState(() => _errorMessage = 'Select a cover first.');
+    if (!_selectionChanged || _selectedImages.isEmpty) {
+      setState(() {
+        _errorMessage = 'Select at least one image or choose No cover.';
+      });
       return;
     }
 
@@ -247,7 +315,7 @@ class _DirectoryCoverPickerDialogState
     });
     await ref
         .read(directoryCoverControllerProvider(widget.directoryPath).notifier)
-        .setCover(media);
+        .setCovers(_selectedImages);
     if (!mounted) {
       return;
     }
@@ -264,6 +332,11 @@ class _DirectoryCoverPickerDialogState
         });
       },
     );
+  }
+
+  bool _samePath(String first, String second) {
+    return p.normalize(first).toLowerCase() ==
+        p.normalize(second).toLowerCase();
   }
 
   Future<void> _setNoCover() async {
@@ -376,19 +449,21 @@ class _CoverCandidate extends StatelessWidget {
   const _CoverCandidate({
     required this.media,
     required this.bookmarkData,
-    required this.isSelected,
+    required this.selectionPosition,
     required this.onTap,
   });
 
   final MediaEntity media;
   final String? bookmarkData;
-  final bool isSelected;
+  final int? selectionPosition;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isSelected = selectionPosition != null;
     return Material(
+      key: Key('directory-cover-candidate-${media.name}'),
       color: colorScheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
@@ -420,12 +495,7 @@ class _CoverCandidate extends StatelessWidget {
               padding: const EdgeInsets.all(8),
               child: Row(
                 children: [
-                  Icon(
-                    media.type == MediaType.video
-                        ? Icons.movie_outlined
-                        : Icons.image_outlined,
-                    size: 16,
-                  ),
+                  const Icon(Icons.image_outlined, size: 16),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -434,8 +504,23 @@ class _CoverCandidate extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (isSelected)
-                    Icon(Icons.check_circle, color: colorScheme.primary),
+                  if (selectionPosition case final position?)
+                    Semantics(
+                      label: 'Selected image $position',
+                      child: CircleAvatar(
+                        key: Key(
+                          'directory-cover-selection-position-$position',
+                        ),
+                        radius: 11,
+                        backgroundColor: colorScheme.primary,
+                        foregroundColor: colorScheme.onPrimary,
+                        child: Text(
+                          '$position',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: colorScheme.onPrimary),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

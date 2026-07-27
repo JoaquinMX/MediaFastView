@@ -60,10 +60,14 @@ class MediaGridItem extends StatefulWidget {
 
 class _MediaGridItemState extends State<MediaGridItem> {
   bool _isHovering = false;
+  bool _hasDirectoryFocus = false;
   VideoPlayerController? _videoController;
   String? _activeVideoBookmark;
   int _videoSession = 0;
   Future<String>? _textPreviewFuture;
+  final DirectoryPreviewCarouselController _directoryCarouselController =
+      DirectoryPreviewCarouselController();
+  final FocusNode _directoryFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -101,6 +105,7 @@ class _MediaGridItemState extends State<MediaGridItem> {
   @override
   void dispose() {
     unawaited(_disposeVideoController());
+    _directoryFocusNode.dispose();
     super.dispose();
   }
 
@@ -180,9 +185,15 @@ class _MediaGridItemState extends State<MediaGridItem> {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, child) {
-        return VisibilityDetector(
+        final isDirectory = widget.media.type == MediaType.directory;
+        final shouldInterceptDirectoryPreviewTap =
+            isDirectory && defaultTargetPlatform == TargetPlatform.iOS;
+        final gridItem = VisibilityDetector(
           key: Key('media-grid-${widget.media.id}'),
           onVisibilityChanged: (info) {
+            if (!mounted) {
+              return;
+            }
             if (info.visibleFraction == 0) {
               unawaited(_disposeVideoController());
               if (_isHovering) {
@@ -202,8 +213,13 @@ class _MediaGridItemState extends State<MediaGridItem> {
               await _disposeVideoController();
             },
             child: GestureDetector(
-              onTap: widget.onTap,
-              onDoubleTap: widget.onDoubleTap,
+              // Only iOS turns a preview tap into browsing. Desktop retains
+              // the established card/background activation while child arrow
+              // controls still win their own gesture arenas.
+              onTap: shouldInterceptDirectoryPreviewTap ? null : widget.onTap,
+              onDoubleTap: shouldInterceptDirectoryPreviewTap
+                  ? null
+                  : widget.onDoubleTap,
               onLongPress: () {
                 _ensureSelected();
                 widget.onLongPress?.call();
@@ -305,8 +321,27 @@ class _MediaGridItemState extends State<MediaGridItem> {
             ),
           ),
         );
+        if (!isDirectory) {
+          return gridItem;
+        }
+        return Focus(
+          focusNode: _directoryFocusNode,
+          onFocusChange: _onDirectoryFocusChange,
+          onKeyEvent: _onDirectoryPreviewKeyEvent,
+          child: gridItem,
+        );
       },
     );
+  }
+
+  void _onDirectoryFocusChange(bool hasFocus) {
+    if (_hasDirectoryFocus != hasFocus) {
+      setState(() => _hasDirectoryFocus = hasFocus);
+    }
+  }
+
+  KeyEventResult _onDirectoryPreviewKeyEvent(FocusNode node, KeyEvent event) {
+    return _directoryCarouselController.handleKeyEvent(event);
   }
 
   Widget _buildHoverOverlay() {
@@ -481,6 +516,9 @@ class _MediaGridItemState extends State<MediaGridItem> {
             directoryPath: widget.media.path,
             bookmarkData: widget.bookmarkData,
             fit: BoxFit.cover,
+            isPointerHovering: _isHovering,
+            isFocused: _hasDirectoryFocus,
+            controller: _directoryCarouselController,
             placeholderBuilder: (_) => _buildLoadingContent(),
             emptyBuilder: (_) => _buildDirectoryPlaceholder(),
             errorBuilder: (_) => _buildErrorContent(),
@@ -488,26 +526,25 @@ class _MediaGridItemState extends State<MediaGridItem> {
         ),
         Expanded(
           flex: UiGrid.directoryNameFlex,
-          child: Container(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            padding: UiSpacing.horizontalSmall,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  widget.media.name,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: UiContent.maxLinesSingle,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-                if (showTaggedMediaCounts) ...[
-                  const SizedBox(height: 4),
+          child: InkWell(
+            onTap: widget.onTap,
+            onDoubleTap: widget.onDoubleTap,
+            onLongPress: () {
+              _ensureSelected();
+              widget.onLongPress?.call();
+            },
+            onSecondaryTap: () {
+              _ensureSelected();
+              widget.onSecondaryTap?.call();
+            },
+            child: Container(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              padding: UiSpacing.horizontalSmall,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
                   Text(
-                    '${directoryCounts.taggedMediaCount} / '
-                    '${directoryCounts.totalMediaCount} tagged',
+                    widget.media.name,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -515,8 +552,21 @@ class _MediaGridItemState extends State<MediaGridItem> {
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                   ),
+                  if (showTaggedMediaCounts) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${directoryCounts.taggedMediaCount} / '
+                      '${directoryCounts.totalMediaCount} tagged',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: UiContent.maxLinesSingle,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

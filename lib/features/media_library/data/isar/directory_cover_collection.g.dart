@@ -50,8 +50,13 @@ const DirectoryCoverCollectionSchema = CollectionSchema(
       name: r'sourceFileName',
       type: IsarType.string,
     ),
-    r'updatedAt': PropertySchema(
+    r'sourceFileNames': PropertySchema(
       id: 6,
+      name: r'sourceFileNames',
+      type: IsarType.stringList,
+    ),
+    r'updatedAt': PropertySchema(
+      id: 7,
       name: r'updatedAt',
       type: IsarType.dateTime,
     )
@@ -122,6 +127,13 @@ int _directoryCoverCollectionEstimateSize(
   bytesCount += 3 + object.mode.name.length * 3;
   bytesCount += 3 + object.profileId.length * 3;
   bytesCount += 3 + object.sourceFileName.length * 3;
+  bytesCount += 3 + object.sourceFileNames.length * 3;
+  {
+    for (var i = 0; i < object.sourceFileNames.length; i++) {
+      final value = object.sourceFileNames[i];
+      bytesCount += value.length * 3;
+    }
+  }
   return bytesCount;
 }
 
@@ -137,7 +149,8 @@ void _directoryCoverCollectionSerialize(
   writer.writeString(offsets[3], object.mode.name);
   writer.writeString(offsets[4], object.profileId);
   writer.writeString(offsets[5], object.sourceFileName);
-  writer.writeDateTime(offsets[6], object.updatedAt);
+  writer.writeStringList(offsets[6], object.sourceFileNames);
+  writer.writeDateTime(offsets[7], object.updatedAt);
 }
 
 DirectoryCoverCollection _directoryCoverCollectionDeserialize(
@@ -157,7 +170,8 @@ DirectoryCoverCollection _directoryCoverCollectionDeserialize(
         DirectoryCoverMode.media,
     profileId: reader.readString(offsets[4]),
     sourceFileName: reader.readString(offsets[5]),
-    updatedAt: reader.readDateTime(offsets[6]),
+    sourceFileNames: reader.readStringList(offsets[6]) ?? const <String>[],
+    updatedAt: reader.readDateTime(offsets[7]),
   );
   object.id = id;
   return object;
@@ -187,6 +201,8 @@ P _directoryCoverCollectionDeserializeProp<P>(
     case 5:
       return (reader.readString(offset)) as P;
     case 6:
+      return (reader.readStringList(offset) ?? const <String>[]) as P;
+    case 7:
       return (reader.readDateTime(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1392,6 +1408,235 @@ extension DirectoryCoverCollectionQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sourceFileNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'sourceFileNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'sourceFileNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'sourceFileNames',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesElementStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'sourceFileNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'sourceFileNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+          QAfterFilterCondition>
+      sourceFileNamesElementContains(String value,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'sourceFileNames',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+          QAfterFilterCondition>
+      sourceFileNamesElementMatches(String pattern,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'sourceFileNames',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sourceFileNames',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'sourceFileNames',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'sourceFileNames',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'sourceFileNames',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'sourceFileNames',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'sourceFileNames',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'sourceFileNames',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
+      QAfterFilterCondition> sourceFileNamesLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'sourceFileNames',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection,
       QAfterFilterCondition> updatedAtEqualTo(DateTime value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -1717,6 +1962,13 @@ extension DirectoryCoverCollectionQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection, QDistinct>
+      distinctBySourceFileNames() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'sourceFileNames');
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, DirectoryCoverCollection, QDistinct>
       distinctByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'updatedAt');
@@ -1771,6 +2023,13 @@ extension DirectoryCoverCollectionQueryProperty on QueryBuilder<
       sourceFileNameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'sourceFileName');
+    });
+  }
+
+  QueryBuilder<DirectoryCoverCollection, List<String>, QQueryOperations>
+      sourceFileNamesProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'sourceFileNames');
     });
   }
 

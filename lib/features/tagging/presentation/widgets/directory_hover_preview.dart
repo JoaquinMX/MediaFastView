@@ -1,19 +1,19 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../media_library/presentation/models/directory_preview.dart';
 import '../../../media_library/presentation/providers/directory_cover_controller.dart';
 import '../../../media_library/presentation/providers/directory_preview_providers.dart';
-import '../../../thumbnails/presentation/file_thumbnail.dart';
-import '../../../thumbnails/presentation/media_thumbnail.dart';
+import '../../../media_library/presentation/widgets/directory_thumbnail.dart';
 
-/// Shows a floating strip of thumbnails from [directoryPath] while the pointer
-/// hovers over [child].
+/// Shows an interactive directory-preview carousel while the pointer is over
+/// [child].
 ///
-/// Pointer-only by design: the overlay is decoration, and every directory it can
-/// preview is also reachable through the widget it wraps.
+/// The overlay remains interactive so it can host carousel controls without
+/// disappearing as the pointer crosses from its trigger. A short exit grace
+/// period bridges the intentional gap between the trigger and the popup.
 class DirectoryHoverPreview extends StatefulWidget {
   const DirectoryHoverPreview({
     super.key,
@@ -29,11 +29,22 @@ class DirectoryHoverPreview extends StatefulWidget {
 }
 
 class DirectoryHoverPreviewState extends State<DirectoryHoverPreview> {
-  OverlayEntry? _overlayEntry;
-
   static const double _overlayWidth = 240;
   static const double _overlayHeight = 140;
   static const double _overlayPadding = 12;
+  static const Duration _overlayExitGracePeriod = Duration(milliseconds: 180);
+
+  OverlayEntry? _overlayEntry;
+  Timer? _dismissTimer;
+  bool _isTriggerHovered = false;
+  bool _isOverlayHovered = false;
+  bool _isHardwareKeyHandlerRegistered = false;
+  final DirectoryPreviewCarouselController _carouselController =
+      DirectoryPreviewCarouselController();
+
+  bool get _hasPointerWithin => _isTriggerHovered || _isOverlayHovered;
+
+  bool get _isPointerBrowsing => _hasPointerWithin || _dismissTimer != null;
 
   @override
   void dispose() {
@@ -41,8 +52,17 @@ class DirectoryHoverPreviewState extends State<DirectoryHoverPreview> {
     super.dispose();
   }
 
+  /// Opens the carousel if it is not already visible.
+  void showOverlay() {
+    _showOverlay();
+  }
+
   void _showOverlay() {
-    removeOverlay();
+    _cancelDismissTimer();
+    if (_overlayEntry != null) {
+      _markOverlayNeedsBuild();
+      return;
+    }
 
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.attached) {
@@ -72,13 +92,28 @@ class DirectoryHoverPreviewState extends State<DirectoryHoverPreview> {
           left: left,
           top: top,
           width: _overlayWidth,
-          child: IgnorePointer(
-            child: Material(
-              elevation: 8,
-              borderRadius: BorderRadius.circular(12),
-              color: Theme.of(context).colorScheme.surface,
-              child: _DirectoryPreviewStrip(
-                directoryPath: widget.directoryPath,
+          child: MouseRegion(
+            onEnter: _onOverlayEnter,
+            onExit: _onOverlayExit,
+            child: Focus(
+              canRequestFocus: false,
+              onKeyEvent: _onOverlayKeyEvent,
+              child: Material(
+                elevation: 8,
+                clipBehavior: Clip.antiAlias,
+                borderRadius: BorderRadius.circular(12),
+                color: Theme.of(context).colorScheme.surface,
+                child: SizedBox(
+                  height: _overlayHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: _DirectoryHoverPreviewCarousel(
+                      directoryPath: widget.directoryPath,
+                      isPointerHovering: _isPointerBrowsing,
+                      controller: _carouselController,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -87,145 +122,238 @@ class DirectoryHoverPreviewState extends State<DirectoryHoverPreview> {
     );
 
     Overlay.of(context).insert(_overlayEntry!);
+    _registerHardwareKeyHandler();
+  }
+
+  void _onTriggerEnter(PointerEnterEvent event) {
+    _isTriggerHovered = true;
+    _cancelDismissTimer();
+    _showOverlay();
+    _markOverlayNeedsBuild();
+  }
+
+  void _onTriggerExit(PointerExitEvent event) {
+    _isTriggerHovered = false;
+    _markOverlayNeedsBuild();
+    _scheduleDismissIfOutside();
+  }
+
+  void _onOverlayEnter(PointerEnterEvent event) {
+    _isOverlayHovered = true;
+    _cancelDismissTimer();
+    _markOverlayNeedsBuild();
+  }
+
+  void _onOverlayExit(PointerExitEvent event) {
+    _isOverlayHovered = false;
+    _markOverlayNeedsBuild();
+    _scheduleDismissIfOutside();
+  }
+
+  void _scheduleDismissIfOutside() {
+    if (_hasPointerWithin || _overlayEntry == null) {
+      return;
+    }
+    _cancelDismissTimer();
+    _dismissTimer = Timer(_overlayExitGracePeriod, () {
+      _dismissTimer = null;
+      if (!mounted || _hasPointerWithin) {
+        return;
+      }
+      removeOverlay();
+    });
+  }
+
+  void _cancelDismissTimer() {
+    _dismissTimer?.cancel();
+    _dismissTimer = null;
+  }
+
+  void _markOverlayNeedsBuild() {
+    _overlayEntry?.markNeedsBuild();
+  }
+
+  void _onTriggerPointerDown(PointerDownEvent event) {
+    removeOverlay();
+  }
+
+  KeyEventResult _onTriggerKeyEvent(FocusNode node, KeyEvent event) {
+    return _handleKeyEvent(event);
+  }
+
+  KeyEventResult _onOverlayKeyEvent(FocusNode node, KeyEvent event) {
+    return _handleKeyEvent(event);
+  }
+
+  KeyEventResult _handleKeyEvent(KeyEvent event) {
+    final carouselResult = _carouselController.handleKeyEvent(event);
+    if (carouselResult == KeyEventResult.handled) {
+      return carouselResult;
+    }
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      removeOverlay();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.space) {
+      removeOverlay();
+    }
+    return KeyEventResult.ignored;
+  }
+
+  bool _onHardwareKeyEvent(KeyEvent event) {
+    if (_overlayEntry == null ||
+        event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.escape) {
+      return false;
+    }
+    removeOverlay();
+    return true;
+  }
+
+  void _registerHardwareKeyHandler() {
+    if (_isHardwareKeyHandlerRegistered) {
+      return;
+    }
+    HardwareKeyboard.instance.addHandler(_onHardwareKeyEvent);
+    _isHardwareKeyHandlerRegistered = true;
+  }
+
+  void _removeHardwareKeyHandler() {
+    if (!_isHardwareKeyHandlerRegistered) {
+      return;
+    }
+    HardwareKeyboard.instance.removeHandler(_onHardwareKeyEvent);
+    _isHardwareKeyHandlerRegistered = false;
   }
 
   /// Dismisses the preview, if one is showing.
   ///
-  /// Public so the wrapped widget can hide the overlay when it is activated —
-  /// otherwise it lingers over whatever the tap navigated to.
+  /// Public so wrapped controls can dismiss the popup before their activation
+  /// changes the surrounding view.
   void removeOverlay() {
+    _cancelDismissTimer();
+    _removeHardwareKeyHandler();
+    _isTriggerHovered = false;
+    _isOverlayHovered = false;
     _overlayEntry?.remove();
     _overlayEntry = null;
   }
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => _showOverlay(),
-      onExit: (_) => removeOverlay(),
-      child: widget.child,
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: _onTriggerKeyEvent,
+      child: Listener(
+        onPointerDown: _onTriggerPointerDown,
+        behavior: HitTestBehavior.translucent,
+        child: MouseRegion(
+          onEnter: _onTriggerEnter,
+          onExit: _onTriggerExit,
+          child: widget.child,
+        ),
+      ),
     );
   }
 }
 
-class _DirectoryPreviewStrip extends ConsumerWidget {
-  const _DirectoryPreviewStrip({required this.directoryPath});
+class _DirectoryHoverPreviewCarousel extends ConsumerStatefulWidget {
+  const _DirectoryHoverPreviewCarousel({
+    required this.directoryPath,
+    required this.isPointerHovering,
+    required this.controller,
+  });
 
   final String directoryPath;
+  final bool isPointerHovering;
+  final DirectoryPreviewCarouselController controller;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(directoryCoverControllerProvider(directoryPath));
-    final previewAsync = ref.watch(
-      directoryPreviewStripProvider(directoryPath),
-    );
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: previewAsync.when(
-        data: (resolution) {
-          if (resolution.hasStaleCustomCover) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              ref
-                  .read(
-                    directoryCoverControllerProvider(directoryPath).notifier,
-                  )
-                  .clearStaleCover();
-            });
-          }
-          if (resolution.previews.isEmpty) {
-            return _buildMessage(theme, 'No previews available');
-          }
-
-          return SizedBox(
-            height: 80,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final preview in resolution.previews)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _PreviewThumbnail(preview: preview),
-                  ),
-              ],
-            ),
-          );
-        },
-        loading: () => const SizedBox(
-          height: 80,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-        error: (_, __) => _buildMessage(theme, 'Preview unavailable'),
-      ),
-    );
-  }
-
-  Widget _buildMessage(ThemeData theme, String message) {
-    return SizedBox(
-      height: 80,
-      child: Center(
-        child: Text(
-          message,
-          style: theme.textTheme.bodySmall,
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
+  ConsumerState<_DirectoryHoverPreviewCarousel> createState() =>
+      _DirectoryHoverPreviewCarouselState();
 }
 
-class _PreviewThumbnail extends StatelessWidget {
-  const _PreviewThumbnail({required this.preview});
-
-  final DirectoryPreview preview;
+class _DirectoryHoverPreviewCarouselState
+    extends ConsumerState<_DirectoryHoverPreviewCarousel> {
+  bool _cleanupScheduled = false;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final borderRadius = BorderRadius.circular(8);
-
-    return ClipRRect(
-      borderRadius: borderRadius,
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: switch (preview) {
-          DirectoryCustomPreview(:final media) => MediaThumbnail(
-            media: media,
-            fit: BoxFit.cover,
-            placeholderBuilder: (_) => _placeholder(theme),
-            errorBuilder: (_) => _error(theme),
-          ),
-          DirectoryImagePreview(:final sourcePath) => FileThumbnail(
-            path: sourcePath,
-            fit: BoxFit.cover,
-            placeholderBuilder: (_) => _placeholder(theme),
-            errorBuilder: (_) => _error(theme),
-          ),
-          DirectoryVideoPreview(:final thumbnailPath) => Image.file(
-            File(thumbnailPath),
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _error(theme),
-          ),
-          DirectoryEmptyPreview() => _error(theme),
-        },
+    ref.watch(directoryCoverControllerProvider(widget.directoryPath));
+    final catalog = ref.watch(
+      directoryPreviewCatalogProvider(
+        DirectoryPreviewCatalogQuery(directoryPath: widget.directoryPath),
       ),
+    );
+    final theme = Theme.of(context);
+
+    return catalog.when(
+      data: (value) {
+        _scheduleStaleCleanup(value.missingCustomCoverFileNames);
+        return DirectoryPreviewCarousel(
+          catalog: value,
+          fit: BoxFit.cover,
+          isPointerHovering: widget.isPointerHovering,
+          controller: widget.controller,
+          placeholderBuilder: (_) => _placeholder(theme),
+          emptyBuilder: (_) => _message(theme, 'No previews available'),
+          errorBuilder: (_) => _error(theme),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (_, __) => _message(theme, 'Preview unavailable'),
     );
   }
 
+  void _scheduleStaleCleanup(List<String> missingSourceFileNames) {
+    if (missingSourceFileNames.isEmpty) {
+      _cleanupScheduled = false;
+      return;
+    }
+    if (_cleanupScheduled) {
+      return;
+    }
+    _cleanupScheduled = true;
+    final missingNames = List<String>.of(missingSourceFileNames);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      ref
+          .read(directoryCoverControllerProvider(widget.directoryPath).notifier)
+          .reconcileMissingSelections(missingNames);
+    });
+  }
+
   Widget _placeholder(ThemeData theme) {
-    return Container(
+    return ColoredBox(
       color: theme.colorScheme.surfaceContainerHighest,
       child: const Center(child: CircularProgressIndicator()),
     );
   }
 
   Widget _error(ThemeData theme) {
-    return Container(
+    return ColoredBox(
       color: theme.colorScheme.surfaceContainerHighest,
-      child: Icon(
-        Icons.broken_image,
-        color: theme.colorScheme.onSurfaceVariant,
+      child: Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  Widget _message(ThemeData theme, String message) {
+    return Center(
+      child: Text(
+        message,
+        style: theme.textTheme.bodySmall,
+        textAlign: TextAlign.center,
       ),
     );
   }

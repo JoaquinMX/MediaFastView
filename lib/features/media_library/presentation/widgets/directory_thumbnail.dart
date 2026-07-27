@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as path;
 
 import '../../../thumbnails/presentation/file_thumbnail.dart';
 import '../../../thumbnails/presentation/media_thumbnail.dart';
@@ -9,7 +13,7 @@ import '../models/directory_preview.dart';
 import '../providers/directory_cover_controller.dart';
 import '../providers/directory_preview_providers.dart';
 
-/// Renders the custom or automatic preview selected for a directory.
+/// Renders a custom directory cover or an automatic collage of direct children.
 class DirectoryThumbnail extends ConsumerStatefulWidget {
   const DirectoryThumbnail({
     super.key,
@@ -19,11 +23,29 @@ class DirectoryThumbnail extends ConsumerStatefulWidget {
     required this.errorBuilder,
     this.bookmarkData,
     this.fit = BoxFit.cover,
+    this.isPointerHovering = false,
+    this.isFocused = false,
+    this.controller,
   });
 
   final String directoryPath;
   final String? bookmarkData;
   final BoxFit fit;
+
+  /// Whether the containing directory surface is currently pointer-hovered.
+  ///
+  /// The carousel deliberately waits for a short dwell before replacing an
+  /// automatic collage, so brief pointer passes do not cause visual churn.
+  final bool isPointerHovering;
+
+  /// Whether the containing directory surface has keyboard focus.
+  ///
+  /// Focus opens the first single preview immediately, but does not enable
+  /// timed advancement because that is reserved for an active pointer hover.
+  final bool isFocused;
+
+  /// Lets a containing focus surface route keyboard navigation to its carousel.
+  final DirectoryPreviewCarouselController? controller;
   final WidgetBuilder placeholderBuilder;
   final WidgetBuilder emptyBuilder;
   final WidgetBuilder errorBuilder;
@@ -38,52 +60,872 @@ class _DirectoryThumbnailState extends ConsumerState<DirectoryThumbnail> {
   @override
   Widget build(BuildContext context) {
     ref.watch(directoryCoverControllerProvider(widget.directoryPath));
-    final preview = ref.watch(directoryPreviewProvider(widget.directoryPath));
-    return preview.when(
+    final catalog = ref.watch(
+      directoryPreviewCatalogProvider(
+        DirectoryPreviewCatalogQuery(
+          directoryPath: widget.directoryPath,
+          bookmarkData: widget.bookmarkData,
+        ),
+      ),
+    );
+    return catalog.when(
       data: (value) {
-        _scheduleStaleCleanup(value?.hasStaleCustomCover ?? false);
-        return switch (value) {
-          DirectoryCustomPreview(:final media) => MediaThumbnail(
-            media: media,
-            bookmarkData: widget.bookmarkData,
-            fit: widget.fit,
-            placeholderBuilder: widget.placeholderBuilder,
-            errorBuilder: widget.emptyBuilder,
-          ),
-          DirectoryImagePreview(:final sourcePath) => FileThumbnail(
-            path: sourcePath,
-            bookmarkData: widget.bookmarkData,
-            fit: widget.fit,
-            placeholderBuilder: widget.placeholderBuilder,
-            errorBuilder: widget.emptyBuilder,
-          ),
-          DirectoryVideoPreview(:final thumbnailPath) => Image.file(
-            File(thumbnailPath),
-            fit: widget.fit,
-            gaplessPlayback: true,
-            errorBuilder: (_, __, ___) => widget.emptyBuilder(context),
-          ),
-          DirectoryEmptyPreview() => widget.emptyBuilder(context),
-          null => widget.emptyBuilder(context),
-        };
+        _scheduleStaleCleanup(value.missingCustomCoverFileNames);
+        return _buildCatalog(value);
       },
       loading: () => widget.placeholderBuilder(context),
       error: (_, __) => widget.errorBuilder(context),
     );
   }
 
-  void _scheduleStaleCleanup(bool isStale) {
-    if (!isStale || _cleanupScheduled) {
+  Widget _buildCatalog(DirectoryPreviewCatalog catalog) {
+    return DirectoryPreviewCarousel(
+      catalog: catalog,
+      fit: widget.fit,
+      isPointerHovering: widget.isPointerHovering,
+      isFocused: widget.isFocused,
+      controller: widget.controller,
+      placeholderBuilder: widget.placeholderBuilder,
+      emptyBuilder: widget.emptyBuilder,
+      errorBuilder: widget.errorBuilder,
+      fallbackBookmarkData: widget.bookmarkData,
+    );
+  }
+
+  void _scheduleStaleCleanup(List<String> missingSourceFileNames) {
+    if (missingSourceFileNames.isEmpty) {
+      _cleanupScheduled = false;
+      return;
+    }
+    if (_cleanupScheduled) {
       return;
     }
     _cleanupScheduled = true;
+    final missingNames = List<String>.of(missingSourceFileNames);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
       ref
           .read(directoryCoverControllerProvider(widget.directoryPath).notifier)
-          .clearStaleCover();
+          .reconcileMissingSelections(missingNames);
     });
+  }
+}
+
+/// Routes external navigation requests to a mounted directory carousel.
+///
+/// Directory cards deliberately keep their own focusable information areas so
+/// activating a folder remains separate from browsing its preview. This small
+/// controller lets those focus areas forward Left and Right without exposing a
+/// state object or letting the key activate the underlying card, checkbox, or
+/// chip.
+class DirectoryPreviewCarouselController {
+  bool Function()? _showFirstPreview;
+  bool Function()? _showPreviousPreview;
+  bool Function()? _showNextPreview;
+
+  /// Opens the first single preview, if the carousel has content.
+  bool showFirstPreview() => _showFirstPreview?.call() ?? false;
+
+  /// Moves one preview backward without wrapping.
+  bool showPreviousPreview() => _showPreviousPreview?.call() ?? false;
+
+  /// Moves one preview forward without wrapping.
+  bool showNextPreview() => _showNextPreview?.call() ?? false;
+
+  /// Handles a directional keyboard event and reports whether it was consumed.
+  KeyEventResult handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    return switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowLeft =>
+        showPreviousPreview() ? KeyEventResult.handled : KeyEventResult.ignored,
+      LogicalKeyboardKey.arrowRight =>
+        showNextPreview() ? KeyEventResult.handled : KeyEventResult.ignored,
+      _ => KeyEventResult.ignored,
+    };
+  }
+
+  void _attach({
+    required bool Function() showFirstPreview,
+    required bool Function() showPreviousPreview,
+    required bool Function() showNextPreview,
+  }) {
+    _showFirstPreview = showFirstPreview;
+    _showPreviousPreview = showPreviousPreview;
+    _showNextPreview = showNextPreview;
+  }
+
+  void _detach() {
+    _showFirstPreview = null;
+    _showPreviousPreview = null;
+    _showNextPreview = null;
+  }
+}
+
+/// Displays a directory's collage at rest and a timed single-preview browser.
+///
+/// The component intentionally works from a resolved [DirectoryPreviewCatalog]
+/// rather than resolving files itself. Cards and hover overlays therefore share
+/// ordering, cache, and custom-cover behavior while keeping the visual state
+/// local to the surface that is being browsed.
+class DirectoryPreviewCarousel extends StatefulWidget {
+  const DirectoryPreviewCarousel({
+    super.key,
+    required this.catalog,
+    required this.fit,
+    required this.placeholderBuilder,
+    required this.emptyBuilder,
+    required this.errorBuilder,
+    this.fallbackBookmarkData,
+    this.isPointerHovering = false,
+    this.isFocused = false,
+    this.controller,
+    this.hoverDwell = const Duration(milliseconds: 250),
+    this.autoAdvanceInterval = const Duration(milliseconds: 2500),
+    this.transitionDuration = const Duration(milliseconds: 180),
+  });
+
+  /// Stable key for tests and visual instrumentation.
+  static const Key carouselKey = Key('directory-preview-carousel');
+
+  /// Stable key for the interactive preview hit target.
+  static const Key interactionKey = Key(
+    'directory-preview-carousel-interaction',
+  );
+
+  /// Stable key for the resting collage or custom-cover surface.
+  static const Key restingContentKey = Key(
+    'directory-preview-carousel-resting-content',
+  );
+
+  /// Produces the key of a currently visible single preview.
+  static Key previewKey(int index) =>
+      Key('directory-preview-carousel-preview-$index');
+
+  /// Stable key for the accessible previous-preview control.
+  static const Key previousButtonKey = Key(
+    'directory-preview-carousel-previous-button',
+  );
+
+  /// Stable key for the accessible next-preview control.
+  static const Key nextButtonKey = Key(
+    'directory-preview-carousel-next-button',
+  );
+
+  /// Stable key for the visible preview position indicator.
+  static const Key counterKey = Key('directory-preview-carousel-counter');
+
+  /// Stable key for the visible preview filename.
+  static const Key filenameKey = Key('directory-preview-carousel-filename');
+
+  /// Stable key for the semantic filename and position announcement.
+  static const Key previewSemanticsKey = Key(
+    'directory-preview-carousel-preview-semantics',
+  );
+
+  final DirectoryPreviewCatalog catalog;
+  final BoxFit fit;
+  final WidgetBuilder placeholderBuilder;
+  final WidgetBuilder emptyBuilder;
+  final WidgetBuilder errorBuilder;
+  final String? fallbackBookmarkData;
+  final bool isPointerHovering;
+  final bool isFocused;
+  final DirectoryPreviewCarouselController? controller;
+
+  /// Time the pointer must remain over the surface before browsing starts.
+  final Duration hoverDwell;
+
+  /// Delay between automatic preview changes while the pointer remains over it.
+  final Duration autoAdvanceInterval;
+
+  /// Cross-fade duration between single previews.
+  final Duration transitionDuration;
+
+  @override
+  State<DirectoryPreviewCarousel> createState() =>
+      _DirectoryPreviewCarouselState();
+}
+
+class _DirectoryPreviewCarouselState extends State<DirectoryPreviewCarousel> {
+  Timer? _hoverDwellTimer;
+  Timer? _autoAdvanceTimer;
+  final FocusNode _focusNode = FocusNode();
+  bool _isPointerBrowsing = false;
+  bool _hasInteractiveFocus = false;
+  bool _isManuallyBrowsing = false;
+  int _currentIndex = 0;
+
+  bool get _isBrowsing =>
+      _isPointerBrowsing ||
+      widget.isFocused ||
+      _hasInteractiveFocus ||
+      _isManuallyBrowsing;
+
+  bool get _isIos => defaultTargetPlatform == TargetPlatform.iOS;
+
+  bool get _hasMultiplePreviews => widget.catalog.previews.length > 1;
+
+  bool get _shouldShowNavigation =>
+      _hasMultiplePreviews && (_isBrowsing || _isIos);
+
+  bool get _canShowPrevious => _currentIndex > 0;
+
+  bool get _canShowNext => _currentIndex < widget.catalog.previews.length - 1;
+
+  bool get _reduceAnimations =>
+      MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+
+  bool get _canAutoAdvance =>
+      _isPointerBrowsing &&
+      widget.isPointerHovering &&
+      !_reduceAnimations &&
+      widget.catalog.previews.length > 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _attachController();
+    if (widget.isPointerHovering) {
+      _startHoverDwell();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncAutoAdvance();
+  }
+
+  @override
+  void didUpdateWidget(covariant DirectoryPreviewCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._detach();
+      _attachController();
+    }
+
+    if (!oldWidget.isPointerHovering && widget.isPointerHovering) {
+      _startHoverDwell();
+    } else if (oldWidget.isPointerHovering && !widget.isPointerHovering) {
+      _cancelHoverDwell();
+      _isPointerBrowsing = false;
+    }
+
+    if (!_samePreviews(oldWidget.catalog.previews, widget.catalog.previews) ||
+        _currentIndex >= widget.catalog.previews.length) {
+      _currentIndex = 0;
+    }
+
+    final didGainExternalFocus = !oldWidget.isFocused && widget.isFocused;
+    if (didGainExternalFocus && !_isPointerBrowsing && !_isManuallyBrowsing) {
+      _currentIndex = 0;
+    }
+
+    if (!widget.isPointerHovering &&
+        !widget.isFocused &&
+        !_hasInteractiveFocus) {
+      _resetToRest();
+    } else {
+      // A focus transition can temporarily make [_isBrowsing] true before
+      // pointer browsing has started. Do not let a focus loss strand a still
+      // hovered surface on its collage: retain an existing dwell, or arm one
+      // again when the focus change consumed it.
+      _ensureHoverDwell();
+    }
+
+    if (oldWidget.autoAdvanceInterval != widget.autoAdvanceInterval) {
+      _stopAutoAdvance();
+    }
+    _syncAutoAdvance();
+  }
+
+  @override
+  void dispose() {
+    _cancelHoverDwell();
+    _stopAutoAdvance();
+    widget.controller?._detach();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _attachController() {
+    widget.controller?._attach(
+      showFirstPreview: _showFirstPreview,
+      showPreviousPreview: _showPreviousPreview,
+      showNextPreview: _showNextPreview,
+    );
+  }
+
+  void _startHoverDwell() {
+    _cancelHoverDwell();
+    _hoverDwellTimer = Timer(widget.hoverDwell, () {
+      _hoverDwellTimer = null;
+      if (!mounted || !widget.isPointerHovering) {
+        return;
+      }
+      setState(() {
+        _isPointerBrowsing = true;
+        _currentIndex = 0;
+      });
+      _syncAutoAdvance();
+    });
+  }
+
+  void _ensureHoverDwell() {
+    if (!widget.isPointerHovering ||
+        _isPointerBrowsing ||
+        _hoverDwellTimer != null) {
+      return;
+    }
+    _startHoverDwell();
+  }
+
+  void _cancelHoverDwell() {
+    _hoverDwellTimer?.cancel();
+    _hoverDwellTimer = null;
+  }
+
+  void _syncAutoAdvance() {
+    if (_canAutoAdvance) {
+      _autoAdvanceTimer ??= Timer.periodic(
+        widget.autoAdvanceInterval,
+        (_) => _advanceAutomatically(),
+      );
+      return;
+    }
+    _stopAutoAdvance();
+  }
+
+  void _stopAutoAdvance() {
+    _autoAdvanceTimer?.cancel();
+    _autoAdvanceTimer = null;
+  }
+
+  void _advanceAutomatically() {
+    if (!mounted || !_canAutoAdvance) {
+      _syncAutoAdvance();
+      return;
+    }
+    setState(() {
+      _currentIndex = (_currentIndex + 1) % widget.catalog.previews.length;
+    });
+  }
+
+  void _resetToRest() {
+    _cancelHoverDwell();
+    _stopAutoAdvance();
+    _isPointerBrowsing = false;
+    _isManuallyBrowsing = false;
+    _currentIndex = 0;
+  }
+
+  bool _showFirstPreview() {
+    if (widget.catalog.isEmpty) {
+      return false;
+    }
+    _beginManualBrowsing(index: 0);
+    return true;
+  }
+
+  bool _showPreviousPreview() {
+    return _navigateBy(-1);
+  }
+
+  bool _showNextPreview() {
+    return _navigateBy(1);
+  }
+
+  bool _navigateBy(int direction) {
+    if (widget.catalog.isEmpty) {
+      return false;
+    }
+
+    final targetIndex = (_currentIndex + direction)
+        .clamp(0, widget.catalog.previews.length - 1)
+        .toInt();
+    _beginManualBrowsing(index: targetIndex);
+    return true;
+  }
+
+  void _beginManualBrowsing({required int index}) {
+    final changed =
+        !_isManuallyBrowsing || _currentIndex != index || !_isBrowsing;
+    if (changed) {
+      setState(() {
+        _isManuallyBrowsing = true;
+        _currentIndex = index;
+      });
+    }
+    // A manual key, click, or swipe gives the user a full interval to inspect
+    // the chosen frame before pointer-only auto-advance resumes.
+    _restartAutoAdvance();
+  }
+
+  void _restartAutoAdvance() {
+    _stopAutoAdvance();
+    _syncAutoAdvance();
+  }
+
+  void _onFocusChange(bool hasFocus) {
+    if (_hasInteractiveFocus == hasFocus) {
+      return;
+    }
+    setState(() {
+      _hasInteractiveFocus = hasFocus;
+      if (!hasFocus && !widget.isPointerHovering && !widget.isFocused) {
+        _isManuallyBrowsing = false;
+        _currentIndex = 0;
+      }
+    });
+
+    if (!hasFocus && !widget.isPointerHovering && !widget.isFocused) {
+      _resetToRest();
+      return;
+    }
+    _ensureHoverDwell();
+    _syncAutoAdvance();
+  }
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    return widget.controller?.handleKeyEvent(event) ??
+        _handleLocalKeyEvent(event);
+  }
+
+  KeyEventResult _handleLocalKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    return switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowLeft =>
+        _showPreviousPreview()
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored,
+      LogicalKeyboardKey.arrowRight =>
+        _showNextPreview() ? KeyEventResult.handled : KeyEventResult.ignored,
+      _ => KeyEventResult.ignored,
+    };
+  }
+
+  void _onPreviewTap() {
+    if (!_isIos) {
+      return;
+    }
+    _focusNode.requestFocus();
+    _showFirstPreview();
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    if (!_isIos) {
+      return;
+    }
+    final velocity = details.primaryVelocity;
+    if (velocity == null || velocity.abs() < 100) {
+      return;
+    }
+    if (velocity < 0) {
+      _showNextPreview();
+    } else {
+      _showPreviousPreview();
+    }
+  }
+
+  bool _samePreviews(
+    List<DirectoryPreview> first,
+    List<DirectoryPreview> second,
+  ) {
+    if (identical(first, second)) {
+      return true;
+    }
+    if (first.length != second.length) {
+      return false;
+    }
+    for (var index = 0; index < first.length; index += 1) {
+      final firstPreview = first[index];
+      final secondPreview = second[index];
+      if (firstPreview.runtimeType != secondPreview.runtimeType ||
+          firstPreview.sourcePath != secondPreview.sourcePath) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = _reduceAnimations
+        ? Duration.zero
+        : widget.transitionDuration;
+    return Focus(
+      focusNode: _focusNode,
+      onFocusChange: _onFocusChange,
+      onKeyEvent: _onKeyEvent,
+      child: GestureDetector(
+        key: DirectoryPreviewCarousel.interactionKey,
+        behavior: HitTestBehavior.opaque,
+        onTap: _isIos ? _onPreviewTap : null,
+        onHorizontalDragEnd: _isIos ? _onHorizontalDragEnd : null,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            AnimatedSwitcher(
+              key: DirectoryPreviewCarousel.carouselKey,
+              duration: duration,
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(opacity: animation, child: child);
+              },
+              child: _isBrowsing
+                  ? _buildBrowsingPreview()
+                  : _buildRestingContent(),
+            ),
+            if (_shouldShowNavigation) _buildNavigationOverlay(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavigationOverlay() {
+    final preview = widget.catalog.previews[_currentIndex];
+    final previewName = path.basename(preview.sourcePath);
+    final theme = Theme.of(context);
+    final overlayColor = theme.colorScheme.scrim.withValues(alpha: 0.68);
+    final foregroundColor = theme.colorScheme.onPrimary;
+
+    return Stack(
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _NavigationButton(
+            key: DirectoryPreviewCarousel.previousButtonKey,
+            icon: Icons.chevron_left,
+            tooltip: 'Previous preview',
+            isEnabled: _canShowPrevious,
+            onPressed: _showPreviousPreview,
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: _NavigationButton(
+            key: DirectoryPreviewCarousel.nextButtonKey,
+            icon: Icons.chevron_right,
+            tooltip: 'Next preview',
+            isEnabled: _canShowNext,
+            onPressed: _showNextPreview,
+          ),
+        ),
+        Positioned(
+          left: 6,
+          right: 6,
+          bottom: 6,
+          child: ExcludeSemantics(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: overlayColor,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        previewName,
+                        key: DirectoryPreviewCarousel.filenameKey,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: foregroundColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${_currentIndex + 1} / ${widget.catalog.previews.length}',
+                      key: DirectoryPreviewCarousel.counterKey,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: foregroundColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Semantics(
+          key: DirectoryPreviewCarousel.previewSemanticsKey,
+          label:
+              '$previewName, preview ${_currentIndex + 1} of '
+              '${widget.catalog.previews.length}',
+          child: const SizedBox.expand(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRestingContent() {
+    if (widget.catalog.isEmpty) {
+      return KeyedSubtree(
+        key: DirectoryPreviewCarousel.restingContentKey,
+        child: widget.emptyBuilder(context),
+      );
+    }
+
+    if (widget.catalog.hasCustomCover) {
+      return KeyedSubtree(
+        key: DirectoryPreviewCarousel.restingContentKey,
+        child: DirectoryPreviewCollage(
+          previews: widget.catalog.customPreviews,
+          fit: widget.fit,
+          fallbackBookmarkData: widget.fallbackBookmarkData,
+        ),
+      );
+    }
+
+    return KeyedSubtree(
+      key: DirectoryPreviewCarousel.restingContentKey,
+      child: DirectoryPreviewCollage(
+        previews: widget.catalog.automaticPreviews
+            .take(4)
+            .toList(growable: false),
+        fit: widget.fit,
+        fallbackBookmarkData: widget.fallbackBookmarkData,
+      ),
+    );
+  }
+
+  Widget _buildBrowsingPreview() {
+    if (widget.catalog.isEmpty) {
+      return KeyedSubtree(
+        key: DirectoryPreviewCarousel.restingContentKey,
+        child: widget.emptyBuilder(context),
+      );
+    }
+
+    final preview = widget.catalog.previews[_currentIndex];
+    return KeyedSubtree(
+      key: DirectoryPreviewCarousel.previewKey(_currentIndex),
+      child: DirectoryPreviewTile(
+        preview: preview,
+        fit: widget.fit,
+        placeholderBuilder: widget.placeholderBuilder,
+        errorBuilder: widget.errorBuilder,
+        fallbackBookmarkData: widget.fallbackBookmarkData,
+      ),
+    );
+  }
+}
+
+class _NavigationButton extends StatelessWidget {
+  const _NavigationButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.isEnabled,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool isEnabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      enabled: isEnabled,
+      label: tooltip,
+      child: Material(
+        color: colorScheme.scrim.withValues(alpha: 0.6),
+        shape: const CircleBorder(),
+        child: IconButton(
+          icon: Icon(icon),
+          iconSize: 22,
+          color: colorScheme.onPrimary,
+          disabledColor: colorScheme.onPrimary.withValues(alpha: 0.4),
+          tooltip: tooltip,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+          visualDensity: VisualDensity.compact,
+          onPressed: isEnabled ? onPressed : null,
+        ),
+      ),
+    );
+  }
+}
+
+/// Displays up to four automatic previews without creating a composite image.
+///
+/// A single preview fills the card. Two divide it evenly, three reserve a
+/// larger left tile, and four form quadrants. Each cell owns its failure state
+/// so one damaged image never replaces a healthy directory collage.
+class DirectoryPreviewCollage extends StatelessWidget {
+  const DirectoryPreviewCollage({
+    super.key,
+    required this.previews,
+    required this.fit,
+    this.fallbackBookmarkData,
+  });
+
+  static const Key collageKey = Key('directory-preview-collage');
+  static const double _gutter = 2;
+
+  final List<DirectoryPreview> previews;
+  final BoxFit fit;
+  final String? fallbackBookmarkData;
+
+  @override
+  Widget build(BuildContext context) {
+    final visiblePreviews = previews.take(4).toList(growable: false);
+    final theme = Theme.of(context);
+    if (visiblePreviews.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return ColoredBox(
+      key: collageKey,
+      color: theme.colorScheme.surface,
+      child: switch (visiblePreviews.length) {
+        1 => _tile(context, visiblePreviews[0], 0),
+        2 => Row(
+          children: [
+            Expanded(child: _tile(context, visiblePreviews[0], 0)),
+            const SizedBox(width: _gutter),
+            Expanded(child: _tile(context, visiblePreviews[1], 1)),
+          ],
+        ),
+        3 => Row(
+          children: [
+            Expanded(flex: 2, child: _tile(context, visiblePreviews[0], 0)),
+            const SizedBox(width: _gutter),
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(child: _tile(context, visiblePreviews[1], 1)),
+                  const SizedBox(height: _gutter),
+                  Expanded(child: _tile(context, visiblePreviews[2], 2)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        _ => Column(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: _tile(context, visiblePreviews[0], 0)),
+                  const SizedBox(width: _gutter),
+                  Expanded(child: _tile(context, visiblePreviews[1], 1)),
+                ],
+              ),
+            ),
+            const SizedBox(height: _gutter),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: _tile(context, visiblePreviews[2], 2)),
+                  const SizedBox(width: _gutter),
+                  Expanded(child: _tile(context, visiblePreviews[3], 3)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      },
+    );
+  }
+
+  Widget _tile(BuildContext context, DirectoryPreview preview, int index) {
+    return SizedBox.expand(
+      key: Key('directory-preview-collage-tile-$index'),
+      child: DirectoryPreviewTile(
+        preview: preview,
+        fit: fit,
+        placeholderBuilder: (_) => _placeholder(context),
+        errorBuilder: (_) => _failure(context, index),
+        fallbackBookmarkData: fallbackBookmarkData,
+      ),
+    );
+  }
+
+  Widget _placeholder(BuildContext context) {
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: Icon(
+          Icons.image_outlined,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  Widget _failure(BuildContext context, int index) {
+    return ColoredBox(
+      key: Key('directory-preview-collage-failure-$index'),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// Renders one preview source using the existing lazy thumbnail pipeline.
+class DirectoryPreviewTile extends StatelessWidget {
+  const DirectoryPreviewTile({
+    super.key,
+    required this.preview,
+    required this.fit,
+    required this.placeholderBuilder,
+    required this.errorBuilder,
+    this.fallbackBookmarkData,
+  });
+
+  final DirectoryPreview preview;
+  final BoxFit fit;
+  final WidgetBuilder placeholderBuilder;
+  final WidgetBuilder errorBuilder;
+  final String? fallbackBookmarkData;
+
+  @override
+  Widget build(BuildContext context) {
+    final bookmarkData = preview.bookmarkData ?? fallbackBookmarkData;
+    return switch (preview) {
+      DirectoryCustomPreview(:final media) => MediaThumbnail(
+        media: media,
+        bookmarkData: bookmarkData,
+        fit: fit,
+        placeholderBuilder: placeholderBuilder,
+        errorBuilder: errorBuilder,
+      ),
+      DirectoryImagePreview(:final sourcePath) => FileThumbnail(
+        path: sourcePath,
+        bookmarkData: bookmarkData,
+        fit: fit,
+        placeholderBuilder: placeholderBuilder,
+        errorBuilder: errorBuilder,
+      ),
+      DirectoryVideoPreview(:final thumbnailPath) => Image.file(
+        File(thumbnailPath),
+        fit: fit,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => errorBuilder(context),
+      ),
+      DirectoryEmptyPreview() => errorBuilder(context),
+    };
   }
 }

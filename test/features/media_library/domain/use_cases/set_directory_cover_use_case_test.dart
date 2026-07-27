@@ -53,38 +53,84 @@ MediaEntity _media(String path, MediaType type) {
 }
 
 void main() {
-  test('persists a direct-child image', () async {
-    final repository = _RecordingCoverRepository();
-    final useCase = SetDirectoryCoverUseCase(repository);
+  test(
+    'persists one through four direct-child images in selection order',
+    () async {
+      final repository = _RecordingCoverRepository();
+      final useCase = SetDirectoryCoverUseCase(repository);
 
-    await useCase(
-      directoryPath: '/library/folder',
-      media: _media('/library/folder/cover.jpg', MediaType.image),
-    );
+      for (var count = 1; count <= 4; count += 1) {
+        final images = <MediaEntity>[
+          for (var index = 0; index < count; index += 1)
+            _media('/library/folder/cover-$index.jpg', MediaType.image),
+        ];
 
-    expect(repository.saved?.directoryPath, '/library/folder');
-    expect(repository.saved?.sourceFileName, 'cover.jpg');
-    expect(repository.saved?.mediaType, MediaType.image);
-  });
+        await useCase(directoryPath: '/library/folder', images: images);
 
-  test('rejects unsupported and nested media', () async {
-    final useCase = SetDirectoryCoverUseCase(_RecordingCoverRepository());
+        expect(repository.saved?.directoryPath, '/library/folder');
+        expect(
+          repository.saved?.sourceFileNames,
+          images.map((image) => image.name).toList(),
+        );
+        expect(
+          repository.saved?.selections.map((selection) => selection.mediaType),
+          everyElement(MediaType.image),
+        );
+      }
+    },
+  );
 
-    expect(
-      () => useCase(
-        directoryPath: '/library/folder',
-        media: _media('/library/folder/readme.txt', MediaType.text),
-      ),
-      throwsArgumentError,
-    );
-    expect(
-      () => useCase(
-        directoryPath: '/library/folder',
-        media: _media('/library/folder/nested/cover.jpg', MediaType.image),
-      ),
-      throwsArgumentError,
-    );
-  });
+  test(
+    'rejects empty, excessive, unsupported, nested, and excluded images',
+    () {
+      final useCase = SetDirectoryCoverUseCase(_RecordingCoverRepository());
+
+      expect(
+        () => useCase(
+          directoryPath: '/library/folder',
+          images: const <MediaEntity>[],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => useCase(
+          directoryPath: '/library/folder',
+          images: <MediaEntity>[
+            for (var index = 0; index < 5; index += 1)
+              _media('/library/folder/$index.jpg', MediaType.image),
+          ],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => useCase(
+          directoryPath: '/library/folder',
+          images: <MediaEntity>[
+            _media('/library/folder/video.mp4', MediaType.video),
+          ],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => useCase(
+          directoryPath: '/library/folder',
+          images: <MediaEntity>[
+            _media('/library/folder/nested/cover.jpg', MediaType.image),
+          ],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => useCase(
+          directoryPath: '/library/folder',
+          images: <MediaEntity>[
+            _media('/library/folder/._cover.jpg', MediaType.image),
+          ],
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
 
   test('persists no cover as a distinct override', () async {
     final repository = _RecordingCoverRepository();

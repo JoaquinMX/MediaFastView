@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/features/media_library/presentation/models/directory_preview.dart';
+import 'package:media_fast_view/features/media_library/presentation/providers/directory_preview_catalog_invalidator.dart';
 import 'package:media_fast_view/features/media_library/presentation/providers/directory_preview_providers.dart';
 import 'package:media_fast_view/features/thumbnails/data/thumbnail_coordinator.dart';
 import 'package:media_fast_view/features/thumbnails/data/thumbnail_disk_cache.dart';
@@ -54,9 +55,12 @@ ProviderContainer _createContainer({
         _GenerateThumbnailsUseCaseFake(),
       ),
       thumbnailDiskCacheProvider.overrideWithValue(thumbnailDiskCache),
-      directoryPreviewProvider.overrideWith((ref, path) {
+      directoryPreviewCatalogProvider.overrideWith((ref, query) {
+        ref.watch(
+          directoryPreviewCatalogPathRevisionProvider(query.directoryPath),
+        );
         onPreviewBuild();
-        return null;
+        return const DirectoryPreviewCatalog(previews: <DirectoryPreview>[]);
       }),
     ],
   );
@@ -72,17 +76,21 @@ void main() {
         thumbnailDiskCache: _ThumbnailDiskCacheFake(),
       );
       addTearDown(container.dispose);
-      final subscription = container.listen<AsyncValue<DirectoryPreview?>>(
-        directoryPreviewProvider('/library/folder'),
-        (_, __) {},
-        fireImmediately: true,
+      final provider = directoryPreviewCatalogProvider(
+        const DirectoryPreviewCatalogQuery(directoryPath: '/library/folder'),
       );
+      final subscription = container
+          .listen<AsyncValue<DirectoryPreviewCatalog>>(
+            provider,
+            (_, __) {},
+            fireImmediately: true,
+          );
       addTearDown(subscription.close);
-      await container.read(directoryPreviewProvider('/library/folder').future);
+      await container.read(provider.future);
 
       await container.read(thumbnailBatchControllerProvider.notifier).start();
       await container.pump();
-      await container.read(directoryPreviewProvider('/library/folder').future);
+      await container.read(provider.future);
 
       expect(previewBuilds, 2);
     },
@@ -96,19 +104,22 @@ void main() {
       thumbnailDiskCache: thumbnailDiskCache,
     );
     addTearDown(container.dispose);
-    final subscription = container.listen<AsyncValue<DirectoryPreview?>>(
-      directoryPreviewProvider('/library/folder'),
+    final provider = directoryPreviewCatalogProvider(
+      const DirectoryPreviewCatalogQuery(directoryPath: '/library/folder'),
+    );
+    final subscription = container.listen<AsyncValue<DirectoryPreviewCatalog>>(
+      provider,
       (_, __) {},
       fireImmediately: true,
     );
     addTearDown(subscription.close);
-    await container.read(directoryPreviewProvider('/library/folder').future);
+    await container.read(provider.future);
 
     final cleared = await container
         .read(thumbnailBatchControllerProvider.notifier)
         .clearCache();
     await container.pump();
-    await container.read(directoryPreviewProvider('/library/folder').future);
+    await container.read(provider.future);
 
     expect(cleared, isTrue);
     expect(thumbnailDiskCache.clearCalls, 1);

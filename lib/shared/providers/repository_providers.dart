@@ -38,6 +38,7 @@ import '../../features/media_library/domain/use_cases/rescan_library_use_case.da
 import '../../features/media_library/domain/use_cases/get_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/get_media_use_case.dart';
 import '../../features/media_library/domain/use_cases/remove_directory_use_case.dart';
+import '../../features/media_library/domain/use_cases/reconcile_directory_cover_use_case.dart';
 import '../../features/media_library/domain/use_cases/reset_directory_cover_use_case.dart';
 import '../../features/media_library/domain/use_cases/search_directories_use_case.dart';
 import '../../features/media_library/domain/use_cases/set_directory_cover_use_case.dart';
@@ -529,6 +530,13 @@ final setDirectoryCoverUseCaseProvider = Provider<SetDirectoryCoverUseCase>((
 ) {
   return SetDirectoryCoverUseCase(ref.watch(directoryCoverRepositoryProvider));
 });
+
+final reconcileDirectoryCoverUseCaseProvider =
+    Provider<ReconcileDirectoryCoverUseCase>((ref) {
+      return ReconcileDirectoryCoverUseCase(
+        ref.watch(directoryCoverRepositoryProvider),
+      );
+    });
 
 final setDirectoryNoCoverUseCaseProvider = Provider<SetDirectoryNoCoverUseCase>(
   (ref) {

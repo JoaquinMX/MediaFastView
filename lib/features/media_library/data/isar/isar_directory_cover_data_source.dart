@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/isar_database.dart';
+import '../../../../core/utils/file_utils.dart';
 import '../../domain/entities/directory_cover_entity.dart';
 import '../../domain/entities/media_entity.dart';
 import 'directory_cover_collection.dart';
@@ -41,12 +42,14 @@ class IsarDirectoryCoverDataSource {
   }
 
   Future<void> saveCover(DirectoryCoverEntity cover) async {
+    _validateCover(cover);
     final normalizedPath = _normalize(cover.directoryPath);
     final collection = DirectoryCoverCollection(
       coverKey: directoryCoverKey(profileId, normalizedPath),
       profileId: profileId,
       directoryPath: normalizedPath,
       sourceFileName: cover.sourceFileName ?? '',
+      sourceFileNames: cover.sourceFileNames,
       mediaType: cover.mediaType ?? MediaType.image,
       mode: cover.mode,
       updatedAt: cover.updatedAt,
@@ -78,20 +81,31 @@ class IsarDirectoryCoverDataSource {
       final cover = await _store.getByCoverKey(
         directoryCoverKey(profileId, oldParent),
       );
-      if (cover == null ||
-          cover.mode != DirectoryCoverMode.media ||
-          cover.sourceFileName.toLowerCase() != oldName.toLowerCase()) {
+      if (cover == null || cover.mode != DirectoryCoverMode.media) {
+        return;
+      }
+      final sourceFileNames = _effectiveSourceFileNames(cover);
+      final movedIndex = sourceFileNames.indexWhere(
+        (fileName) => fileName.toLowerCase() == oldName.toLowerCase(),
+      );
+      if (movedIndex < 0) {
         return;
       }
 
       await _store.writeTxn(() async {
-        if (oldParent.toLowerCase() != newParent.toLowerCase()) {
-          await _store.deleteById(cover.id);
-          return;
+        if (oldParent.toLowerCase() == newParent.toLowerCase() &&
+            !isExcludedMediaFileName(newName)) {
+          sourceFileNames[movedIndex] = newName;
+        } else {
+          sourceFileNames.removeAt(movedIndex);
         }
-        cover.sourceFileName = newName;
-        cover.updatedAt = DateTime.now();
-        await _store.put(cover);
+        if (sourceFileNames.isEmpty) {
+          await _store.deleteById(cover.id);
+        } else {
+          _replaceSourceFileNames(cover, sourceFileNames);
+          cover.updatedAt = DateTime.now();
+          await _store.put(cover);
+        }
       });
     }, 'Failed to reconcile moved directory cover');
   }
@@ -103,12 +117,25 @@ class IsarDirectoryCoverDataSource {
       final cover = await _store.getByCoverKey(
         directoryCoverKey(profileId, parent),
       );
-      if (cover == null ||
-          cover.mode != DirectoryCoverMode.media ||
-          cover.sourceFileName.toLowerCase() != name.toLowerCase()) {
+      if (cover == null || cover.mode != DirectoryCoverMode.media) {
         return;
       }
-      await _store.writeTxn(() => _store.deleteById(cover.id));
+      final sourceFileNames = _effectiveSourceFileNames(cover);
+      sourceFileNames.removeWhere(
+        (fileName) => fileName.toLowerCase() == name.toLowerCase(),
+      );
+      if (sourceFileNames.length == _effectiveSourceFileNames(cover).length) {
+        return;
+      }
+      await _store.writeTxn(() async {
+        if (sourceFileNames.isEmpty) {
+          await _store.deleteById(cover.id);
+        } else {
+          _replaceSourceFileNames(cover, sourceFileNames);
+          cover.updatedAt = DateTime.now();
+          await _store.put(cover);
+        }
+      });
     }, 'Failed to remove deleted directory cover');
   }
 
@@ -195,6 +222,54 @@ class IsarDirectoryCoverDataSource {
 
   static bool _samePath(String first, String second) {
     return _normalize(first).toLowerCase() == _normalize(second).toLowerCase();
+  }
+
+  static List<String> _effectiveSourceFileNames(
+    DirectoryCoverCollection cover,
+  ) {
+    if (cover.sourceFileNames.isNotEmpty) {
+      return List<String>.of(cover.sourceFileNames);
+    }
+    return cover.sourceFileName.isEmpty
+        ? <String>[]
+        : <String>[cover.sourceFileName];
+  }
+
+  static void _replaceSourceFileNames(
+    DirectoryCoverCollection cover,
+    List<String> sourceFileNames,
+  ) {
+    cover.sourceFileNames = List<String>.of(sourceFileNames);
+    cover.sourceFileName = sourceFileNames.first;
+    if (sourceFileNames.length > 1) {
+      cover.mediaType = MediaType.image;
+    }
+  }
+
+  static void _validateCover(DirectoryCoverEntity cover) {
+    if (cover.mode == DirectoryCoverMode.none) {
+      return;
+    }
+    final selections = cover.selections;
+    if (selections.isEmpty ||
+        selections.length > DirectoryCoverEntity.maximumSelectionCount) {
+      throw ArgumentError.value(
+        selections.length,
+        'cover',
+        'A directory cover requires one to four selections.',
+      );
+    }
+    for (final selection in selections) {
+      final fileName = selection.sourceFileName;
+      if (p.basename(fileName) != fileName ||
+          isExcludedMediaFileName(fileName)) {
+        throw ArgumentError.value(
+          fileName,
+          'cover',
+          'Directory cover selections must be direct-child media files.',
+        );
+      }
+    }
   }
 
   static DirectoryCoverCollectionStore _defaultStoreBuilder(

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/features/media_library/data/isar/directory_cover_collection.dart';
 import 'package:media_fast_view/features/media_library/data/isar/isar_directory_cover_data_source.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/directory_cover_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
@@ -72,6 +73,61 @@ void main() {
     expect(saved?.mediaType, isNull);
   });
 
+  test('deserializes a legacy single cover as a one-item selection', () {
+    final legacy = DirectoryCoverCollection(
+      coverKey: 'profile:/library/photos',
+      profileId: 'profile',
+      directoryPath: '/library/photos',
+      sourceFileName: 'legacy.mov',
+      mediaType: MediaType.video,
+      mode: DirectoryCoverMode.media,
+      updatedAt: DateTime(2025),
+    );
+
+    final entity = legacy.toEntity();
+
+    expect(entity.sourceFileNames, <String>['legacy.mov']);
+    expect(entity.selections.single.mediaType, MediaType.video);
+  });
+
+  test('persists one through four selected images', () async {
+    for (var count = 1; count <= 4; count += 1) {
+      final names = <String>[
+        for (var index = 0; index < count; index += 1) '$index.jpg',
+      ];
+
+      await firstProfile.saveCover(
+        DirectoryCoverEntity.images(
+          directoryPath: '/library/photos',
+          sourceFileNames: names,
+          updatedAt: DateTime(2025),
+        ),
+      );
+
+      expect(
+        (await firstProfile.getCover('/library/photos'))?.sourceFileNames,
+        names,
+      );
+    }
+  });
+
+  test('rejects more than four selected images', () {
+    expect(
+      () => DirectoryCoverEntity.images(
+        directoryPath: '/library/photos',
+        sourceFileNames: <String>[
+          'one.jpg',
+          'two.jpg',
+          'three.jpg',
+          'four.jpg',
+          'five.jpg',
+        ],
+        updatedAt: DateTime(2025),
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('renames a selected file and clears it when moved away', () async {
     await firstProfile.saveCover(cover('/library/photos', 'old.jpg'));
 
@@ -90,6 +146,43 @@ void main() {
     );
     expect(await firstProfile.getCover('/library/photos'), isNull);
   });
+
+  test(
+    'renames and removes individual selections without discarding others',
+    () async {
+      await firstProfile.saveCover(
+        DirectoryCoverEntity.images(
+          directoryPath: '/library/photos',
+          sourceFileNames: <String>['one.jpg', 'two.jpg', 'three.jpg'],
+          updatedAt: DateTime(2025),
+        ),
+      );
+
+      await firstProfile.reconcileMediaMove(
+        oldPath: '/library/photos/two.jpg',
+        newPath: '/library/photos/replaced.jpg',
+      );
+      expect(
+        (await firstProfile.getCover('/library/photos'))?.sourceFileNames,
+        <String>['one.jpg', 'replaced.jpg', 'three.jpg'],
+      );
+
+      await firstProfile.removeCoverForSource('/library/photos/one.jpg');
+      expect(
+        (await firstProfile.getCover('/library/photos'))?.sourceFileNames,
+        <String>['replaced.jpg', 'three.jpg'],
+      );
+
+      await firstProfile.reconcileMediaMove(
+        oldPath: '/library/photos/replaced.jpg',
+        newPath: '/library/archive/replaced.jpg',
+      );
+      expect(
+        (await firstProfile.getCover('/library/photos'))?.sourceFileNames,
+        <String>['three.jpg'],
+      );
+    },
+  );
 
   test('rebases covers for a moved directory tree', () async {
     await firstProfile.saveCover(cover('/library/trip', 'cover.jpg'));

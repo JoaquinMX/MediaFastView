@@ -1479,7 +1479,7 @@ class _MediaGridScreenState extends ConsumerState<MediaGridScreen> {
           child: const Text('Info'),
           onTap: () => _onMediaLongPress(context, media),
         ),
-        if (media.type == MediaType.image || media.type == MediaType.video)
+        if (media.type == MediaType.image)
           PopupMenuItem(
             child: const Text('Use as Folder Cover'),
             onTap: () => unawaited(_useAsFolderCover(media)),

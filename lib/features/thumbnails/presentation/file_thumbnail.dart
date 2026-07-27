@@ -23,7 +23,11 @@ class FileThumbnail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ref
-        .watch(previewImageMediaProvider(path))
+        .watch(
+          previewImageMediaProvider(
+            PreviewImageMediaQuery(path: path, bookmarkData: bookmarkData),
+          ),
+        )
         .when(
           data: (media) => MediaThumbnail(
             media: media,

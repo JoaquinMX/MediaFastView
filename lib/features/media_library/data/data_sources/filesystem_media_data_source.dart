@@ -6,6 +6,7 @@ import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/logging_service.dart';
+import '../../../../core/utils/file_utils.dart';
 import '../../../../shared/utils/bookmark_resolver.dart';
 import '../../../../shared/utils/media_id_utils.dart';
 import '../models/media_model.dart';
@@ -112,15 +113,6 @@ class FilesystemMediaDataSource {
     ..._videoExtensions,
     ..._textExtensions,
     ..._audioExtensions,
-  };
-
-  /// System files to exclude (macOS specific)
-  static const Set<String> _excludedFiles = {
-    '._', // macOS resource fork files
-    '.DS_Store', // macOS directory metadata
-    'Thumbs.db', // Windows thumbnail cache
-    'desktop.ini', // Windows desktop.ini
-    '.mediafastview.json', // Portable tag/favorite sidecar manifest
   };
 
   /// Validates permissions for directory access before scanning
@@ -265,7 +257,8 @@ class FilesystemMediaDataSource {
        )) {
          if (entity is Directory) {
            final dirName = path.basename(entity.path);
-           if (!dirName.startsWith('.') && !_excludedFiles.contains(dirName)) {
+           if (!dirName.startsWith('.') &&
+               !excludedMediaFileNamePrefixes.contains(dirName)) {
              final dirStat = await entity.stat();
              final dirId = _generateId(entity.path);
 
@@ -435,7 +428,7 @@ class FilesystemMediaDataSource {
          .replaceFirst('.', '');
 
      // Skip excluded files
-     if (_isExcludedFile(fileName)) {
+     if (isExcludedMediaFileName(fileName)) {
        return null;
      }
 
@@ -490,11 +483,6 @@ class FilesystemMediaDataSource {
       return MediaType.audio;
     }
     return null;
-  }
-
-  /// Checks if a file should be excluded.
-  bool _isExcludedFile(String fileName) {
-    return _excludedFiles.any((excluded) => fileName.startsWith(excluded));
   }
 
   /// Generates a unique ID from file metadata for consistency across different access paths.

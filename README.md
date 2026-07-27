@@ -18,7 +18,9 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 - Scan directories for images, videos, audio, and text documents with lazy metadata caching (`lib/features/media_library/data/data_sources`).
 - Adjustable column density and multiple sort options for both directory and media grids.
 - Marquee (rubber-band) and keyboard multi-select, with bulk tag assignment and bulk favorite toggling.
-- Choose a profile-specific directory cover from any direct-child image or video, explicitly show no cover, or reset the choice to resume automatic previews.
+- Choose one to four direct-child images as a profile-specific directory-cover collage, explicitly show no cover, or reset the choice to resume automatic previews.
+- Custom and automatic directory covers use live one-to-four-tile layouts without composite bitmaps; automatic covers draw from direct-child images and existing cached video frames.
+- Hover or focus a root or nested directory to browse up to five ordered previews. The carousel supports bounded arrow-button and keyboard navigation with filenames and position counters, while iOS adds tap-to-focus and horizontal swipes.
 - Perceptual duplicate-image detection with a dedicated review UI (see **Duplicate management**).
 
 ### Media grid & file operations
@@ -49,7 +51,7 @@ Media Fast View is a Flutter application for macOS and iOS designed to make larg
 
 - A dual tagging system that applies to both directories and individual media, with colored tags and tag-driven library views (`lib/features/tagging`).
 - Manage tags: create, rename, recolor, merge, and delete.
-- The Tags tab filters media with **Any / All / Hybrid** match modes, required/optional/excluded tags, a media-type filter, tag search, and a hierarchical **directory filter tree** with hover previews.
+- The Tags tab filters media with **Any / All / Hybrid** match modes, required/optional/excluded tags, a media-type filter, tag search, and a hierarchical **directory filter tree** with interactive directory-preview carousels.
 - **Saved filters**: name and persist a query, apply it from a chip strip, update/rename/delete it, and get notified when a saved filter references tags or directories that no longer exist. Start a slideshow directly from any filtered result set.
 
 ### Favorites & slideshow
@@ -87,6 +89,7 @@ The in-app guide (press `?`) is the source of truth; a summary:
 | `Escape`               | Exit the viewer or clear the current selection                   | Viewer, grids      |
 | `← / →`                | Navigate between media items                                     | Full-screen viewer |
 | `← / →`                | Move between sibling directories                                 | Media grids        |
+| `← / →`                | Browse previous/next directory previews                          | Directory preview  |
 | `Home / End`           | Jump to the first or last item                                   | Full-screen viewer |
 | `Page Up / Page Down`  | Move ten items at a time                                         | Full-screen viewer |
 | `Cmd/Ctrl + Alt + 1–0` | Assign/remove the matching shortcut tag                          | Full-screen viewer |
@@ -159,9 +162,6 @@ Widget and integration test scaffolds live under `test/`. Add coverage for new v
 
 - **Perceptual matching for video** and near-duplicate audio, extending duplicate detection beyond images.
 - **Portable, sidecar tag metadata** (e.g. XMP export/import) so tags travel with files between machines.
-- **Directory thumbnail collages** built from representative images and cached video frames.
-- **Directory hover preview carousels** that cycle through cached thumbnails.
-- **Directory preview navigation controls** for browsing previous and next thumbnails without opening the folder.
 - **Timeline scrub previews and selectable poster frames** for videos.
 - **Video chapter tagging** so viewers can jump between tagged segments inside long clips.
 - **Metadata display & filtering** (EXIF: date taken, dimensions, camera, GPS) with date/timeline-based browsing.

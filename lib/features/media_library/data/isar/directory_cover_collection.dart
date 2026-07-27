@@ -22,6 +22,7 @@ class DirectoryCoverCollection {
     required this.profileId,
     required this.directoryPath,
     required this.sourceFileName,
+    this.sourceFileNames = const <String>[],
     required this.mediaType,
     required this.mode,
     required this.updatedAt,
@@ -41,6 +42,12 @@ class DirectoryCoverCollection {
 
   String sourceFileName;
 
+  /// Ordered custom-cover filenames.
+  ///
+  /// Records created before multi-image covers leave this empty and continue
+  /// to deserialize through [sourceFileName].
+  List<String> sourceFileNames;
+
   @Enumerated(EnumType.name)
   MediaType mediaType;
 
@@ -53,10 +60,9 @@ class DirectoryCoverCollection {
 extension DirectoryCoverCollectionMapper on DirectoryCoverCollection {
   DirectoryCoverEntity toEntity() {
     return switch (mode) {
-      DirectoryCoverMode.media => DirectoryCoverEntity.media(
+      DirectoryCoverMode.media => DirectoryCoverEntity.selections(
         directoryPath: directoryPath,
-        sourceFileName: sourceFileName,
-        mediaType: mediaType,
+        selections: _persistedSelections(),
         updatedAt: updatedAt,
       ),
       DirectoryCoverMode.none => DirectoryCoverEntity.none(
@@ -64,5 +70,18 @@ extension DirectoryCoverCollectionMapper on DirectoryCoverCollection {
         updatedAt: updatedAt,
       ),
     };
+  }
+
+  List<DirectoryCoverSelection> _persistedSelections() {
+    final fileNames = sourceFileNames.isEmpty
+        ? <String>[sourceFileName]
+        : sourceFileNames;
+    return <DirectoryCoverSelection>[
+      for (var index = 0; index < fileNames.length; index += 1)
+        DirectoryCoverSelection(
+          sourceFileName: fileNames[index],
+          mediaType: index == 0 ? mediaType : MediaType.image,
+        ),
+    ];
   }
 }

@@ -1,10 +1,11 @@
 import 'package:path/path.dart' as p;
 
+import '../../../../core/utils/file_utils.dart';
 import '../entities/directory_cover_entity.dart';
 import '../entities/media_entity.dart';
 import '../repositories/directory_cover_repository.dart';
 
-/// Validates and persists a direct-child image or video as a directory cover.
+/// Validates and persists one to four direct-child images as a directory cover.
 class SetDirectoryCoverUseCase {
   const SetDirectoryCoverUseCase(this._repository);
 
@@ -12,31 +13,58 @@ class SetDirectoryCoverUseCase {
 
   Future<void> call({
     required String directoryPath,
-    required MediaEntity media,
+    required List<MediaEntity> images,
   }) async {
-    if (media.type != MediaType.image && media.type != MediaType.video) {
+    if (images.isEmpty ||
+        images.length > DirectoryCoverEntity.maximumSelectionCount) {
       throw ArgumentError.value(
-        media.type,
-        'media',
-        'A directory cover must be an image or video.',
+        images.length,
+        'images',
+        'A directory cover requires one to four images.',
       );
     }
 
     final normalizedDirectory = p.normalize(directoryPath);
-    final mediaParent = p.normalize(p.dirname(media.path));
-    if (normalizedDirectory.toLowerCase() != mediaParent.toLowerCase()) {
-      throw ArgumentError.value(
-        media.path,
-        'media',
-        'A directory cover must be a direct child of the directory.',
-      );
+    final selectedNames = <String>{};
+    for (final image in images) {
+      if (image.type != MediaType.image) {
+        throw ArgumentError.value(
+          image.type,
+          'images',
+          'A directory cover selection must be an image.',
+        );
+      }
+      final mediaParent = p.normalize(p.dirname(image.path));
+      final fileName = p.basename(image.path);
+      if (normalizedDirectory.toLowerCase() != mediaParent.toLowerCase()) {
+        throw ArgumentError.value(
+          image.path,
+          'images',
+          'A directory cover must be a direct child of the directory.',
+        );
+      }
+      if (isExcludedMediaFileName(fileName)) {
+        throw ArgumentError.value(
+          image.path,
+          'images',
+          'System metadata cannot be used as a directory cover.',
+        );
+      }
+      if (!selectedNames.add(fileName.toLowerCase())) {
+        throw ArgumentError.value(
+          image.path,
+          'images',
+          'A directory cover cannot select the same image twice.',
+        );
+      }
     }
 
     await _repository.saveCover(
-      DirectoryCoverEntity.media(
+      DirectoryCoverEntity.images(
         directoryPath: normalizedDirectory,
-        sourceFileName: p.basename(media.path),
-        mediaType: media.type,
+        sourceFileNames: images
+            .map((image) => p.basename(image.path))
+            .toList(growable: false),
         updatedAt: DateTime.now(),
       ),
     );

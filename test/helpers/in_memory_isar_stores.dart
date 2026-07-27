@@ -162,6 +162,7 @@ class InMemoryDirectoryCoverCollectionStore
       profileId: cover.profileId,
       directoryPath: cover.directoryPath,
       sourceFileName: cover.sourceFileName,
+      sourceFileNames: List<String>.of(cover.sourceFileNames),
       mediaType: cover.mediaType,
       mode: cover.mode,
       updatedAt: cover.updatedAt,

@@ -82,6 +82,9 @@ void main() {
             directoryCoverRepositoryProvider.overrideWithValue(
               _NoCoverRepository(),
             ),
+            directoryPreviewInheritedBookmarkProvider.overrideWith(
+              (ref, path) => null,
+            ),
             activeProfileIdProvider.overrideWith(
               () => ActiveProfileIdNotifier('test-profile'),
             ),

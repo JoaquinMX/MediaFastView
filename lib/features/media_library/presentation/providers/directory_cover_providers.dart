@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../shared/providers/repository_providers.dart';
+import '../../../../core/utils/file_utils.dart';
 import '../../../../shared/providers/active_profile_provider.dart';
+import '../../../../shared/providers/repository_providers.dart';
 import '../../domain/entities/directory_cover_entity.dart';
 import '../../domain/entities/media_entity.dart';
 
@@ -36,7 +37,7 @@ class DirectoryCoverCandidatesQuery {
   int get hashCode => Object.hash(directoryPath, bookmarkData);
 }
 
-/// Loads direct-child image and video choices for the cover picker.
+/// Loads supported direct-child image choices for the cover picker.
 final directoryCoverCandidatesProvider = FutureProvider.autoDispose
     .family<List<MediaEntity>, DirectoryCoverCandidatesQuery>((
       ref,
@@ -51,7 +52,8 @@ final directoryCoverCandidatesProvider = FutureProvider.autoDispose
       return media
           .where(
             (item) =>
-                item.type == MediaType.image || item.type == MediaType.video,
+                item.type == MediaType.image &&
+                !isExcludedMediaFileName(item.name),
           )
           .toList(growable: false);
     });

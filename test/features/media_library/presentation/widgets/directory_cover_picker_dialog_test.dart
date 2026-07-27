@@ -105,25 +105,69 @@ Widget _subject(
 }
 
 void main() {
-  testWidgets('selects and saves a direct-child cover', (tester) async {
-    final repository = _MemoryCoverRepository();
-    final candidates = <MediaEntity>[
-      _media('first.jpg', MediaType.image),
-      _media('chosen.mp4', MediaType.video),
-    ];
-    await tester.pumpWidget(_subject(repository, candidates));
+  testWidgets(
+    'selects up to four images and supports removal and replacement',
+    (tester) async {
+      final repository = _MemoryCoverRepository();
+      final candidates = <MediaEntity>[
+        _media('first.jpg', MediaType.image),
+        _media('second.jpg', MediaType.image),
+        _media('third.jpg', MediaType.image),
+        _media('fourth.jpg', MediaType.image),
+        _media('fifth.jpg', MediaType.image),
+        _media('ignored.mp4', MediaType.video),
+        _media('._metadata.jpg', MediaType.image),
+      ];
+      await tester.pumpWidget(_subject(repository, candidates));
 
-    await tester.tap(find.text('Open picker'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('chosen.mp4'));
-    await tester.pump();
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Open picker'));
+      await tester.pumpAndSettle();
+      expect(find.text('ignored.mp4'), findsNothing);
+      expect(find.text('._metadata.jpg'), findsNothing);
+      expect(find.text('0 of 4 images selected'), findsOneWidget);
 
-    expect(repository.cover?.sourceFileName, 'chosen.mp4');
-    expect(repository.cover?.mediaType, MediaType.video);
-    expect(find.byType(DirectoryCoverPickerDialog), findsNothing);
-  });
+      for (final name in <String>[
+        'first.jpg',
+        'second.jpg',
+        'third.jpg',
+        'fourth.jpg',
+      ]) {
+        await tester.ensureVisible(find.text(name));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(name));
+        await tester.pump();
+      }
+      expect(find.text('4 of 4 images selected'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('fifth.jpg'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('fifth.jpg'));
+      await tester.pump();
+      expect(
+        find.textContaining('You can select up to 4 images'),
+        findsOneWidget,
+      );
+
+      await tester.ensureVisible(find.text('second.jpg'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('second.jpg'));
+      await tester.pump();
+      await tester.ensureVisible(find.text('fifth.jpg'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('fifth.jpg'));
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(repository.cover?.sourceFileNames, <String>[
+        'first.jpg',
+        'third.jpg',
+        'fourth.jpg',
+        'fifth.jpg',
+      ]);
+      expect(find.byType(DirectoryCoverPickerDialog), findsNothing);
+    },
+  );
 
   testWidgets('highlights the current cover and restores automatic previews', (
     tester,
@@ -145,7 +189,11 @@ void main() {
     await tester.tap(find.text('Open picker'));
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    expect(
+      find.byKey(const Key('directory-cover-selection-position-1')),
+      findsOneWidget,
+    );
+    expect(find.text('1 of 4 images selected'), findsOneWidget);
     await tester.tap(find.text('Use automatic'));
     await tester.pumpAndSettle();
 
@@ -170,5 +218,24 @@ void main() {
 
     expect(repository.cover?.mode, DirectoryCoverMode.none);
     expect(find.byType(DirectoryCoverPickerDialog), findsNothing);
+  });
+
+  testWidgets('disables Save when no valid image is selected', (tester) async {
+    final repository = _MemoryCoverRepository();
+    await tester.pumpWidget(
+      _subject(repository, <MediaEntity>[
+        _media('ignored.mp4', MediaType.video),
+        _media('._ignored.jpg', MediaType.image),
+      ]),
+    );
+
+    await tester.tap(find.text('Open picker'));
+    await tester.pumpAndSettle();
+
+    final saveButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Save'),
+    );
+    expect(saveButton.onPressed, isNull);
+    expect(find.text('0 of 4 images selected'), findsOneWidget);
   });
 }
