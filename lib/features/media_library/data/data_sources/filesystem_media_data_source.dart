@@ -30,13 +30,17 @@ class PermissionValidationResult {
 
 /// Data source for scanning media files from the filesystem.
 class FilesystemMediaDataSource {
-  const FilesystemMediaDataSource(this._bookmarkService, [this._permissionService]);
+  const FilesystemMediaDataSource(
+    this._bookmarkService, [
+    this._permissionService,
+  ]);
 
   final BookmarkService _bookmarkService;
   final PermissionService? _permissionService;
 
   /// Gets the permission service, creating one if not provided
-  PermissionService get _permissionSvc => _permissionService ?? PermissionService();
+  PermissionService get _permissionSvc =>
+      _permissionService ?? PermissionService();
 
   /// Supported image file extensions.
   ///
@@ -128,7 +132,9 @@ class FilesystemMediaDataSource {
 
     // First check if bookmark is valid if provided
     if (bookmarkData != null && bookmarkData.isNotEmpty) {
-      final bookmarkResult = await _permissionSvc.validateBookmark(bookmarkData);
+      final bookmarkResult = await _permissionSvc.validateBookmark(
+        bookmarkData,
+      );
       if (!bookmarkResult.isValid) {
         _permissionSvc.logPermissionEvent(
           'bookmark_validation_failed_attempting_renewal',
@@ -137,22 +143,32 @@ class FilesystemMediaDataSource {
         );
 
         // Attempt to renew the bookmark
-        final renewedBookmark = await _permissionSvc.renewBookmark(bookmarkData, directoryPath);
+        final renewedBookmark = await _permissionSvc.renewBookmark(
+          bookmarkData,
+          directoryPath,
+        );
         if (renewedBookmark != null) {
           _permissionSvc.logPermissionEvent(
             'bookmark_renewal_success_in_validation',
             path: directoryPath,
           );
           // Validate the renewed bookmark
-          final renewedValidation = await _permissionSvc.validateBookmark(renewedBookmark);
+          final renewedValidation = await _permissionSvc.validateBookmark(
+            renewedBookmark,
+          );
           if (renewedValidation.isValid) {
             // Check directory access with renewed bookmark
-            final accessStatus = await _permissionSvc.checkDirectoryAccess(directoryPath);
+            final accessStatus = await _permissionSvc.checkDirectoryAccess(
+              directoryPath,
+              bookmarkData: renewedBookmark,
+            );
             final canAccess = accessStatus == PermissionStatus.granted;
             return PermissionValidationResult(
               canAccess: canAccess,
               requiresRecovery: !canAccess,
-              reason: canAccess ? null : 'Access ${accessStatus.name} after renewal',
+              reason: canAccess
+                  ? null
+                  : 'Access ${accessStatus.name} after renewal',
               renewedBookmarkData: renewedBookmark,
             );
           }
@@ -162,13 +178,17 @@ class FilesystemMediaDataSource {
         return PermissionValidationResult(
           canAccess: false,
           requiresRecovery: true,
-          reason: 'Invalid bookmark and renewal failed: ${bookmarkResult.reason}',
+          reason:
+              'Invalid bookmark and renewal failed: ${bookmarkResult.reason}',
         );
       }
     }
 
     // Check directory access
-    final accessStatus = await _permissionSvc.checkDirectoryAccess(directoryPath);
+    final accessStatus = await _permissionSvc.checkDirectoryAccess(
+      directoryPath,
+      bookmarkData: bookmarkData,
+    );
     final canAccess = accessStatus == PermissionStatus.granted;
 
     _permissionSvc.logPermissionEvent(
@@ -185,114 +205,154 @@ class FilesystemMediaDataSource {
   }
 
   /// Scans a directory for media files and subdirectories.
-   Future<List<MediaModel>> scanMediaForDirectory(
-     String directoryPath,
-     String directoryId, {
-     String? bookmarkData,
-   }) async {
-     final scanStartTime = DateTime.now();
-     _permissionSvc.logPermissionEvent(
-       'scan_media_start',
-       path: directoryPath,
-       details: 'directoryId=$directoryId, bookmark_present=${bookmarkData != null}',
-     );
+  Future<List<MediaModel>> scanMediaForDirectory(
+    String directoryPath,
+    String directoryId, {
+    String? bookmarkData,
+  }) async {
+    final scanStartTime = DateTime.now();
+    _permissionSvc.logPermissionEvent(
+      'scan_media_start',
+      path: directoryPath,
+      details:
+          'directoryId=$directoryId, bookmark_present=${bookmarkData != null}',
+    );
 
-     // Validate permissions proactively
-     final validationResult = await validateDirectoryAccess(directoryPath, bookmarkData: bookmarkData);
-     if (!validationResult.canAccess) {
-       _permissionSvc.logPermissionEvent(
-         'scan_cancelled_permission_denied',
-         path: directoryPath,
-         error: validationResult.reason,
-       );
-       throw DirectoryAccessDeniedError('Permission denied: ${validationResult.reason}');
-     }
+    // Validate permissions proactively
+    final validationResult = await validateDirectoryAccess(
+      directoryPath,
+      bookmarkData: bookmarkData,
+    );
+    if (!validationResult.canAccess) {
+      _permissionSvc.logPermissionEvent(
+        'scan_cancelled_permission_denied',
+        path: directoryPath,
+        error: validationResult.reason,
+      );
+      throw DirectoryAccessDeniedError(
+        'Permission denied: ${validationResult.reason}',
+      );
+    }
 
-     // Use renewed bookmark data if available
-     final effectiveBookmarkData = validationResult.renewedBookmarkData ?? bookmarkData;
+    // Use renewed bookmark data if available
+    final effectiveBookmarkData =
+        validationResult.renewedBookmarkData ?? bookmarkData;
 
-     LoggingService.instance.info('Starting scan for directory: $directoryPath, bookmarkData present: ${effectiveBookmarkData != null && effectiveBookmarkData.isNotEmpty}');
-     String resolvedPath = directoryPath;
-     bool startedAccess = false;
-     try {
-       // Start accessing bookmark if provided
-       if (effectiveBookmarkData != null && effectiveBookmarkData.isNotEmpty) {
-         LoggingService.instance.debug('Bookmark data provided, checking validity...');
-         try {
-           final isValid = await _bookmarkService.isBookmarkValid(effectiveBookmarkData);
-           LoggingService.instance.debug('Bookmark validity check result: $isValid');
-           if (isValid) {
-             final scopePath = await _bookmarkService.startAccessingBookmark(effectiveBookmarkData);
-             startedAccess = true;
-             resolvedPath = resolveScanTarget(directoryPath, scopePath);
-             LoggingService.instance.info('Started accessing bookmark scope $scopePath for directory: $directoryPath -> scanning $resolvedPath');
-           } else {
-             LoggingService.instance.error('CRITICAL: Bookmark validation failed during scan for directory: $directoryPath - bookmark has expired. Falling back to stored path: $directoryPath');
-             // Don't throw here - let the directory access check below handle it
-           }
-         } catch (e) {
-           LoggingService.instance.error('Failed to start accessing bookmark for directory $directoryPath: $e');
-           // Fall back to original path
-         }
-       } else {
-         LoggingService.instance.debug('No bookmark data provided, using original path: $directoryPath');
-       }
+    LoggingService.instance.info(
+      'Starting scan for directory: $directoryPath, bookmarkData present: ${effectiveBookmarkData != null && effectiveBookmarkData.isNotEmpty}',
+    );
+    String resolvedPath = directoryPath;
+    bool startedAccess = false;
+    try {
+      // Start accessing bookmark if provided
+      if (effectiveBookmarkData != null && effectiveBookmarkData.isNotEmpty) {
+        LoggingService.instance.debug(
+          'Bookmark data provided, checking validity...',
+        );
+        try {
+          final isValid = await _bookmarkService.isBookmarkValid(
+            effectiveBookmarkData,
+          );
+          LoggingService.instance.debug(
+            'Bookmark validity check result: $isValid',
+          );
+          if (isValid) {
+            final scopePath = await _bookmarkService.startAccessingBookmark(
+              effectiveBookmarkData,
+            );
+            startedAccess = true;
+            resolvedPath = resolveScanTarget(directoryPath, scopePath);
+            LoggingService.instance.info(
+              'Started accessing bookmark scope $scopePath for directory: $directoryPath -> scanning $resolvedPath',
+            );
+          } else {
+            LoggingService.instance.error(
+              'CRITICAL: Bookmark validation failed during scan for directory: $directoryPath - bookmark has expired. Falling back to stored path: $directoryPath',
+            );
+            // Don't throw here - let the directory access check below handle it
+          }
+        } catch (e) {
+          LoggingService.instance.error(
+            'Failed to start accessing bookmark for directory $directoryPath: $e',
+          );
+          // Fall back to original path
+        }
+      } else {
+        LoggingService.instance.debug(
+          'No bookmark data provided, using original path: $directoryPath',
+        );
+      }
 
-       final directory = Directory(resolvedPath);
-       LoggingService.instance.debug('Checking if directory exists: $resolvedPath');
-       if (!await directory.exists()) {
-         LoggingService.instance.error('CRITICAL: Directory does not exist at resolved path: $resolvedPath (original: $directoryPath). This indicates the directory was moved/renamed after bookmark creation.');
-         throw DirectoryNotFoundError('Directory does not exist: $resolvedPath');
-       }
-       LoggingService.instance.info('Directory exists at resolved path, starting scan');
+      final directory = Directory(resolvedPath);
+      LoggingService.instance.debug(
+        'Checking if directory exists: $resolvedPath',
+      );
+      if (!await directory.exists()) {
+        LoggingService.instance.error(
+          'CRITICAL: Directory does not exist at resolved path: $resolvedPath (original: $directoryPath). This indicates the directory was moved/renamed after bookmark creation.',
+        );
+        throw DirectoryNotFoundError('Directory does not exist: $resolvedPath');
+      }
+      LoggingService.instance.info(
+        'Directory exists at resolved path, starting scan',
+      );
 
-       final mediaItems = <MediaModel>[];
+      final mediaItems = <MediaModel>[];
 
-       // First, scan for subdirectories
-       LoggingService.instance.debug('Scanning for subdirectories');
-       final subdirScanStart = DateTime.now();
-       await for (final entity in directory.list(
-         recursive: false,
-         followLinks: false,
-       )) {
-         if (entity is Directory) {
-           final dirName = path.basename(entity.path);
-           if (!dirName.startsWith('.') &&
-               !excludedMediaFileNamePrefixes.contains(dirName)) {
-             final dirStat = await entity.stat();
-             final dirId = _generateId(entity.path);
+      // First, scan for subdirectories
+      LoggingService.instance.debug('Scanning for subdirectories');
+      final subdirScanStart = DateTime.now();
+      await for (final entity in directory.list(
+        recursive: false,
+        followLinks: false,
+      )) {
+        if (entity is Directory) {
+          final dirName = path.basename(entity.path);
+          if (!dirName.startsWith('.') &&
+              !excludedMediaFileNamePrefixes.contains(dirName)) {
+            final dirStat = await entity.stat();
+            final dirId = _generateId(entity.path);
 
-             mediaItems.add(
-               MediaModel(
-                 id: dirId,
-                 path: entity.path,
-                 name: dirName,
-                 type: MediaType.directory,
-                 size: 0, // Directories don't have a size in the same way
-                 lastModified: dirStat.modified,
-                 directoryId: directoryId,
-                 tagIds: const [],
-                 bookmarkData: null, // Subdirectories inherit access from parent directory
-               ),
-             );
-           }
-         }
-       }
-       final subdirScanDuration = DateTime.now().difference(subdirScanStart);
-       LoggingService.instance.info('Found ${mediaItems.where((m) => m.type == MediaType.directory).length} subdirectories, subdir scan took ${subdirScanDuration.inMilliseconds}ms');
+            mediaItems.add(
+              MediaModel(
+                id: dirId,
+                path: entity.path,
+                name: dirName,
+                type: MediaType.directory,
+                size: 0, // Directories don't have a size in the same way
+                lastModified: dirStat.modified,
+                directoryId: directoryId,
+                tagIds: const [],
+                bookmarkData:
+                    null, // Subdirectories inherit access from parent directory
+              ),
+            );
+          }
+        }
+      }
+      final subdirScanDuration = DateTime.now().difference(subdirScanStart);
+      LoggingService.instance.info(
+        'Found ${mediaItems.where((m) => m.type == MediaType.directory).length} subdirectories, subdir scan took ${subdirScanDuration.inMilliseconds}ms',
+      );
 
-       // Then scan for media files
-       LoggingService.instance.debug('Starting recursive scan for media files');
-       final fileScanStart = DateTime.now();
-       await _scanDirectoryRecursive(directory, directoryId, mediaItems);
-       final fileScanDuration = DateTime.now().difference(fileScanStart);
-       final fileCount = mediaItems.where((m) => m.type != MediaType.directory).length;
-       LoggingService.instance.info('Scan completed, found $fileCount media files, file scan took ${fileScanDuration.inMilliseconds}ms');
+      // Then scan for media files
+      LoggingService.instance.debug('Starting recursive scan for media files');
+      final fileScanStart = DateTime.now();
+      await _scanDirectoryRecursive(directory, directoryId, mediaItems);
+      final fileScanDuration = DateTime.now().difference(fileScanStart);
+      final fileCount = mediaItems
+          .where((m) => m.type != MediaType.directory)
+          .length;
+      LoggingService.instance.info(
+        'Scan completed, found $fileCount media files, file scan took ${fileScanDuration.inMilliseconds}ms',
+      );
 
-       final totalScanDuration = DateTime.now().difference(scanStartTime);
-       LoggingService.instance.info('Total scan duration: ${totalScanDuration.inMilliseconds}ms for ${mediaItems.length} items');
+      final totalScanDuration = DateTime.now().difference(scanStartTime);
+      LoggingService.instance.info(
+        'Total scan duration: ${totalScanDuration.inMilliseconds}ms for ${mediaItems.length} items',
+      );
 
-       return mediaItems;
+      return mediaItems;
     } catch (e) {
       // Log detailed error information for debugging
       final errorMessage = e.toString();
@@ -303,15 +363,22 @@ class FilesystemMediaDataSource {
         details: 'started_access=$startedAccess',
       );
 
-      LoggingService.instance.error('Failed to scan directory $resolvedPath: $e');
-      if (errorMessage.contains('Operation not permitted') || errorMessage.contains('errno = 1')) {
+      LoggingService.instance.error(
+        'Failed to scan directory $resolvedPath: $e',
+      );
+      if (errorMessage.contains('Operation not permitted') ||
+          errorMessage.contains('errno = 1')) {
         _permissionSvc.logPermissionEvent(
           'permission_denied_detected',
           path: resolvedPath,
           error: errorMessage,
         );
-        LoggingService.instance.warning('Permission denied - security-scoped bookmark may have expired for directory: $resolvedPath');
-        throw DirectoryAccessDeniedError('Permission denied scanning directory: $resolvedPath');
+        LoggingService.instance.warning(
+          'Permission denied - security-scoped bookmark may have expired for directory: $resolvedPath',
+        );
+        throw DirectoryAccessDeniedError(
+          'Permission denied scanning directory: $resolvedPath',
+        );
       }
       throw DirectoryScanError('Failed to scan directory: $e');
     } finally {
@@ -319,9 +386,13 @@ class FilesystemMediaDataSource {
       if (startedAccess && effectiveBookmarkData != null) {
         try {
           await _bookmarkService.stopAccessingBookmark(effectiveBookmarkData);
-          LoggingService.instance.debug('Stopped accessing bookmark for directory: $directoryPath');
+          LoggingService.instance.debug(
+            'Stopped accessing bookmark for directory: $directoryPath',
+          );
         } catch (e) {
-          LoggingService.instance.warning('Failed to stop accessing bookmark for directory $directoryPath: $e');
+          LoggingService.instance.warning(
+            'Failed to stop accessing bookmark for directory $directoryPath: $e',
+          );
           // Don't throw - cleanup failure shouldn't break the operation
         }
       }
@@ -356,120 +427,141 @@ class FilesystemMediaDataSource {
   }
 
   /// Recursively scans a directory for media files.
-   Future<void> _scanDirectoryRecursive(
-     Directory directory,
-     String directoryId,
-     List<MediaModel> mediaFiles,
-   ) async {
-     LoggingService.instance.debug('Scanning directory recursively: ${directory.path}');
-     final scanStart = DateTime.now();
+  Future<void> _scanDirectoryRecursive(
+    Directory directory,
+    String directoryId,
+    List<MediaModel> mediaFiles,
+  ) async {
+    LoggingService.instance.debug(
+      'Scanning directory recursively: ${directory.path}',
+    );
+    final scanStart = DateTime.now();
 
-     try {
-       // First, collect all file entities
-       final fileEntities = <File>[];
-       await for (final entity in directory.list(
-         recursive: false,
-         followLinks: false,
-       )) {
-         if (entity is File) {
-           fileEntities.add(entity);
-         } else if (entity is Directory) {
-           // For nested directories, we could add them as special media items
-           // but for now, we'll focus on files only
-           continue;
-         }
-       }
+    try {
+      // First, collect all file entities
+      final fileEntities = <File>[];
+      await for (final entity in directory.list(
+        recursive: false,
+        followLinks: false,
+      )) {
+        if (entity is File) {
+          fileEntities.add(entity);
+        } else if (entity is Directory) {
+          // For nested directories, we could add them as special media items
+          // but for now, we'll focus on files only
+          continue;
+        }
+      }
 
-       LoggingService.instance.debug('Found ${fileEntities.length} files to process');
+      LoggingService.instance.debug(
+        'Found ${fileEntities.length} files to process',
+      );
 
-       // Process files in parallel batches to improve performance
-       const batchSize = 10; // Process 10 files concurrently
-       final batches = <List<File>>[];
-       for (var i = 0; i < fileEntities.length; i += batchSize) {
-         final end = (i + batchSize < fileEntities.length) ? i + batchSize : fileEntities.length;
-         batches.add(fileEntities.sublist(i, end));
-       }
+      // Process files in parallel batches to improve performance
+      const batchSize = 10; // Process 10 files concurrently
+      final batches = <List<File>>[];
+      for (var i = 0; i < fileEntities.length; i += batchSize) {
+        final end = (i + batchSize < fileEntities.length)
+            ? i + batchSize
+            : fileEntities.length;
+        batches.add(fileEntities.sublist(i, end));
+      }
 
-       LoggingService.instance.debug('Processing ${batches.length} batches of files');
+      LoggingService.instance.debug(
+        'Processing ${batches.length} batches of files',
+      );
 
-       for (final batch in batches) {
-         final batchFutures = batch.map((file) => _processFile(file, directoryId));
-         final batchResults = await Future.wait(batchFutures);
+      for (final batch in batches) {
+        final batchFutures = batch.map(
+          (file) => _processFile(file, directoryId),
+        );
+        final batchResults = await Future.wait(batchFutures);
 
-         for (final media in batchResults) {
-           if (media != null) {
-             mediaFiles.add(media);
-           }
-         }
-       }
+        for (final media in batchResults) {
+          if (media != null) {
+            mediaFiles.add(media);
+          }
+        }
+      }
 
-       final scanDuration = DateTime.now().difference(scanStart);
-       final processedFiles = fileEntities.length;
-       final mediaFilesFound = mediaFiles.length - mediaFiles.where((m) => m.type == MediaType.directory).length;
+      final scanDuration = DateTime.now().difference(scanStart);
+      final processedFiles = fileEntities.length;
+      final mediaFilesFound =
+          mediaFiles.length -
+          mediaFiles.where((m) => m.type == MediaType.directory).length;
 
-       LoggingService.instance.debug('Completed scanning directory: ${directory.path}, processed $processedFiles files, found $mediaFilesFound media files, took ${scanDuration.inMilliseconds}ms');
-     } catch (e) {
-       // Log permission errors for debugging
-       LoggingService.instance.error('Failed to scan subdirectory ${directory.path}: $e');
-       if (e.toString().contains('Operation not permitted') || e.toString().contains('errno = 1')) {
-         LoggingService.instance.warning('Permission denied in subdirectory - security-scoped bookmark may have expired for: ${directory.path}');
-       }
-       // Skip directories we can't access
-       return;
-     }
-   }
+      LoggingService.instance.debug(
+        'Completed scanning directory: ${directory.path}, processed $processedFiles files, found $mediaFilesFound media files, took ${scanDuration.inMilliseconds}ms',
+      );
+    } catch (e) {
+      // Log permission errors for debugging
+      LoggingService.instance.error(
+        'Failed to scan subdirectory ${directory.path}: $e',
+      );
+      if (e.toString().contains('Operation not permitted') ||
+          e.toString().contains('errno = 1')) {
+        LoggingService.instance.warning(
+          'Permission denied in subdirectory - security-scoped bookmark may have expired for: ${directory.path}',
+        );
+      }
+      // Skip directories we can't access
+      return;
+    }
+  }
 
   /// Processes a single file to determine if it's media and create a MediaModel.
-   Future<MediaModel?> _processFile(File file, String directoryId) async {
-     final fileName = path.basename(file.path);
-     final extension = path
-         .extension(file.path)
-         .toLowerCase()
-         .replaceFirst('.', '');
+  Future<MediaModel?> _processFile(File file, String directoryId) async {
+    final fileName = path.basename(file.path);
+    final extension = path
+        .extension(file.path)
+        .toLowerCase()
+        .replaceFirst('.', '');
 
-     // Skip excluded files
-     if (isExcludedMediaFileName(fileName)) {
-       return null;
-     }
+    // Skip excluded files
+    if (isExcludedMediaFileName(fileName)) {
+      return null;
+    }
 
-     // Determine media type
-     final mediaType = _getMediaType(extension);
-     if (mediaType == null) {
-       return null;
-     }
+    // Determine media type
+    final mediaType = _getMediaType(extension);
+    if (mediaType == null) {
+      return null;
+    }
 
-     try {
-       // Get file stats - this is the potential bottleneck
-       final statStart = DateTime.now();
-       final stat = await file.stat();
-       final statDuration = DateTime.now().difference(statStart);
-       final size = stat.size;
-       final lastModified = stat.modified;
+    try {
+      // Get file stats - this is the potential bottleneck
+      final statStart = DateTime.now();
+      final stat = await file.stat();
+      final statDuration = DateTime.now().difference(statStart);
+      final size = stat.size;
+      final lastModified = stat.modified;
 
-       // Log slow file.stat() calls (over 10ms)
-       if (statDuration.inMilliseconds > 10) {
-         LoggingService.instance.warning('Slow file.stat() for ${file.path}: ${statDuration.inMilliseconds}ms');
-       }
+      // Log slow file.stat() calls (over 10ms)
+      if (statDuration.inMilliseconds > 10) {
+        LoggingService.instance.warning(
+          'Slow file.stat() for ${file.path}: ${statDuration.inMilliseconds}ms',
+        );
+      }
 
-       // Generate ID from file system metadata for consistency across different access paths
-       final id = _generateIdFromMetadata(stat, file.path);
+      // Generate ID from file system metadata for consistency across different access paths
+      final id = _generateIdFromMetadata(stat, file.path);
 
-       return MediaModel(
-         id: id,
-         path: file.path,
-         name: fileName,
-         type: mediaType,
-         size: size,
-         lastModified: lastModified,
-         directoryId: directoryId,
-         tagIds: const [],
-       );
-     } catch (e) {
-       // Skip files we can't process
-       LoggingService.instance.debug('Failed to process file ${file.path}: $e');
-       return null;
-     }
-   }
+      return MediaModel(
+        id: id,
+        path: file.path,
+        name: fileName,
+        type: mediaType,
+        size: size,
+        lastModified: lastModified,
+        directoryId: directoryId,
+        tagIds: const [],
+      );
+    } catch (e) {
+      // Skip files we can't process
+      LoggingService.instance.debug('Failed to process file ${file.path}: $e');
+      return null;
+    }
+  }
 
   /// Determines the media type from file extension.
   MediaType? _getMediaType(String extension) {
@@ -508,7 +600,11 @@ class FilesystemMediaDataSource {
     String? bookmarkData,
   }) async {
     // Note: scanMediaForDirectory already handles bookmark access lifecycle
-    final allMedia = await scanMediaForDirectory(directoryPath, directoryId, bookmarkData: bookmarkData);
+    final allMedia = await scanMediaForDirectory(
+      directoryPath,
+      directoryId,
+      bookmarkData: bookmarkData,
+    );
     return allMedia.where((media) => media.id == mediaId).firstOrNull;
   }
 
@@ -521,7 +617,11 @@ class FilesystemMediaDataSource {
     IsarMediaDataSource? mediaPersistence,
   }) async {
     // Note: scanMediaForDirectory already handles bookmark access lifecycle
-    final allMedia = await scanMediaForDirectory(directoryPath, directoryId, bookmarkData: bookmarkData);
+    final allMedia = await scanMediaForDirectory(
+      directoryPath,
+      directoryId,
+      bookmarkData: bookmarkData,
+    );
 
     // If we have a shared preferences data source, merge tagIds from persisted data
     List<MediaModel> mediaWithTags = allMedia;
@@ -539,7 +639,9 @@ class FilesystemMediaDataSource {
           type: entity.type,
           size: entity.size,
           lastModified: entity.lastModified,
-          tagIds: existing?.tagIds ?? entity.tagIds, // Merge tagIds from persisted data
+          tagIds:
+              existing?.tagIds ??
+              entity.tagIds, // Merge tagIds from persisted data
           directoryId: entity.directoryId,
           bookmarkData: entity.bookmarkData,
         );
@@ -551,5 +653,4 @@ class FilesystemMediaDataSource {
         .where((media) => media.tagIds.any((tagId) => tagIds.contains(tagId)))
         .toList();
   }
-
 }

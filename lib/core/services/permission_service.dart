@@ -2,17 +2,14 @@ import 'dart:io';
 
 import '../config/app_config.dart';
 import '../error/app_error.dart';
+import '../../shared/utils/bookmark_resolver.dart';
 import 'bookmark_service.dart';
 import 'directory_picker_service.dart';
 import 'logging_service.dart';
+import 'platform_service.dart';
 
 /// Enum representing the status of directory access permissions
-enum PermissionStatus {
-  granted,
-  denied,
-  notFound,
-  error,
-}
+enum PermissionStatus { granted, denied, notFound, error }
 
 /// Result of bookmark validation
 class BookmarkValidationResult {
@@ -42,10 +39,21 @@ class DirectoryRecoveryResult {
 
 /// Service for handling permissions on iOS/macOS
 class PermissionService {
-  PermissionService([BookmarkService? bookmarkService])
-      : _bookmarkService = bookmarkService ?? BookmarkService.instance;
+  PermissionService([
+    BookmarkService? bookmarkService,
+    DirectoryPicker? directoryPickerService,
+    PlatformService? platformService,
+  ]) : _bookmarkService = bookmarkService ?? BookmarkService.instance,
+       _directoryPickerService =
+           directoryPickerService ?? const DirectoryPickerService(),
+       _platformService = platformService ?? PlatformService();
 
   final BookmarkService _bookmarkService;
+  final DirectoryPicker _directoryPickerService;
+  final PlatformService _platformService;
+
+  bool get _supportsBookmarks =>
+      _platformService.isMacOS || _platformService.isIOS;
 
   /// Checks if storage permission is granted
   Future<bool> hasStoragePermission() async {
@@ -72,16 +80,47 @@ class PermissionService {
     return await hasStoragePermission();
   }
 
-  /// Checks if we can access a specific directory path (macOS specific)
-  Future<PermissionStatus> checkDirectoryAccess(String directoryPath) async {
+  /// Checks whether a directory can be read, optionally within bookmark scope.
+  Future<PermissionStatus> checkDirectoryAccess(
+    String directoryPath, {
+    String? bookmarkData,
+  }) async {
+    if (bookmarkData == null || bookmarkData.isEmpty || !_supportsBookmarks) {
+      return _checkDirectoryPathAccess(directoryPath);
+    }
+
+    var isAccessingBookmark = false;
+    try {
+      final resolvedPath = await _bookmarkService.startAccessingBookmark(
+        bookmarkData,
+      );
+      isAccessingBookmark = true;
+      final accessPath = resolveScanTarget(directoryPath, resolvedPath);
+      return await _checkDirectoryPathAccess(accessPath);
+    } catch (error) {
+      logPermissionEvent(
+        'bookmark_access_failed',
+        path: directoryPath,
+        error: error.toString(),
+      );
+      return PermissionStatus.denied;
+    } finally {
+      if (isAccessingBookmark) {
+        await _bookmarkService.stopAccessingBookmark(bookmarkData);
+      }
+    }
+  }
+
+  Future<PermissionStatus> _checkDirectoryPathAccess(
+    String directoryPath,
+  ) async {
     try {
       final directory = Directory(directoryPath);
       if (!await directory.exists()) {
         return PermissionStatus.notFound;
       }
 
-      // Try to list directory contents to check access
-      await directory.list().first;
+      await directory.list().isEmpty;
       return PermissionStatus.granted;
     } catch (e) {
       final errorMessage = e.toString();
@@ -94,24 +133,33 @@ class PermissionService {
     }
   }
 
-  /// Validates bookmark data for macOS security-scoped access
+  /// Validates bookmark data for Apple security-scoped access.
   Future<BookmarkValidationResult> validateBookmark(String bookmarkData) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsBookmarks) {
         return const BookmarkValidationResult(
           isValid: false,
-          reason: 'Bookmarks only supported on macOS',
+          reason: 'Bookmarks are only supported on Apple platforms',
         );
       }
 
-      logPermissionEvent('bookmark_validation_start', details: 'validating bookmark');
+      logPermissionEvent(
+        'bookmark_validation_start',
+        details: 'validating bookmark',
+      );
 
       // Check if bookmark is valid
       final isValid = await _bookmarkService.isBookmarkValid(bookmarkData);
 
       if (!isValid) {
-        logPermissionEvent('bookmark_validation_failed', error: 'CRITICAL: bookmark invalid or expired - this is the root cause of access denied errors');
-        LoggingService.instance.error('CRITICAL: Bookmark validation failed in PermissionService - bookmark has expired or become invalid');
+        logPermissionEvent(
+          'bookmark_validation_failed',
+          error:
+              'CRITICAL: bookmark invalid or expired - this is the root cause of access denied errors',
+        );
+        LoggingService.instance.error(
+          'CRITICAL: Bookmark validation failed in PermissionService - bookmark has expired or become invalid',
+        );
         return const BookmarkValidationResult(
           isValid: false,
           reason: 'Bookmark is invalid or expired',
@@ -120,14 +168,22 @@ class PermissionService {
 
       // Try to resolve the bookmark to get the current path
       try {
-        final resolvedPath = await _bookmarkService.resolveBookmark(bookmarkData);
-        logPermissionEvent('bookmark_validation_success', details: 'resolved path: $resolvedPath');
+        final resolvedPath = await _bookmarkService.resolveBookmark(
+          bookmarkData,
+        );
+        logPermissionEvent(
+          'bookmark_validation_success',
+          details: 'resolved path: $resolvedPath',
+        );
         return BookmarkValidationResult(
           isValid: true,
           resolvedPath: resolvedPath,
         );
       } catch (resolveError) {
-        logPermissionEvent('bookmark_resolution_failed', error: resolveError.toString());
+        logPermissionEvent(
+          'bookmark_resolution_failed',
+          error: resolveError.toString(),
+        );
         return const BookmarkValidationResult(
           isValid: false,
           reason: 'Bookmark valid but resolution failed',
@@ -143,28 +199,39 @@ class PermissionService {
   }
 
   /// Attempts to recover access to a directory by prompting user
-  Future<DirectoryRecoveryResult?> recoverDirectoryAccess(String directoryPath) async {
+  Future<DirectoryRecoveryResult?> recoverDirectoryAccess(
+    String directoryPath,
+  ) async {
     try {
-      logPermissionEvent('directory_access_recovery_start', path: directoryPath);
+      logPermissionEvent(
+        'directory_access_recovery_start',
+        path: directoryPath,
+      );
 
-      if (!Platform.isMacOS) {
-        final directoryPickerService = DirectoryPickerService();
-        final selectedDirectory = await directoryPickerService.pickSingleDirectory(
-          initialDirectoryPath: directoryPath,
-          dialogTitle: 'Re-select Directory for Access Recovery',
-        );
+      if (!_platformService.isMacOS) {
+        final selectedDirectory = await _directoryPickerService
+            .pickSingleDirectory(
+              initialDirectoryPath: directoryPath,
+              dialogTitle: 'Re-select Directory for Access Recovery',
+            );
 
         if (selectedDirectory == null) {
-          logPermissionEvent('directory_access_recovery_cancelled', path: directoryPath);
+          logPermissionEvent(
+            'directory_access_recovery_cancelled',
+            path: directoryPath,
+          );
           return null;
         }
 
         // Validate that the selected directory is accessible
-        final accessStatus = await checkDirectoryAccess(selectedDirectory);
+        final accessStatus = await checkDirectoryAccess(
+          selectedDirectory.path,
+          bookmarkData: selectedDirectory.bookmarkData,
+        );
         if (accessStatus != PermissionStatus.granted) {
           logPermissionEvent(
             'directory_access_recovery_failed',
-            path: selectedDirectory,
+            path: selectedDirectory.path,
             error: 'Selected directory not accessible: $accessStatus',
           );
           return null;
@@ -172,11 +239,14 @@ class PermissionService {
 
         logPermissionEvent(
           'directory_access_recovery_success',
-          path: selectedDirectory,
+          path: selectedDirectory.path,
           details: 'original: $directoryPath',
         );
 
-        return DirectoryRecoveryResult(directoryPath: selectedDirectory);
+        return DirectoryRecoveryResult(
+          directoryPath: selectedDirectory.path,
+          bookmarkData: selectedDirectory.bookmarkData,
+        );
       }
 
       // On macOS, use the new bookmark-based approach
@@ -188,7 +258,10 @@ class PermissionService {
       final bookmarkData = result['bookmarkData'] as String?;
 
       if (selectedPath == null) {
-        logPermissionEvent('directory_access_recovery_cancelled', path: directoryPath);
+        logPermissionEvent(
+          'directory_access_recovery_cancelled',
+          path: directoryPath,
+        );
         return null;
       }
 
@@ -213,9 +286,12 @@ class PermissionService {
   }
 
   /// Attempts to renew an expired bookmark by re-creating it
-  Future<String?> renewBookmark(String expiredBookmarkData, String directoryPath) async {
+  Future<String?> renewBookmark(
+    String expiredBookmarkData,
+    String directoryPath,
+  ) async {
     try {
-      if (!Platform.isMacOS) {
+      if (!_supportsBookmarks) {
         return null;
       }
 
@@ -229,7 +305,9 @@ class PermissionService {
       }
 
       // Use the bookmark data from recovery if available, otherwise create new one
-      final newBookmarkData = recoveryResult.bookmarkData ?? await _bookmarkService.createBookmark(recoveryResult.directoryPath);
+      final newBookmarkData =
+          recoveryResult.bookmarkData ??
+          await _bookmarkService.createBookmark(recoveryResult.directoryPath);
 
       logPermissionEvent(
         'bookmark_renewal_success',
@@ -284,7 +362,12 @@ class PermissionService {
   }
 
   /// Logs permission-related events for debugging
-  void logPermissionEvent(String event, {String? path, String? error, String? details}) {
+  void logPermissionEvent(
+    String event, {
+    String? path,
+    String? error,
+    String? details,
+  }) {
     final timestamp = DateTime.now().toIso8601String();
     final logMessage = '[PermissionService:$timestamp] $event';
     final additionalInfo = <String>[];
@@ -292,7 +375,9 @@ class PermissionService {
     if (error != null) additionalInfo.add('error=$error');
     if (details != null) additionalInfo.add('details=$details');
 
-    final fullMessage = additionalInfo.isEmpty ? logMessage : '$logMessage (${additionalInfo.join(', ')})';
+    final fullMessage = additionalInfo.isEmpty
+        ? logMessage
+        : '$logMessage (${additionalInfo.join(', ')})';
 
     // Use the logging service
     LoggingService.instance.info(fullMessage);
@@ -311,14 +396,14 @@ class PermissionService {
       final directory = Directory(path);
       if (await directory.exists()) {
         // Try to list directory contents
-        await directory.list().first;
+        await directory.list().isEmpty;
         return true;
       }
 
       // Path doesn't exist, check if parent directory is accessible
       final parent = File(path).parent;
       if (await parent.exists()) {
-        await parent.list().first;
+        await parent.list().isEmpty;
         return true;
       }
 
@@ -378,7 +463,10 @@ class PermissionService {
       details: 'interval=${checkInterval.inMinutes}min',
     );
 
-    final accessStatus = await checkDirectoryAccess(directoryPath);
+    final accessStatus = await checkDirectoryAccess(
+      directoryPath,
+      bookmarkData: bookmarkData,
+    );
 
     // If no bookmark data, just check directory access
     if (bookmarkData == null) {
@@ -392,10 +480,14 @@ class PermissionService {
     }
 
     // Validate bookmark and attempt renewal if needed
-    final bookmarkValidation = await validateAndRenewBookmark(bookmarkData, directoryPath);
+    final bookmarkValidation = await validateAndRenewBookmark(
+      bookmarkData,
+      directoryPath,
+    );
 
     final bookmarkValid = bookmarkValidation.isValid;
-    final requiresRecovery = accessStatus == PermissionStatus.denied || !bookmarkValid;
+    final requiresRecovery =
+        accessStatus == PermissionStatus.denied || !bookmarkValid;
 
     if (requiresRecovery) {
       final reason = accessStatus == PermissionStatus.denied
@@ -432,18 +524,23 @@ class PermissionService {
 
     for (final path in directoryPaths) {
       final bookmarkData = bookmarkDataMap?[path];
-      final accessStatus = await checkDirectoryAccess(path);
+      final accessStatus = await checkDirectoryAccess(
+        path,
+        bookmarkData: bookmarkData,
+      );
 
       // If no bookmark data, just check directory access
       if (bookmarkData == null) {
         final requiresRecovery = accessStatus != PermissionStatus.granted;
-        results.add(DirectoryPermissionStatus(
-          path: path,
-          status: accessStatus,
-          requiresRecovery: requiresRecovery,
-          reason: requiresRecovery ? 'Directory access denied' : null,
-          lastChecked: DateTime.now(),
-        ));
+        results.add(
+          DirectoryPermissionStatus(
+            path: path,
+            status: accessStatus,
+            requiresRecovery: requiresRecovery,
+            reason: requiresRecovery ? 'Directory access denied' : null,
+            lastChecked: DateTime.now(),
+          ),
+        );
 
         logPermissionEvent(
           'batch_validation',
@@ -454,29 +551,36 @@ class PermissionService {
       }
 
       // Validate bookmark and attempt renewal if needed
-      final bookmarkValidation = await validateAndRenewBookmark(bookmarkData, path);
+      final bookmarkValidation = await validateAndRenewBookmark(
+        bookmarkData,
+        path,
+      );
       final bookmarkValid = bookmarkValidation.isValid;
 
-      final requiresRecovery = accessStatus == PermissionStatus.denied || !bookmarkValid;
+      final requiresRecovery =
+          accessStatus == PermissionStatus.denied || !bookmarkValid;
 
       final reason = accessStatus == PermissionStatus.denied
           ? 'Directory access denied'
           : !bookmarkValid
-              ? 'Bookmark invalid: ${bookmarkValidation.reason}'
-              : null;
+          ? 'Bookmark invalid: ${bookmarkValidation.reason}'
+          : null;
 
-      results.add(DirectoryPermissionStatus(
-        path: path,
-        status: accessStatus,
-        requiresRecovery: requiresRecovery,
-        reason: reason,
-        lastChecked: DateTime.now(),
-      ));
+      results.add(
+        DirectoryPermissionStatus(
+          path: path,
+          status: accessStatus,
+          requiresRecovery: requiresRecovery,
+          reason: reason,
+          lastChecked: DateTime.now(),
+        ),
+      );
 
       logPermissionEvent(
         'batch_validation',
         path: path,
-        details: 'status=$accessStatus, bookmark_valid=$bookmarkValid, recovery_needed=$requiresRecovery',
+        details:
+            'status=$accessStatus, bookmark_valid=$bookmarkValid, recovery_needed=$requiresRecovery',
       );
     }
 

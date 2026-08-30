@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../utils/playback_speed_policy.dart';
+import 'playback_speed_control.dart';
+
 /// Builder callback for customizing the progress presentation of the controls.
 typedef MediaPlaybackProgressBuilder =
     Widget Function(
@@ -186,7 +189,7 @@ class MediaPlaybackControls extends StatelessWidget {
     this.isMuted = false,
     this.isVideoLooping = false,
     this.playbackSpeed,
-    this.playbackSpeedOptions = const [1.0],
+    this.playbackSpeedOptions = PlaybackSpeedPolicy.presets,
     this.progress,
     this.minDuration = const Duration(seconds: 1),
     this.maxDuration = const Duration(seconds: 10),
@@ -401,68 +404,22 @@ class MediaPlaybackControls extends StatelessWidget {
   }
 
   Widget _buildPlaybackSpeedButton() {
-    final speeds =
-        (playbackSpeedOptions.isEmpty ? const [1.0] : playbackSpeedOptions)
-            .toSet()
-            .toList()
-          ..sort();
-    final currentSpeed = playbackSpeed ?? speeds.first;
+    final currentSpeed =
+        playbackSpeed ??
+        (playbackSpeedOptions.isNotEmpty
+            ? playbackSpeedOptions.first
+            : PlaybackSpeedPolicy.presets.first);
     final enabled =
         availability.enablePlaybackSpeed && onPlaybackSpeedSelected != null;
 
-    return PopupMenuButton<double>(
-      tooltip: 'Playback speed',
+    return PlaybackSpeedControl(
+      playbackSpeed: currentSpeed,
+      playbackSpeedOptions: playbackSpeedOptions,
       enabled: enabled,
-      initialValue: currentSpeed,
-      onSelected: enabled ? onPlaybackSpeedSelected : null,
-      itemBuilder: (context) {
-        return speeds
-            .map(
-              (speed) => PopupMenuItem<double>(
-                value: speed,
-                child: Row(
-                  children: [
-                    if (speed == currentSpeed)
-                      Icon(Icons.check, color: style.activeColor, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    Text(_formatPlaybackSpeed(speed)),
-                  ],
-                ),
-              ),
-            )
-            .toList();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: style.inactiveColor.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.speed),
-            const SizedBox(width: 6),
-            Text(
-              '${_formatPlaybackSpeed(currentSpeed)}x',
-              style: TextStyle(
-                color: enabled ? style.inactiveColor : style.inactiveColor,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
+      onPlaybackSpeedSelected: onPlaybackSpeedSelected,
+      foregroundColor: style.inactiveColor,
+      activeColor: style.activeColor,
     );
-  }
-
-  String _formatPlaybackSpeed(double speed) {
-    return speed == speed.roundToDouble()
-        ? speed.toStringAsFixed(0)
-        : speed.toStringAsFixed(1);
   }
 
   Widget _buildDurationSlider(BuildContext context) {

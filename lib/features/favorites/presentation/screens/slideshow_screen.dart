@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_fast_view/core/config/app_config.dart';
 import 'package:media_fast_view/shared/providers/settings_providers.dart';
+import 'package:media_fast_view/shared/utils/playback_speed_policy.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../../shared/widgets/delete_media_action.dart';
@@ -94,9 +95,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
                   viewModel: slideshowViewModel,
                   onClose: () => Navigator.of(context).pop(),
                   onPlayPause: _handlePlayPause,
-                  onDelete: Platform.isMacOS
-                      ? _handleDeleteCurrentMedia
-                      : null,
+                  onDelete: Platform.isMacOS ? _handleDeleteCurrentMedia : null,
                 ),
             ],
           ),
@@ -142,6 +141,7 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
         seekNotifier: _seekNotifier,
         onPositionUpdate: viewModel.updateVideoPosition,
         onDurationUpdate: viewModel.updateVideoDuration,
+        onPlaybackSpeedRejected: _handlePlaybackSpeedRejected,
       );
     }
 
@@ -211,6 +211,34 @@ class _SlideshowScreenState extends ConsumerState<SlideshowScreen> {
     } else {
       viewModel.startSlideshow();
     }
+  }
+
+  void _handlePlaybackSpeedRejected(
+    double attemptedSpeed,
+    double fallbackSpeed,
+  ) {
+    if (!mounted) {
+      return;
+    }
+
+    final viewModel = ref.read(
+      slideshowViewModelProvider(widget.mediaList).notifier,
+    );
+    viewModel.setPlaybackSpeed(fallbackSpeed);
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          '${PlaybackSpeedPolicy.format(attemptedSpeed)}x playback is not '
+          'supported for this media. Restored '
+          '${PlaybackSpeedPolicy.format(fallbackSpeed)}x.',
+        ),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   /// Moves the current slideshow item to the Trash and advances (closing the

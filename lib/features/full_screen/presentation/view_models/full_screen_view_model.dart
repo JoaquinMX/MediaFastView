@@ -18,6 +18,7 @@ import '../../../../shared/utils/tag_cache_refresher.dart';
 import '../../../../shared/utils/tag_lookup.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';
 import '../../../../shared/utils/tag_usage_ranker.dart';
+import '../../../../shared/utils/playback_speed_policy.dart';
 import '../../domain/use_cases/load_media_for_viewing_use_case.dart';
 import '../../domain/entities/viewer_state_entity.dart';
 import '../../../../core/services/logging_service.dart';
@@ -34,15 +35,16 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     PlaybackSettings playbackSettings, {
     TagMutationService? tagMutationService,
     TagUsageRanker? tagUsageRanker,
-  })  : _playbackSettings = playbackSettings,
-        _tagMutationService = tagMutationService ??
-            TagMutationService(
-              assignTagUseCase: _assignTagUseCase,
-              tagLookup: _tagLookup,
-              tagCacheRefresher: _tagCacheRefresher,
-            ),
-        _tagUsageRanker = tagUsageRanker ?? const TagUsageRanker(),
-        super(const FullScreenInitial());
+  }) : _playbackSettings = playbackSettings,
+       _tagMutationService =
+           tagMutationService ??
+           TagMutationService(
+             assignTagUseCase: _assignTagUseCase,
+             tagLookup: _tagLookup,
+             tagCacheRefresher: _tagCacheRefresher,
+           ),
+       _tagUsageRanker = tagUsageRanker ?? const TagUsageRanker(),
+       super(const FullScreenInitial());
 
   final LoadMediaForViewingUseCase _loadMediaUseCase;
   final FavoritesViewModel _favoritesViewModel;
@@ -83,7 +85,9 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     bool startAtEnd = false,
   }) async {
     if (_siblingDirectories.isEmpty ||
-        !_siblingDirectories.any((directory) => directory.path == target.path)) {
+        !_siblingDirectories.any(
+          (directory) => directory.path == target.path,
+        )) {
       _siblingDirectories = [..._siblingDirectories, target];
     }
 
@@ -116,13 +120,16 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     );
 
     if (_siblingDirectories.isNotEmpty) {
-      final resolvedIndex = currentIndex ??
+      final resolvedIndex =
+          currentIndex ??
           _siblingDirectories.indexWhere(
             (directory) => directory.path == directoryPath,
           );
 
-      final safeIndex = (resolvedIndex == -1 ? 0 : resolvedIndex)
-          .clamp(0, _siblingDirectories.length - 1);
+      final safeIndex = (resolvedIndex == -1 ? 0 : resolvedIndex).clamp(
+        0,
+        _siblingDirectories.length - 1,
+      );
       _currentDirectoryIndex = safeIndex;
       _currentDirectory = _siblingDirectories[_currentDirectoryIndex];
     } else {
@@ -147,7 +154,9 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     int? initialIndex,
     bool startAtEnd = false,
   }) async {
-    LoggingService.instance.info('Initializing with directoryPath: $directoryPath, initialMediaId: $initialMediaId, mediaList provided: ${mediaList != null}');
+    LoggingService.instance.info(
+      'Initializing with directoryPath: $directoryPath, initialMediaId: $initialMediaId, mediaList provided: ${mediaList != null}',
+    );
     Future(() {
       state = const FullScreenLoading();
     });
@@ -158,20 +167,32 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       if (mediaList != null) {
         // Use provided media list (e.g., favorites)
         finalMediaList = mediaList;
-        LoggingService.instance.info('Using provided mediaList with ${finalMediaList.length} items');
+        LoggingService.instance.info(
+          'Using provided mediaList with ${finalMediaList.length} items',
+        );
       } else {
         // Load media from directory
         // Generate directoryId from path for consistency
         final directoryId = generateDirectoryId(directoryPath);
         LoggingService.instance.debug('Generated directoryId: $directoryId');
 
-        LoggingService.instance.debug('Calling _loadMediaUseCase.call($directoryPath, $directoryId, bookmarkData: $bookmarkData)');
-        finalMediaList = await _loadMediaUseCase.call(directoryPath, directoryId, bookmarkData: bookmarkData);
-        LoggingService.instance.info('Received mediaList with ${finalMediaList.length} items');
+        LoggingService.instance.debug(
+          'Calling _loadMediaUseCase.call($directoryPath, $directoryId, bookmarkData: $bookmarkData)',
+        );
+        finalMediaList = await _loadMediaUseCase.call(
+          directoryPath,
+          directoryId,
+          bookmarkData: bookmarkData,
+        );
+        LoggingService.instance.info(
+          'Received mediaList with ${finalMediaList.length} items',
+        );
       }
 
       if (finalMediaList.isEmpty) {
-        LoggingService.instance.warning('mediaList is empty, setting error state');
+        LoggingService.instance.warning(
+          'mediaList is empty, setting error state',
+        );
         Future(() {
           state = const FullScreenError('No media found');
         });
@@ -202,9 +223,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       final isPlayable = currentMedia.type.isTimeBased;
 
       // Check if current media is favorite
-      final isFavorite = await _favoritesRepository.isFavorite(
-        currentMedia.id,
-      );
+      final isFavorite = await _favoritesRepository.isFavorite(currentMedia.id);
 
       _loopOverridden = false;
 
@@ -228,7 +247,6 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
           shortcutTags: shortcutTags,
         );
       });
-
     } catch (e) {
       LoggingService.instance.error('Error during initialization: $e');
       // Check if this is a permission-related error
@@ -247,7 +265,10 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
   }
 
   /// Attempt to recover permissions for the current directory
-  Future<bool> attemptPermissionRecovery(String directoryPath, {String? bookmarkData}) async {
+  Future<bool> attemptPermissionRecovery(
+    String directoryPath, {
+    String? bookmarkData,
+  }) async {
     final permissionService = PermissionService();
     permissionService.logPermissionEvent(
       'fullscreen_recovery_attempt',
@@ -293,10 +314,8 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         totalDuration: Duration.zero,
         isPlaying:
             nextMedia.type.isTimeBased && _playbackSettings.autoplayVideos,
-        isMuted:
-            nextMedia.type.isTimeBased && _playbackSettings.startMuted,
-        isLooping:
-            nextMedia.type.isTimeBased && _playbackSettings.loopVideos,
+        isMuted: nextMedia.type.isTimeBased && _playbackSettings.startMuted,
+        isLooping: nextMedia.type.isTimeBased && _playbackSettings.loopVideos,
         currentMediaTags: nextTags,
       );
 
@@ -331,12 +350,11 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
         isFavorite: isFavorite,
         currentPosition: Duration.zero,
         totalDuration: Duration.zero,
-        isPlaying: previousMedia.type.isTimeBased &&
-            _playbackSettings.autoplayVideos,
-        isMuted: previousMedia.type.isTimeBased &&
-            _playbackSettings.startMuted,
-        isLooping: previousMedia.type.isTimeBased &&
-            _playbackSettings.loopVideos,
+        isPlaying:
+            previousMedia.type.isTimeBased && _playbackSettings.autoplayVideos,
+        isMuted: previousMedia.type.isTimeBased && _playbackSettings.startMuted,
+        isLooping:
+            previousMedia.type.isTimeBased && _playbackSettings.loopVideos,
         currentMediaTags: previousTags,
       );
 
@@ -471,8 +489,11 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     final currentState = state;
     if (currentState is! FullScreenLoaded) return;
 
-    if (currentState.currentMedia.type.isTimeBased && speed > 0) {
-      state = currentState.copyWith(playbackSpeed: speed);
+    final normalizedSpeed = PlaybackSpeedPolicy.normalize(speed);
+    if (currentState.currentMedia.type.isTimeBased &&
+        normalizedSpeed != null &&
+        normalizedSpeed != currentState.playbackSpeed) {
+      state = currentState.copyWith(playbackSpeed: normalizedSpeed);
     }
   }
 
@@ -551,9 +572,7 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       return const <TagEntity>[];
     }
 
-    final tagsById = {
-      for (final tag in resolvedTags) tag.id: tag,
-    };
+    final tagsById = {for (final tag in resolvedTags) tag.id: tag};
 
     return [
       for (final tagId in rankedTagIds)
@@ -565,19 +584,23 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
     try {
       await _tagLookup.refresh();
     } catch (error, stackTrace) {
-      LoggingService.instance
-          .error('Failed to refresh tag lookup cache: $error');
-      LoggingService.instance
-          .debug('Tag lookup refresh stack trace: $stackTrace');
+      LoggingService.instance.error(
+        'Failed to refresh tag lookup cache: $error',
+      );
+      LoggingService.instance.debug(
+        'Tag lookup refresh stack trace: $stackTrace',
+      );
     }
 
     try {
       await _tagCacheRefresher.refresh();
     } catch (error, stackTrace) {
-      LoggingService.instance
-          .error('Failed to refresh tag view models: $error');
-      LoggingService.instance
-          .debug('Tag cache refresh stack trace: $stackTrace');
+      LoggingService.instance.error(
+        'Failed to refresh tag view models: $error',
+      );
+      LoggingService.instance.debug(
+        'Tag cache refresh stack trace: $stackTrace',
+      );
     }
   }
 
@@ -599,15 +622,12 @@ class FullScreenViewModel extends StateNotifier<FullScreenState> {
       totalDuration: Duration.zero,
       isPlaying:
           targetMedia.type.isTimeBased && _playbackSettings.autoplayVideos,
-      isMuted:
-          targetMedia.type.isTimeBased && _playbackSettings.startMuted,
-      isLooping:
-          targetMedia.type.isTimeBased && _playbackSettings.loopVideos,
+      isMuted: targetMedia.type.isTimeBased && _playbackSettings.startMuted,
+      isLooping: targetMedia.type.isTimeBased && _playbackSettings.loopVideos,
       currentMediaTags: targetTags,
     );
 
     _loopOverridden = false;
-
   }
 
   /// Removes the current media from the in-memory list after it has been
@@ -682,26 +702,26 @@ class NavigationAttemptResult {
 
 /// Provider for FullScreenViewModel
 final fullScreenViewModelProvider =
-    StateNotifierProvider.autoDispose<FullScreenViewModel, FullScreenState>(
-  (ref) {
-    final viewModel = FullScreenViewModel(
-      ref.watch(loadMediaForViewingUseCaseProvider),
-      ref.read(favoritesViewModelProvider.notifier),
-      ref.watch(favoritesRepositoryProvider),
-      ref.watch(assignTagUseCaseProvider),
-      ref.watch(tagLookupProvider),
-      ref.watch(tagCacheRefresherProvider),
-      ref.read(videoPlaybackSettingsProvider),
-      tagMutationService: ref.watch(tagMutationServiceProvider),
-    );
+    StateNotifierProvider.autoDispose<FullScreenViewModel, FullScreenState>((
+      ref,
+    ) {
+      final viewModel = FullScreenViewModel(
+        ref.watch(loadMediaForViewingUseCaseProvider),
+        ref.read(favoritesViewModelProvider.notifier),
+        ref.watch(favoritesRepositoryProvider),
+        ref.watch(assignTagUseCaseProvider),
+        ref.watch(tagLookupProvider),
+        ref.watch(tagCacheRefresherProvider),
+        ref.read(videoPlaybackSettingsProvider),
+        tagMutationService: ref.watch(tagMutationServiceProvider),
+      );
 
-    ref.listen<PlaybackSettings>(
-      videoPlaybackSettingsProvider,
-      (previous, next) {
+      ref.listen<PlaybackSettings>(videoPlaybackSettingsProvider, (
+        previous,
+        next,
+      ) {
         viewModel.updatePlaybackPreferences(next);
-      },
-    );
+      });
 
-    return viewModel;
-  },
-);
+      return viewModel;
+    });

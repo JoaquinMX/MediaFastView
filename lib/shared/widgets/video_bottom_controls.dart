@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'media_progress_indicator.dart';
+import 'playback_speed_control.dart';
 import 'seekable_video_progress_bar.dart';
 
 /// Configuration for VideoBottomControls widget
@@ -212,56 +213,10 @@ class VideoBottomControls extends StatelessWidget {
   }
 
   Widget _buildPlaybackSpeedButton() {
-    final speeds = config.playbackSpeedOptions.toSet().toList()..sort();
-    final currentSpeed = config.playbackSpeed;
-    final enabled = config.onPlaybackSpeedSelected != null;
-
-    return PopupMenuButton<double>(
-      tooltip: 'Playback speed',
-      enabled: enabled,
-      initialValue: currentSpeed,
-      onSelected: enabled ? config.onPlaybackSpeedSelected : null,
-      itemBuilder: (context) {
-        return speeds
-            .map(
-              (speed) => PopupMenuItem<double>(
-                value: speed,
-                child: Row(
-                  children: [
-                    if (speed == currentSpeed)
-                      Icon(Icons.check, color: Colors.blue, size: 18)
-                    else
-                      const SizedBox(width: 18),
-                    const SizedBox(width: 8),
-                    Text('${speed}x'),
-                  ],
-                ),
-              ),
-            )
-            .toList();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.speed, color: Colors.white),
-            const SizedBox(width: 6),
-            Text(
-              '${currentSpeed}x',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return PlaybackSpeedControl(
+      playbackSpeed: config.playbackSpeed,
+      playbackSpeedOptions: config.playbackSpeedOptions,
+      onPlaybackSpeedSelected: config.onPlaybackSpeedSelected,
     );
   }
 }

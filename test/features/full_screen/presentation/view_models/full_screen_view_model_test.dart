@@ -18,6 +18,7 @@ import 'package:media_fast_view/shared/utils/tag_mutation_service.dart';
 import 'package:media_fast_view/shared/utils/tag_usage_ranker.dart';
 
 import '../mocks.dart';
+
 void main() {
   late MockLoadMediaForViewingUseCase loadMediaForViewingUseCase;
   late MockFavoritesViewModel favoritesViewModel;
@@ -27,12 +28,11 @@ void main() {
   late MockTagCacheRefresher tagCacheRefresher;
   late FullScreenViewModel viewModel;
 
-  const playbackSettings =
-      PlaybackSettings(
-        autoplayVideos: false,
-        loopVideos: false,
-        startMuted: false,
-      );
+  const playbackSettings = PlaybackSettings(
+    autoplayVideos: false,
+    loopVideos: false,
+    startMuted: false,
+  );
 
   setUp(() {
     loadMediaForViewingUseCase = MockLoadMediaForViewingUseCase();
@@ -87,10 +87,10 @@ void main() {
       shortcutTags: const <TagEntity>[],
     );
 
-    when(assignTagUseCase.assignTagToMedia(media.id, tag))
-        .thenAnswer((_) async {});
-    when(tagLookup.getTagsByIds(['tag-1']))
-        .thenAnswer((_) async => [tag]);
+    when(
+      assignTagUseCase.assignTagToMedia(media.id, tag),
+    ).thenAnswer((_) async {});
+    when(tagLookup.getTagsByIds(['tag-1'])).thenAnswer((_) async => [tag]);
     when(tagLookup.refresh()).thenAnswer((_) async {});
     when(tagCacheRefresher.refresh()).thenAnswer((_) async {});
 
@@ -140,10 +140,12 @@ void main() {
       shortcutTags: [tag],
     );
 
-    when(assignTagUseCase.removeTagFromMedia(media.id, tag))
-        .thenAnswer((_) async {});
-    when(tagLookup.getTagsByIds(const <String>[]))
-        .thenAnswer((_) async => const <TagEntity>[]);
+    when(
+      assignTagUseCase.removeTagFromMedia(media.id, tag),
+    ).thenAnswer((_) async {});
+    when(
+      tagLookup.getTagsByIds(const <String>[]),
+    ).thenAnswer((_) async => const <TagEntity>[]);
     when(tagLookup.refresh()).thenAnswer((_) async {});
     when(tagCacheRefresher.refresh()).thenAnswer((_) async {});
 
@@ -199,8 +201,9 @@ void main() {
       shortcutTags: [originalTag],
     );
 
-    when(assignTagUseCase.setTagsForMedia(['media-1'], ['tag-2', 'tag-1']))
-        .thenAnswer((_) async => BatchUpdateResult.empty);
+    when(
+      assignTagUseCase.setTagsForMedia(['media-1'], ['tag-2', 'tag-1']),
+    ).thenAnswer((_) async => BatchUpdateResult.empty);
     when(tagLookup.getTagsByIds(any)).thenAnswer((invocation) async {
       final ids = List<String>.from(invocation.positionalArguments.first);
       if (ids.length == 2 && ids.first == 'tag-2') {
@@ -214,8 +217,11 @@ void main() {
     when(tagLookup.refresh()).thenAnswer((_) async {});
     when(tagCacheRefresher.refresh()).thenAnswer((_) async {});
 
-    final result =
-        await viewModel.setTagsForCurrentMedia(['tag-2', 'tag-1', 'tag-2']);
+    final result = await viewModel.setTagsForCurrentMedia([
+      'tag-2',
+      'tag-1',
+      'tag-2',
+    ]);
 
     expect(result.addedCount, 1);
     expect(result.removedCount, 0);
@@ -225,8 +231,9 @@ void main() {
     expect(updatedState.currentMediaTags, [replacementTag, originalTag]);
     expect(updatedState.shortcutTags, [originalTag, replacementTag]);
 
-    verify(assignTagUseCase.setTagsForMedia(['media-1'], ['tag-2', 'tag-1']))
-        .called(1);
+    verify(
+      assignTagUseCase.setTagsForMedia(['media-1'], ['tag-2', 'tag-1']),
+    ).called(1);
     verify(tagLookup.refresh()).called(1);
     verify(tagCacheRefresher.refresh()).called(1);
   });
@@ -286,6 +293,27 @@ void main() {
     test('setPlaybackSpeed updates speed for audio', () {
       viewModel.state = audioState();
       viewModel.setPlaybackSpeed(2.0);
+      expect((viewModel.state as FullScreenLoaded).playbackSpeed, 2.0);
+    });
+
+    test('setPlaybackSpeed snaps and clamps speed for audio', () {
+      viewModel.state = audioState();
+
+      viewModel.setPlaybackSpeed(2.6);
+      expect((viewModel.state as FullScreenLoaded).playbackSpeed, 2.5);
+
+      viewModel.setPlaybackSpeed(100);
+      expect((viewModel.state as FullScreenLoaded).playbackSpeed, 16.0);
+
+      viewModel.setPlaybackSpeed(0.1);
+      expect((viewModel.state as FullScreenLoaded).playbackSpeed, 0.5);
+    });
+
+    test('setPlaybackSpeed ignores non-finite speed', () {
+      viewModel.state = audioState(playbackSpeed: 2.0);
+
+      viewModel.setPlaybackSpeed(double.nan);
+
       expect((viewModel.state as FullScreenLoaded).playbackSpeed, 2.0);
     });
 

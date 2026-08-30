@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/services/directory_access_grant.dart';
 import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/core/services/permission_service.dart';
 import 'package:media_fast_view/core/utils/batch_update_result.dart';
@@ -17,15 +18,27 @@ import 'package:media_fast_view/shared/providers/repository_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class InMemoryDirectoryRepository implements DirectoryRepository {
-  InMemoryDirectoryRepository(this._directories);
+  InMemoryDirectoryRepository(
+    this._directories, {
+    this.failingPaths = const <String>{},
+  });
 
   final List<DirectoryEntity> _directories;
+  List<DirectoryEntity> get directories =>
+      List<DirectoryEntity>.unmodifiable(_directories);
+  final Set<String> failingPaths;
+  final List<String> addAttempts = <String>[];
+  int getDirectoriesCallCount = 0;
 
   @override
   Future<void> addDirectory(
     DirectoryEntity directory, {
     bool silent = false,
   }) async {
+    addAttempts.add(directory.path);
+    if (failingPaths.contains(directory.path)) {
+      throw ArgumentError('Directory does not exist: ${directory.path}');
+    }
     _directories.add(directory);
   }
 
@@ -51,6 +64,7 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
 
   @override
   Future<List<DirectoryEntity>> getDirectories() async {
+    getDirectoriesCallCount += 1;
     return List<DirectoryEntity>.from(_directories);
   }
 
@@ -132,8 +146,7 @@ class InMemoryDirectoryRepository implements DirectoryRepository {
     for (final entry in directoryTags.entries) {
       final index = _directories.indexWhere((dir) => dir.id == entry.key);
       if (index != -1) {
-        _directories[index] =
-            _directories[index].copyWith(tagIds: entry.value);
+        _directories[index] = _directories[index].copyWith(tagIds: entry.value);
         updated++;
       } else {
         failed++;
@@ -191,12 +204,12 @@ class InMemoryMediaRepository implements MediaRepository {
     final countsByDirectory = <String, DirectoryMediaCounts>{};
 
     for (final item in _media) {
-      final previous = countsByDirectory[item.directoryId] ??
-          const DirectoryMediaCounts();
+      final previous =
+          countsByDirectory[item.directoryId] ?? const DirectoryMediaCounts();
       countsByDirectory[item.directoryId] = DirectoryMediaCounts(
         totalMediaCount: previous.totalMediaCount + 1,
-        taggedMediaCount: previous.taggedMediaCount +
-            (item.tagIds.isNotEmpty ? 1 : 0),
+        taggedMediaCount:
+            previous.taggedMediaCount + (item.tagIds.isNotEmpty ? 1 : 0),
       );
     }
 
@@ -258,8 +271,7 @@ class InMemoryMediaRepository implements MediaRepository {
   @override
   Future<int> rescanLibrary({
     void Function(int done, int total)? onProgress,
-  }) async =>
-      0;
+  }) async => 0;
 
   @override
   Future<void> clearAllMedia() async {
@@ -351,20 +363,32 @@ class FakeLocalDirectoryDataSource extends LocalDirectoryDataSource {
 }
 
 class FakePermissionService extends PermissionService {
-  FakePermissionService() : super();
+  FakePermissionService({this.recoveryResult}) : super();
+
+  final DirectoryRecoveryResult? recoveryResult;
+
+  @override
+  Future<DirectoryRecoveryResult?> recoverDirectoryAccess(
+    String directoryPath,
+  ) async {
+    return recoveryResult;
+  }
 }
 
 Future<ProviderContainer> _createDirectoryTestContainer({
   required InMemoryDirectoryRepository directoryRepository,
   required InMemoryMediaRepository mediaRepository,
   required InMemoryFavoritesRepository favoritesRepository,
+  PermissionService? permissionService,
 }) async {
   final container = ProviderContainer(
     overrides: [
       localDirectoryDataSourceProvider.overrideWithValue(
         FakeLocalDirectoryDataSource(),
       ),
-      permissionServiceProvider.overrideWithValue(FakePermissionService()),
+      permissionServiceProvider.overrideWithValue(
+        permissionService ?? FakePermissionService(),
+      ),
       directoryRepositoryProvider.overrideWith((ref) {
         return DirectoryRepositoryNotifier(directoryRepository);
       }),
@@ -447,6 +471,106 @@ void main() {
         container.read(directoryViewModelProvider) as DirectoryLoaded;
     expect(cleared.selectedDirectoryIds, isEmpty);
     expect(cleared.isSelectionMode, isFalse);
+  });
+
+  test('addDirectories deduplicates paths and reloads once', () async {
+    final container = await _createDirectoryTestContainer(
+      directoryRepository: directoryRepository,
+      mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(directoryViewModelProvider.notifier);
+    await viewModel.loadDirectories();
+    final callsBeforeBatch = directoryRepository.getDirectoriesCallCount;
+
+    final result = await viewModel.addDirectories(const <DirectoryAccessGrant>[
+      DirectoryAccessGrant(path: '/new/first', bookmarkData: 'old'),
+      DirectoryAccessGrant(path: '/new/second'),
+      DirectoryAccessGrant(path: '/new/first', bookmarkData: 'new'),
+      DirectoryAccessGrant(path: ''),
+    ]);
+
+    expect(result.successfulPaths, <String>['/new/first', '/new/second']);
+    expect(result.failureReasonsByPath, isEmpty);
+    expect(directoryRepository.addAttempts, <String>[
+      '/new/first',
+      '/new/second',
+    ]);
+    expect(
+      directoryRepository.directories
+          .firstWhere((directory) => directory.path == '/new/first')
+          .bookmarkData,
+      'new',
+    );
+    expect(directoryRepository.getDirectoriesCallCount, callsBeforeBatch + 1);
+  });
+
+  test('addDirectories keeps successes and reports failures', () async {
+    directoryRepository = InMemoryDirectoryRepository(
+      <DirectoryEntity>[],
+      failingPaths: const <String>{'/missing'},
+    );
+    final container = await _createDirectoryTestContainer(
+      directoryRepository: directoryRepository,
+      mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(directoryViewModelProvider.notifier);
+    await viewModel.loadDirectories();
+
+    final result = await viewModel.addDirectories(const <DirectoryAccessGrant>[
+      DirectoryAccessGrant(path: '/available'),
+      DirectoryAccessGrant(path: '/missing'),
+    ]);
+
+    expect(result.successfulPaths, <String>['/available']);
+    expect(result.failureReasonsByPath.keys, <String>['/missing']);
+    expect(result.failureReasonsByPath['/missing'], contains('/missing'));
+    final state = container.read(directoryViewModelProvider);
+    expect(state, isA<DirectoryLoaded>());
+    expect((state as DirectoryLoaded).directories.single.path, '/available');
+  });
+
+  test('bookmark recovery updates access without replacing metadata', () async {
+    directoryRepository = InMemoryDirectoryRepository([
+      DirectoryEntity(
+        id: 'recover-me',
+        path: '/old/path',
+        name: 'Old name',
+        thumbnailPath: '/cached/cover.jpg',
+        tagIds: const <String>['favorite-tag'],
+        lastModified: DateTime(2024, 1, 1),
+        bookmarkData: 'legacy-bookmark',
+      ),
+    ]);
+    final container = await _createDirectoryTestContainer(
+      directoryRepository: directoryRepository,
+      mediaRepository: mediaRepository,
+      favoritesRepository: favoritesRepository,
+      permissionService: FakePermissionService(
+        recoveryResult: const DirectoryRecoveryResult(
+          directoryPath: '/new/path',
+          bookmarkData: 'fresh-bookmark',
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+
+    final viewModel = container.read(directoryViewModelProvider.notifier);
+    await viewModel.loadDirectories();
+    await viewModel.recoverDirectoryBookmark('recover-me', '/old/path');
+
+    expect(directoryRepository.directories, hasLength(1));
+    final recovered = directoryRepository.directories.single;
+    expect(recovered.path, '/new/path');
+    expect(recovered.name, 'path');
+    expect(recovered.bookmarkData, 'fresh-bookmark');
+    expect(recovered.tagIds, const <String>['favorite-tag']);
+    expect(recovered.thumbnailPath, '/cached/cover.jpg');
   });
 
   test('selectDirectoryRange supports append mode', () async {
@@ -546,62 +670,68 @@ void main() {
     },
   );
 
-  test('loadDirectories enriches directories with cached media counts', () async {
-    mediaRepository = InMemoryMediaRepository([
-      MediaEntity(
-        id: 'media-1',
-        path: '/dir1/a.jpg',
-        name: 'a.jpg',
-        type: MediaType.image,
-        size: 100,
-        lastModified: DateTime(2024, 1, 1),
-        tagIds: const ['tag-1'],
-        directoryId: '1',
-      ),
-      MediaEntity(
-        id: 'media-2',
-        path: '/dir1/b.jpg',
-        name: 'b.jpg',
-        type: MediaType.image,
-        size: 100,
-        lastModified: DateTime(2024, 1, 1),
-        tagIds: const <String>[],
-        directoryId: '1',
-      ),
-      MediaEntity(
-        id: 'media-3',
-        path: '/dir2/c.jpg',
-        name: 'c.jpg',
-        type: MediaType.image,
-        size: 100,
-        lastModified: DateTime(2024, 1, 1),
-        tagIds: const ['tag-2'],
-        directoryId: '2',
-      ),
-    ]);
+  test(
+    'loadDirectories enriches directories with cached media counts',
+    () async {
+      mediaRepository = InMemoryMediaRepository([
+        MediaEntity(
+          id: 'media-1',
+          path: '/dir1/a.jpg',
+          name: 'a.jpg',
+          type: MediaType.image,
+          size: 100,
+          lastModified: DateTime(2024, 1, 1),
+          tagIds: const ['tag-1'],
+          directoryId: '1',
+        ),
+        MediaEntity(
+          id: 'media-2',
+          path: '/dir1/b.jpg',
+          name: 'b.jpg',
+          type: MediaType.image,
+          size: 100,
+          lastModified: DateTime(2024, 1, 1),
+          tagIds: const <String>[],
+          directoryId: '1',
+        ),
+        MediaEntity(
+          id: 'media-3',
+          path: '/dir2/c.jpg',
+          name: 'c.jpg',
+          type: MediaType.image,
+          size: 100,
+          lastModified: DateTime(2024, 1, 1),
+          tagIds: const ['tag-2'],
+          directoryId: '2',
+        ),
+      ]);
 
-    final container = await _createDirectoryTestContainer(
-      directoryRepository: directoryRepository,
-      mediaRepository: mediaRepository,
-      favoritesRepository: favoritesRepository,
-    );
-    addTearDown(container.dispose);
+      final container = await _createDirectoryTestContainer(
+        directoryRepository: directoryRepository,
+        mediaRepository: mediaRepository,
+        favoritesRepository: favoritesRepository,
+      );
+      addTearDown(container.dispose);
 
-    final viewModel = container.read(directoryViewModelProvider.notifier);
-    await viewModel.loadDirectories();
+      final viewModel = container.read(directoryViewModelProvider.notifier);
+      await viewModel.loadDirectories();
 
-    final state = container.read(directoryViewModelProvider) as DirectoryLoaded;
-    final directoryOne = state.directories.firstWhere((dir) => dir.id == '1');
-    final directoryTwo = state.directories.firstWhere((dir) => dir.id == '2');
-    final directoryThree = state.directories.firstWhere((dir) => dir.id == '3');
+      final state =
+          container.read(directoryViewModelProvider) as DirectoryLoaded;
+      final directoryOne = state.directories.firstWhere((dir) => dir.id == '1');
+      final directoryTwo = state.directories.firstWhere((dir) => dir.id == '2');
+      final directoryThree = state.directories.firstWhere(
+        (dir) => dir.id == '3',
+      );
 
-    expect(directoryOne.mediaCounts.totalMediaCount, 2);
-    expect(directoryOne.mediaCounts.taggedMediaCount, 1);
-    expect(directoryTwo.mediaCounts.totalMediaCount, 1);
-    expect(directoryTwo.mediaCounts.taggedMediaCount, 1);
-    expect(directoryThree.mediaCounts.totalMediaCount, 0);
-    expect(directoryThree.mediaCounts.taggedMediaCount, 0);
-  });
+      expect(directoryOne.mediaCounts.totalMediaCount, 2);
+      expect(directoryOne.mediaCounts.taggedMediaCount, 1);
+      expect(directoryTwo.mediaCounts.totalMediaCount, 1);
+      expect(directoryTwo.mediaCounts.taggedMediaCount, 1);
+      expect(directoryThree.mediaCounts.totalMediaCount, 0);
+      expect(directoryThree.mediaCounts.taggedMediaCount, 0);
+    },
+  );
 
   test(
     'changeSortOption sorts directories by tagged percentage in both directions',
@@ -715,7 +845,9 @@ void main() {
       final viewModel = container.read(directoryViewModelProvider.notifier);
       await viewModel.loadDirectories();
 
-      viewModel.changeSortOption(DirectorySortOption.taggedPercentageDescending);
+      viewModel.changeSortOption(
+        DirectorySortOption.taggedPercentageDescending,
+      );
 
       final descendingState =
           container.read(directoryViewModelProvider) as DirectoryLoaded;

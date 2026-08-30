@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/error/app_error.dart';
 import '../../../../core/error/error_handler.dart';
+import '../../../../core/services/directory_access_grant.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
@@ -39,6 +40,12 @@ extension DirectorySortOptionX on DirectorySortOption {
     DirectorySortOption.taggedPercentageDescending => 'Tagged % (High-Low)',
   };
 }
+
+/// Describes the paths processed by a batch directory-add operation.
+typedef DirectoryAddBatchResult = ({
+  List<String> successfulPaths,
+  Map<String, String> failureReasonsByPath,
+});
 
 /// Sealed class representing the state of the directory grid.
 sealed class DirectoryState {
@@ -88,8 +95,7 @@ class DirectoryLoaded extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
-      selectedDirectoryIds:
-          selectedDirectoryIds ?? this.selectedDirectoryIds,
+      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
     );
@@ -152,8 +158,7 @@ class DirectoryPermissionRevoked extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
-      selectedDirectoryIds:
-          selectedDirectoryIds ?? this.selectedDirectoryIds,
+      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
     );
@@ -203,8 +208,7 @@ class DirectoryBookmarkInvalid extends DirectoryState {
       selectedTagIds: selectedTagIds ?? this.selectedTagIds,
       columns: columns ?? this.columns,
       sortOption: sortOption ?? this.sortOption,
-      selectedDirectoryIds:
-          selectedDirectoryIds ?? this.selectedDirectoryIds,
+      selectedDirectoryIds: selectedDirectoryIds ?? this.selectedDirectoryIds,
       isSelectionMode: isSelectionMode ?? this.isSelectionMode,
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
     );
@@ -233,25 +237,28 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         _emitFilteredState();
       }
     });
-    _favoritesSubscription =
-        _ref.listen<FavoritesState>(favoritesViewModelProvider, (previous, next) {
-      final favorites = switch (next) {
-        FavoritesLoaded(:final directoryFavorites) => directoryFavorites,
-        FavoritesEmpty() => const <String>[],
-        _ => _favoriteDirectoryIds,
-      };
-      if (!listEquals(favorites, _favoriteDirectoryIds)) {
-        _favoriteDirectoryIds = favorites;
-        if (_showFavoritesOnly && _favoriteDirectoryIds.isEmpty) {
-          _showFavoritesOnly = false;
-          _emitFilteredState();
-          return;
+    _favoritesSubscription = _ref.listen<FavoritesState>(
+      favoritesViewModelProvider,
+      (previous, next) {
+        final favorites = switch (next) {
+          FavoritesLoaded(:final directoryFavorites) => directoryFavorites,
+          FavoritesEmpty() => const <String>[],
+          _ => _favoriteDirectoryIds,
+        };
+        if (!listEquals(favorites, _favoriteDirectoryIds)) {
+          _favoriteDirectoryIds = favorites;
+          if (_showFavoritesOnly && _favoriteDirectoryIds.isEmpty) {
+            _showFavoritesOnly = false;
+            _emitFilteredState();
+            return;
+          }
+          if (_showFavoritesOnly) {
+            _emitFilteredState();
+          }
         }
-        if (_showFavoritesOnly) {
-          _emitFilteredState();
-        }
-      }
-    }, fireImmediately: true);
+      },
+      fireImmediately: true,
+    );
     loadDirectories();
   }
 
@@ -279,7 +286,8 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   bool _showFavoritesOnly = false;
 
   DirectorySortOption get currentSortOption => _currentSortOption;
-  Set<String> get selectedDirectoryIds => Set<String>.unmodifiable(_selectedDirectoryIds);
+  Set<String> get selectedDirectoryIds =>
+      Set<String>.unmodifiable(_selectedDirectoryIds);
   bool get isSelectionMode => _isSelectionMode;
   int get selectedDirectoryCount => _selectedDirectoryIds.length;
   bool get showFavoritesOnly => _showFavoritesOnly;
@@ -301,9 +309,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         final tagSet = LinkedHashSet<String>.from(directory.tagIds);
         common = common == null
             ? tagSet
-            : LinkedHashSet<String>.from(
-                common!.where(tagSet.contains),
-              );
+            : LinkedHashSet<String>.from(common!.where(tagSet.contains));
       }
     }
 
@@ -335,12 +341,14 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   /// Selects a specific set of directory IDs. When [append] is true the IDs
   /// are merged with the existing selection, otherwise the selection is
   /// replaced entirely.
-  void selectDirectoryRange(Iterable<String> directoryIds, {bool append = false}) {
+  void selectDirectoryRange(
+    Iterable<String> directoryIds, {
+    bool append = false,
+  }) {
     Set<String> updated = Set<String>.from(_selectedDirectoryIds);
     if (append) {
       updated.addAll(directoryIds);
-    } 
-    else {
+    } else {
       updated = Set<String>.from(directoryIds);
     }
     _applySelectionUpdate(updated);
@@ -593,7 +601,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
           invalid: const [],
         );
         _clearSelectionInternal();
-        state = DirectoryError(ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)));
+        state = DirectoryError(
+          ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)),
+        );
       }
     }
   }
@@ -672,8 +682,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
   void _emitFilteredState() {
     final filteredAccessible = _filterDirectories(_cachedAccessibleDirectories);
-    final filteredInaccessible =
-        _filterDirectories(_cachedInaccessibleDirectories);
+    final filteredInaccessible = _filterDirectories(
+      _cachedInaccessibleDirectories,
+    );
     final filteredInvalid = _filterDirectories(_cachedInvalidDirectories);
 
     final sortedAccessible = _sortDirectories(filteredAccessible);
@@ -745,9 +756,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     return _searchDirectoriesUseCase(directories, searchQuery);
   }
 
-  List<DirectoryEntity> _filterDirectories(
-    List<DirectoryEntity> directories,
-  ) {
+  List<DirectoryEntity> _filterDirectories(List<DirectoryEntity> directories) {
     final tagged = _filterDirectoriesByTags(
       directories,
       _currentSelectedTagIds,
@@ -774,23 +783,68 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
   /// Sets the number of columns for the grid.
   void setColumns(int columns) {
     final clampedColumns = columns.clamp(2, 12);
-    final newColumns = clampedColumns is int
-        ? clampedColumns
-        : clampedColumns.toInt();
-    _ref.read(gridColumnsProvider.notifier).setColumns(newColumns);
+    _ref.read(gridColumnsProvider.notifier).setColumns(clampedColumns);
   }
 
   /// Adds a new directory.
   /// [silent] if true, skips recovery dialogs for bookmark failures (used for drag-and-drop).
   Future<void> addDirectory(String path, {bool silent = false}) async {
-    try {
-      await _addDirectoryUseCase(path, silent: silent);
-      await loadDirectories(); // Reload to show the new directory
-    } catch (e) {
-      state = DirectoryError(
-        ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e)),
+    final result = await addDirectories(<DirectoryAccessGrant>[
+      DirectoryAccessGrant(path: path),
+    ], silent: silent);
+    final failureReasons = result.failureReasonsByPath.values;
+    if (failureReasons.isNotEmpty) {
+      state = DirectoryError(failureReasons.first);
+    }
+  }
+
+  /// Adds each unique non-empty path and reloads the grid once.
+  ///
+  /// Successful additions are retained when another path fails. The returned
+  /// result contains a user-facing failure reason for every rejected path.
+  Future<DirectoryAddBatchResult> addDirectories(
+    Iterable<DirectoryAccessGrant> grants, {
+    bool silent = false,
+  }) async {
+    final uniqueGrantsByPath = <String, DirectoryAccessGrant>{};
+    for (final grant in grants) {
+      if (grant.path.isNotEmpty) {
+        uniqueGrantsByPath[grant.path] = grant;
+      }
+    }
+    if (uniqueGrantsByPath.isEmpty) {
+      return (
+        successfulPaths: const <String>[],
+        failureReasonsByPath: const <String, String>{},
       );
     }
+
+    final successfulPaths = <String>[];
+    final failureReasonsByPath = <String, String>{};
+
+    for (final grant in uniqueGrantsByPath.values) {
+      try {
+        await _addDirectoryUseCase(
+          grant.path,
+          bookmarkData: grant.bookmarkData,
+          silent: silent,
+        );
+        successfulPaths.add(grant.path);
+      } catch (error) {
+        failureReasonsByPath[grant.path] = ErrorHandler.getErrorMessage(
+          ErrorHandler.toAppError(error),
+        );
+      }
+    }
+
+    await loadDirectories();
+
+    return (
+      successfulPaths: List<String>.unmodifiable(successfulPaths),
+      failureReasonsByPath: Map<String, String>.unmodifiable(
+        failureReasonsByPath,
+      ),
+    );
   }
 
   /// Removes a directory.
@@ -803,20 +857,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     }
   }
 
-  /// Re-grants permissions for a directory by re-adding it.
-  /// This is used when a directory becomes inaccessible due to permission revocation.
-  Future<void> reGrantDirectoryPermissions(String directoryPath) async {
-    try {
-      await _addDirectoryUseCase(directoryPath);
-      await loadDirectories(); // Reload to show the re-added directory
-    } catch (e) {
-      state = DirectoryError(
-        'Failed to re-grant permissions: ${ErrorHandler.getErrorMessage(ErrorHandler.toAppError(e))}',
-      );
-    }
-  }
-
-  /// Recovers access to a directory with invalid bookmark by prompting user to re-select.
+  /// Recovers directory access by prompting the user to re-select it.
   Future<void> recoverDirectoryBookmark(
     String directoryId,
     String directoryPath,
@@ -826,11 +867,20 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         directoryPath,
       );
       if (recoveryResult != null) {
-        // Remove the old directory entry
-        await _removeDirectoryUseCase(directoryId);
-        // Add the new directory with the recovered path
-        await _addDirectoryUseCase(recoveryResult.directoryPath);
-        await loadDirectories(); // Reload to reflect the changes
+        final recoveredPath = recoveryResult.directoryPath;
+        final recoveredName = recoveredPath
+            .split('/')
+            .lastWhere(
+              (element) => element.isNotEmpty,
+              orElse: () => recoveredPath,
+            );
+        await _ref.read(updateDirectoryAccessUseCaseProvider)(
+          directoryId: directoryId,
+          newPath: recoveredPath,
+          newName: recoveredName,
+          bookmarkData: recoveryResult.bookmarkData,
+        );
+        await loadDirectories();
       }
     } catch (e) {
       state = DirectoryError(
@@ -953,20 +1003,12 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
         break;
       case DirectorySortOption.taggedPercentageAscending:
         sorted.sort(
-          (a, b) => _compareByTaggedPercentage(
-            a,
-            b,
-            descending: false,
-          ),
+          (a, b) => _compareByTaggedPercentage(a, b, descending: false),
         );
         break;
       case DirectorySortOption.taggedPercentageDescending:
         sorted.sort(
-          (a, b) => _compareByTaggedPercentage(
-            a,
-            b,
-            descending: true,
-          ),
+          (a, b) => _compareByTaggedPercentage(a, b, descending: true),
         );
         break;
     }
@@ -975,11 +1017,9 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
 
   int _compareByTaggedPercentage(
     DirectoryEntity a,
-    DirectoryEntity b,
-    {
-      required bool descending,
-    }
-  ) {
+    DirectoryEntity b, {
+    required bool descending,
+  }) {
     final percentageComparison = _orderedComparison(
       _taggedPercentage(a),
       _taggedPercentage(b),
@@ -1014,11 +1054,7 @@ class DirectoryViewModel extends StateNotifier<DirectoryState> {
     return directory.mediaCounts.taggedMediaCount / totalMediaCount;
   }
 
-  int _orderedComparison(
-    num left,
-    num right, {
-    required bool descending,
-  }) {
+  int _orderedComparison(num left, num right, {required bool descending}) {
     return descending ? right.compareTo(left) : left.compareTo(right);
   }
 
@@ -1048,18 +1084,18 @@ final directoryViewModelProvider =
     );
 
 Set<String> _extractDirectorySelection(DirectoryState state) => switch (state) {
-      DirectoryLoaded(selectedDirectoryIds: final ids) => ids,
-      DirectoryPermissionRevoked(selectedDirectoryIds: final ids) => ids,
-      DirectoryBookmarkInvalid(selectedDirectoryIds: final ids) => ids,
-      _ => const <String>{},
-    };
+  DirectoryLoaded(selectedDirectoryIds: final ids) => ids,
+  DirectoryPermissionRevoked(selectedDirectoryIds: final ids) => ids,
+  DirectoryBookmarkInvalid(selectedDirectoryIds: final ids) => ids,
+  _ => const <String>{},
+};
 
 bool _extractDirectorySelectionMode(DirectoryState state) => switch (state) {
-      DirectoryLoaded(isSelectionMode: final mode) => mode,
-      DirectoryPermissionRevoked(isSelectionMode: final mode) => mode,
-      DirectoryBookmarkInvalid(isSelectionMode: final mode) => mode,
-      _ => false,
-    };
+  DirectoryLoaded(isSelectionMode: final mode) => mode,
+  DirectoryPermissionRevoked(isSelectionMode: final mode) => mode,
+  DirectoryBookmarkInvalid(isSelectionMode: final mode) => mode,
+  _ => false,
+};
 
 /// Provider exposing the current set of selected directory IDs.
 final selectedDirectoryIdsProvider = Provider.autoDispose<Set<String>>((ref) {

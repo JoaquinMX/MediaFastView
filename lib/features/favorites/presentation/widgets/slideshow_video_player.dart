@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../core/services/logging_service.dart';
+import '../../../../shared/utils/playback_speed_applier.dart';
+import '../../../../shared/utils/playback_speed_policy.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 
 /// Video player dedicated to the slideshow experience.
@@ -23,6 +27,7 @@ class SlideshowVideoPlayer extends StatefulWidget {
     required this.seekNotifier,
     this.onPositionUpdate,
     this.onDurationUpdate,
+    this.onPlaybackSpeedRejected,
   });
 
   final MediaEntity media;
@@ -35,6 +40,7 @@ class SlideshowVideoPlayer extends StatefulWidget {
   final ValueNotifier<Duration?> seekNotifier;
   final ValueChanged<Duration>? onPositionUpdate;
   final ValueChanged<Duration>? onDurationUpdate;
+  final PlaybackSpeedRejectedCallback? onPlaybackSpeedRejected;
 
   @override
   State<SlideshowVideoPlayer> createState() => _SlideshowVideoPlayerState();
@@ -42,6 +48,7 @@ class SlideshowVideoPlayer extends StatefulWidget {
 
 class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
   VideoPlayerController? _controller;
+  PlaybackSpeedApplier? _playbackSpeedApplier;
   bool _hasCompleted = false;
 
   VideoPlayerController? get _activeController => _controller;
@@ -50,7 +57,7 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
   void initState() {
     super.initState();
     widget.seekNotifier.addListener(_onSeekRequested);
-    _initializeController();
+    unawaited(_initializeController());
   }
 
   @override
@@ -58,7 +65,7 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
     super.didUpdateWidget(oldWidget);
 
     if (widget.media.path != oldWidget.media.path) {
-      _initializeController();
+      unawaited(_initializeController());
       return;
     }
 
@@ -75,7 +82,7 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
       controller.setLooping(widget.isVideoLooping);
     }
     if (widget.playbackSpeed != oldWidget.playbackSpeed) {
-      controller.setPlaybackSpeed(widget.playbackSpeed);
+      _playbackSpeedApplier?.request(widget.playbackSpeed);
     }
     if (widget.isPlaying != oldWidget.isPlaying) {
       _hasCompleted = false;
@@ -89,6 +96,8 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
 
   Future<void> _initializeController() async {
     final previousController = _activeController;
+    _playbackSpeedApplier?.dispose();
+    _playbackSpeedApplier = null;
     previousController?.removeListener(_onVideoUpdate);
     await previousController?.dispose();
 
@@ -100,7 +109,11 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
       await controller.initialize();
       await controller.setVolume(widget.isMuted ? 0.0 : 1.0);
       await controller.setLooping(widget.isVideoLooping);
-      await controller.setPlaybackSpeed(widget.playbackSpeed);
+      final initialPlaybackSpeed = await _applyInitialPlaybackSpeed(controller);
+      _playbackSpeedApplier = _createPlaybackSpeedApplier(
+        controller,
+        initialPlaybackSpeed.speed,
+      );
       controller.addListener(_onVideoUpdate);
 
       if (widget.isPlaying) {
@@ -112,8 +125,82 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
       if (mounted) {
         setState(() {});
       }
+
+      if (!initialPlaybackSpeed.wasRejected &&
+          widget.playbackSpeed != initialPlaybackSpeed.speed) {
+        _playbackSpeedApplier?.request(widget.playbackSpeed);
+      }
     } catch (error) {
-      debugPrint('Failed to initialize slideshow video: $error');
+      LoggingService.instance.error(
+        'Failed to initialize slideshow video for ${widget.media.path}: $error',
+      );
+    }
+  }
+
+  Future<({double speed, bool wasRejected})> _applyInitialPlaybackSpeed(
+    VideoPlayerController controller,
+  ) async {
+    final requestedSpeed = widget.playbackSpeed;
+    const fallbackSpeed = 1.0;
+
+    try {
+      await controller.setPlaybackSpeed(requestedSpeed);
+      return (speed: requestedSpeed, wasRejected: false);
+    } catch (error, stackTrace) {
+      await _restoreInitialPlaybackSpeed(controller, fallbackSpeed);
+      _reportPlaybackSpeedRejection(
+        requestedSpeed,
+        fallbackSpeed,
+        error,
+        stackTrace,
+      );
+      return (speed: fallbackSpeed, wasRejected: true);
+    }
+  }
+
+  Future<void> _restoreInitialPlaybackSpeed(
+    VideoPlayerController controller,
+    double fallbackSpeed,
+  ) async {
+    try {
+      await controller.setPlaybackSpeed(fallbackSpeed);
+    } catch (error, stackTrace) {
+      LoggingService.instance.error(
+        'Failed to restore slideshow playback speed to '
+        '${PlaybackSpeedPolicy.format(fallbackSpeed)}x: $error',
+      );
+      LoggingService.instance.debug(
+        'Slideshow playback speed restore stack trace: $stackTrace',
+      );
+    }
+  }
+
+  PlaybackSpeedApplier _createPlaybackSpeedApplier(
+    VideoPlayerController controller,
+    double initialSpeed,
+  ) {
+    return PlaybackSpeedApplier(
+      apply: controller.setPlaybackSpeed,
+      initialSpeed: initialSpeed,
+      onRejected: _reportPlaybackSpeedRejection,
+    );
+  }
+
+  void _reportPlaybackSpeedRejection(
+    double attemptedSpeed,
+    double fallbackSpeed,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    LoggingService.instance.error(
+      'Failed to set slideshow playback speed to '
+      '${PlaybackSpeedPolicy.format(attemptedSpeed)}x: $error',
+    );
+    LoggingService.instance.debug(
+      'Slideshow playback speed stack trace: $stackTrace',
+    );
+    if (mounted) {
+      widget.onPlaybackSpeedRejected?.call(attemptedSpeed, fallbackSpeed);
     }
   }
 
@@ -158,6 +245,7 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
   @override
   void dispose() {
     widget.seekNotifier.removeListener(_onSeekRequested);
+    _playbackSpeedApplier?.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -204,10 +292,7 @@ class _SlideshowVideoPlayerState extends State<SlideshowVideoPlayer> {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 18,
-              ),
+              style: TextStyle(color: colorScheme.onSurface, fontSize: 18),
             ),
           ),
         ],

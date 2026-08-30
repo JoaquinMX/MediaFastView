@@ -35,6 +35,7 @@ import '../../../../shared/widgets/base_media_viewer_overlay.dart';
 import '../../../../shared/widgets/media_viewer_overlay.dart';
 import '../../../../shared/widgets/video_bottom_controls.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';
+import '../../../../shared/utils/playback_speed_policy.dart';
 import '../../../tagging/presentation/widgets/tag_creation_dialog.dart';
 
 /// Full-screen media viewer screen
@@ -220,7 +221,7 @@ class _FullScreenViewerScreenState
                   isShuffleEnabled: false,
                   isMuted: state.isMuted,
                   playbackSpeed: state.playbackSpeed,
-                  playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+                  playbackSpeedOptions: PlaybackSpeedPolicy.presets,
                   progress: state.totalDuration.inMilliseconds > 0
                       ? state.currentPosition.inMilliseconds /
                             state.totalDuration.inMilliseconds
@@ -297,7 +298,7 @@ class _FullScreenViewerScreenState
                         onToggleVideoLoop: () {}, // Not supported
                         playbackSpeed: state.playbackSpeed,
                         onPlaybackSpeedSelected: _viewModel.setPlaybackSpeed,
-                        playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+                        playbackSpeedOptions: PlaybackSpeedPolicy.presets,
                       )
                     : null,
               ),
@@ -638,6 +639,24 @@ class _FullScreenViewerScreenState
       onPositionUpdate: _viewModel.updateVideoPosition,
       onDurationUpdate: _viewModel.updateVideoDuration,
       onPlayingStateUpdate: _viewModel.updatePlayingState,
+      onPlaybackSpeedRejected: _handlePlaybackSpeedRejected,
+    );
+  }
+
+  void _handlePlaybackSpeedRejected(
+    double attemptedSpeed,
+    double fallbackSpeed,
+  ) {
+    if (!mounted) {
+      return;
+    }
+
+    _viewModel.setPlaybackSpeed(fallbackSpeed);
+    _showTagFeedback(
+      '${PlaybackSpeedPolicy.format(attemptedSpeed)}x playback is not '
+      'supported for this media. Restored '
+      '${PlaybackSpeedPolicy.format(fallbackSpeed)}x.',
+      isError: true,
     );
   }
 

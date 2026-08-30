@@ -4,9 +4,14 @@ import UIKit
 import UniformTypeIdentifiers
 
 final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
+  private struct ScopedResourceAccess {
+    let url: URL
+    var referenceCount: Int
+  }
+
   // Keep a pending FlutterResult while the picker is presented.
   private var pendingResult: FlutterResult?
-  private var activeSecurityScopedUrls = Set<URL>()
+  private var activeBookmarkAccess = [String: ScopedResourceAccess]()
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
@@ -20,16 +25,16 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
       handleStopAccessingBookmark(call, result: result)
     case "isBookmarkValid":
       handleIsBookmarkValid(call, result: result)
-    case "pickDirectoryOrFiles":
-      handlePickDirectoryOrFiles(call, result: result)
+    case "pickDirectories":
+      handlePickDirectories(call, result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
   }
 
-  // MARK: - iOS Picker Flow (session-only access)
+  // MARK: - iOS Picker Flow
 
-  private func handlePickDirectoryOrFiles(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+  private func handlePickDirectories(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     // Prevent multiple concurrent pickers.
     if pendingResult != nil {
       result(FlutterError(code: "PICKER_BUSY",
@@ -46,30 +51,27 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
 
     pendingResult = result
 
-    // Prefer directory picking where available; otherwise fall back to multi-file picking.
-    // iOS 15+ has UTType.folder. On iOS 14, UTType is available but folder picking may be unreliable depending on providers.
-    // We will attempt directory picking and if initialization fails, we’ll fall back to file picking.
-    let picker: UIDocumentPickerViewController
-
-    if #available(iOS 15.0, *) {
-      // Directory mode
-      picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.folder], asCopy: false)
-      picker.allowsMultipleSelection = false
-    } else {
-      // Fallback to file picking with multiple selection
-      if #available(iOS 14.0, *) {
-        picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.item], asCopy: false)
-      } else {
-        // Very old fallback (shouldn’t be needed with your support policy, but kept for safety)
-        picker = UIDocumentPickerViewController(documentTypes: ["public.item"], in: .open)
-      }
-      picker.allowsMultipleSelection = true
-    }
+    let arguments = call.arguments as? [String: Any]
+    let allowsMultipleSelection = arguments?["allowsMultipleSelection"] as? Bool ?? false
+    let picker = makeDirectoryPicker(
+      allowsMultipleSelection: allowsMultipleSelection
+    )
 
     picker.delegate = self
     picker.presentationController?.delegate = self
 
     presenter.present(picker, animated: true, completion: nil)
+  }
+
+  func makeDirectoryPicker(
+    allowsMultipleSelection: Bool
+  ) -> UIDocumentPickerViewController {
+    let picker = UIDocumentPickerViewController(
+      forOpeningContentTypes: [UTType.folder],
+      asCopy: false
+    )
+    picker.allowsMultipleSelection = allowsMultipleSelection
+    return picker
   }
 
   // UIDocumentPickerDelegate
@@ -78,16 +80,37 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
     guard let result = pendingResult else { return }
     pendingResult = nil
 
-    // Start accessing security-scoped resources so external drive URLs remain usable.
-    for url in urls where url.isFileURL {
-      if url.startAccessingSecurityScopedResource() {
-        activeSecurityScopedUrls.insert(url)
-      }
+    do {
+      result(try pickedDirectoryPayloads(from: urls))
+    } catch {
+      result(FlutterError(
+        code: "BOOKMARK_ERROR",
+        message: "Failed to preserve access to the selected directories: \(error.localizedDescription)",
+        details: nil
+      ))
     }
+  }
 
-    // Return file:// URL strings for practicality and clarity.
-      let urlStrings = urls.map { $0.absoluteString }
-    result(urlStrings)
+  func pickedDirectoryPayloads(from urls: [URL]) throws -> [[String: String]] {
+    try urls.map { originalUrl in
+      let url = originalUrl.standardizedFileURL
+      let startedAccess = url.startAccessingSecurityScopedResource()
+      defer {
+        if startedAccess {
+          url.stopAccessingSecurityScopedResource()
+        }
+      }
+
+      let bookmarkData = try url.bookmarkData(
+        options: .minimalBookmark,
+        includingResourceValuesForKeys: nil,
+        relativeTo: nil
+      )
+      return [
+        "url": url.absoluteString,
+        "bookmarkData": bookmarkData.base64EncodedString(),
+      ]
+    }
   }
 
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
@@ -123,13 +146,13 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
   }
 
   deinit {
-    for url in activeSecurityScopedUrls {
-      url.stopAccessingSecurityScopedResource()
+    for access in activeBookmarkAccess.values {
+      access.url.stopAccessingSecurityScopedResource()
     }
-    activeSecurityScopedUrls.removeAll()
+    activeBookmarkAccess.removeAll()
   }
 
-  // MARK: - Bookmark APIs (macOS security-scope, iOS regular bookmarks)
+  // MARK: - Apple Security-Scoped Bookmark APIs
 
   private func handleCreateBookmark(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     guard
@@ -150,7 +173,7 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
                                               includingResourceValuesForKeys: nil,
                                               relativeTo: nil)
       #else
-      let bookmarkData = try url.bookmarkData(options: [],
+      let bookmarkData = try url.bookmarkData(options: .minimalBookmark,
                                               includingResourceValuesForKeys: nil,
                                               relativeTo: nil)
       #endif
@@ -237,7 +260,13 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
         return
       }
 
-      #if os(macOS)
+      if var activeAccess = activeBookmarkAccess[bookmarkDataString] {
+        activeAccess.referenceCount += 1
+        activeBookmarkAccess[bookmarkDataString] = activeAccess
+        result(activeAccess.url.path)
+        return
+      }
+
       let started = url.startAccessingSecurityScopedResource()
       if !started {
         result(FlutterError(code: "BOOKMARK_ACCESS",
@@ -245,7 +274,11 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
                             details: nil))
         return
       }
-      #endif
+
+      activeBookmarkAccess[bookmarkDataString] = ScopedResourceAccess(
+        url: url,
+        referenceCount: 1
+      )
 
       result(url.path)
     } catch {
@@ -262,7 +295,7 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
     guard
       let args = call.arguments as? [String: Any],
       let bookmarkDataString = args["bookmarkData"] as? String,
-      let bookmarkData = Data(base64Encoded: bookmarkDataString)
+      Data(base64Encoded: bookmarkDataString) != nil
     else {
       result(FlutterError(code: "INVALID_ARGUMENTS",
                           message: "Missing bookmarkData argument",
@@ -270,28 +303,19 @@ final class BookmarkHandler: NSObject, UIDocumentPickerDelegate, UIAdaptivePrese
       return
     }
 
-    var isStale = false
-    do {
-      #if os(macOS)
-      let url = try URL(resolvingBookmarkData: bookmarkData,
-                        options: .withSecurityScope,
-                        relativeTo: nil,
-                        bookmarkDataIsStale: &isStale)
-      if !isStale {
-        url.stopAccessingSecurityScopedResource()
-      }
-      #else
-      _ = try URL(resolvingBookmarkData: bookmarkData,
-                  options: [],
-                  relativeTo: nil,
-                  bookmarkDataIsStale: &isStale)
-      #endif
+    guard var activeAccess = activeBookmarkAccess[bookmarkDataString] else {
       result(nil)
-    } catch {
-      result(FlutterError(code: "BOOKMARK_ERROR",
-                          message: "Failed to stop accessing bookmark: \(error.localizedDescription)",
-                          details: nil))
+      return
     }
+
+    activeAccess.referenceCount -= 1
+    if activeAccess.referenceCount <= 0 {
+      activeAccess.url.stopAccessingSecurityScopedResource()
+      activeBookmarkAccess.removeValue(forKey: bookmarkDataString)
+    } else {
+      activeBookmarkAccess[bookmarkDataString] = activeAccess
+    }
+    result(nil)
   }
 
   private func handleIsBookmarkValid(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/media_library/domain/entities/media_entity.dart';
 import '../../features/tagging/domain/entities/tag_entity.dart';
+import '../utils/playback_speed_policy.dart';
 import '../widgets/media_playback_controls.dart';
 import '../widgets/media_progress_indicator.dart';
 import '../widgets/tag_overlay.dart';
@@ -33,7 +34,7 @@ class MediaPlaybackData {
     required this.isMuted,
     this.isVideoLooping = false,
     this.playbackSpeed,
-    this.playbackSpeedOptions = const [1.0, 2.0, 2.5, 3.0, 4.0],
+    this.playbackSpeedOptions = PlaybackSpeedPolicy.presets,
     this.progress,
     this.minDuration = const Duration(seconds: 1),
     this.maxDuration = const Duration(seconds: 10),

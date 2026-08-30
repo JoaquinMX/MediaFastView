@@ -86,16 +86,15 @@ class PlatformService {
 
   /// Whether deleting source files from the device is supported.
   ///
-  /// macOS deletes via the native Trash within security-scoped access. iOS is
-  /// intentionally unsupported: picked files are copied into an app-sandbox
-  /// temp directory, so deleting would only remove a throwaway copy rather than
-  /// the user's original file.
+  /// macOS deletes via the native Trash within security-scoped access. iOS
+  /// directory grants are read-only in the current app workflow, so source
+  /// deletion remains intentionally unsupported.
   bool get supportsFileDeletion => Platform.isMacOS;
 
   /// Whether moving and copying files between directories is supported.
   ///
-  /// macOS only, for the same reason as [supportsFileDeletion]: iOS has no
-  /// persistent security-scoped write access to the user's original files.
+  /// macOS only. iOS file-provider writes require a coordinated native workflow
+  /// that the app does not currently implement.
   bool get supportsFileTransfer => Platform.isMacOS;
 
   /// Gets platform-specific path separator

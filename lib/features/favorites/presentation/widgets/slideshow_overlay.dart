@@ -7,11 +7,13 @@ import '../../../../shared/providers/settings_providers.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/widgets/base_media_viewer_overlay.dart';
 import '../../../../shared/widgets/media_viewer_overlay.dart';
+import '../../../../shared/widgets/playback_speed_control.dart';
 import '../../../../shared/widgets/video_bottom_controls.dart';
 import '../../../../shared/widgets/media_playback_controls.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';
+import '../../../../shared/utils/playback_speed_policy.dart';
 import '../widgets/favorite_toggle_button.dart';
 import '../view_models/slideshow_view_model.dart';
 
@@ -100,62 +102,6 @@ class SlideshowOverlay extends ConsumerWidget {
       showPlaybackSpeed: isVideo,
     );
 
-    final playbackSpeedOptions = const [1.0, 2.0, 2.5, 3.0, 4.0];
-
-    Widget _buildPlaybackSpeedButton() {
-      final speeds = playbackSpeedOptions.toSet().toList()..sort();
-      final currentSpeed = playbackSpeed ?? speeds.first;
-      final enabled = viewModel.setPlaybackSpeed != null;
-
-      return PopupMenuButton<double>(
-        tooltip: 'Playback speed',
-        enabled: enabled,
-        initialValue: currentSpeed,
-        onSelected: enabled ? viewModel.setPlaybackSpeed : null,
-        itemBuilder: (context) {
-          return speeds
-              .map(
-                (speed) => PopupMenuItem<double>(
-                  value: speed,
-                  child: Row(
-                    children: [
-                      if (speed == currentSpeed)
-                        Icon(Icons.check, color: Colors.blue, size: 18)
-                      else
-                        const SizedBox(width: 18),
-                      const SizedBox(width: 8),
-                      Text('${speed}x'),
-                    ],
-                  ),
-                ),
-              )
-              .toList();
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.speed, color: Colors.white),
-              const SizedBox(width: 6),
-              Text(
-                '${currentSpeed}x',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     if (isCompactLayout) {
       final primaryVisibility = playbackVisibility.copyWith(
         showPrevious: false,
@@ -168,15 +114,6 @@ class SlideshowOverlay extends ConsumerWidget {
         showProgressBar: false,
         showVideoLoop: false,
         showPlaybackSpeed: false,
-      );
-
-      final secondaryVisibility = playbackVisibility.copyWith(
-        showPrevious: false,
-        showPlayPause: false,
-        showNext: false,
-        showLoop: false,
-        showMute: false,
-        showProgressBar: false,
       );
 
       return Stack(
@@ -216,7 +153,7 @@ class SlideshowOverlay extends ConsumerWidget {
               isMuted: isMuted,
               isVideoLooping: isVideoLooping,
               playbackSpeed: playbackSpeed,
-              playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+              playbackSpeedOptions: PlaybackSpeedPolicy.presets,
               progress: progress,
               minDuration: AppConfig.slideshowMinDuration,
               maxDuration: AppConfig.slideshowMaxDuration,
@@ -350,7 +287,10 @@ class SlideshowOverlay extends ConsumerWidget {
                 ),
                 const SizedBox(width: 16),
                 if (isVideo) ...[
-                  _buildPlaybackSpeedButton(),
+                  PlaybackSpeedControl(
+                    playbackSpeed: playbackSpeed,
+                    onPlaybackSpeedSelected: viewModel.setPlaybackSpeed,
+                  ),
                   const SizedBox(width: 12),
                   IconButton(
                     icon: Icon(
@@ -419,7 +359,7 @@ class SlideshowOverlay extends ConsumerWidget {
         isMuted: isMuted,
         isVideoLooping: isVideoLooping,
         playbackSpeed: playbackSpeed,
-        playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+        playbackSpeedOptions: PlaybackSpeedPolicy.presets,
         progress: progress,
         minDuration: AppConfig.slideshowMinDuration,
         maxDuration: AppConfig.slideshowMaxDuration,
@@ -471,7 +411,7 @@ class SlideshowOverlay extends ConsumerWidget {
               onToggleVideoLoop: viewModel.toggleVideoLoop,
               playbackSpeed: playbackSpeed,
               onPlaybackSpeedSelected: viewModel.setPlaybackSpeed,
-              playbackSpeedOptions: const [1.0, 2.0, 2.5, 3.0, 4.0],
+              playbackSpeedOptions: PlaybackSpeedPolicy.presets,
             )
           : null,
     );

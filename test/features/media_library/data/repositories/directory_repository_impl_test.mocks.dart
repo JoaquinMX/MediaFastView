@@ -884,11 +884,14 @@ class MockPermissionService extends _i1.Mock implements _i7.PermissionService {
 
   @override
   _i8.Future<_i7.PermissionStatus> checkDirectoryAccess(
-          String? directoryPath) =>
+    String? directoryPath, {
+    String? bookmarkData,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #checkDirectoryAccess,
           [directoryPath],
+          {#bookmarkData: bookmarkData},
         ),
         returnValue: _i8.Future<_i7.PermissionStatus>.value(
             _i7.PermissionStatus.granted),

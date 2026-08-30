@@ -27,26 +27,32 @@ void main() {
       useCase = AddDirectoryUseCase(directoryRepository);
     });
 
-    test('creates directory entity from path and delegates to repository', () async {
-      const path = '/home/user/Videos';
-      final expectedId = generateDirectoryId(path);
+    test(
+      'creates directory entity from path and delegates to repository',
+      () async {
+        const path = '/home/user/Videos';
+        final expectedId = generateDirectoryId(path);
 
-      when(directoryRepository.addDirectory(any, silent: anyNamed('silent')))
-          .thenAnswer((_) async {});
+        when(
+          directoryRepository.addDirectory(any, silent: anyNamed('silent')),
+        ).thenAnswer((_) async {});
 
-      await useCase(path, silent: true);
+        await useCase(path, bookmarkData: 'ios-bookmark', silent: true);
 
-      final capturedEntity =
-          verify(directoryRepository.addDirectory(captureAny, silent: true))
-              .captured
-              .single as DirectoryEntity;
+        final capturedEntity =
+            verify(
+                  directoryRepository.addDirectory(captureAny, silent: true),
+                ).captured.single
+                as DirectoryEntity;
 
-      expect(capturedEntity.id, expectedId);
-      expect(capturedEntity.path, path);
-      expect(capturedEntity.name, 'Videos');
-      expect(capturedEntity.tagIds, isEmpty);
-      expect(capturedEntity.thumbnailPath, isNull);
-    });
+        expect(capturedEntity.id, expectedId);
+        expect(capturedEntity.path, path);
+        expect(capturedEntity.name, 'Videos');
+        expect(capturedEntity.tagIds, isEmpty);
+        expect(capturedEntity.thumbnailPath, isNull);
+        expect(capturedEntity.bookmarkData, 'ios-bookmark');
+      },
+    );
   });
 
   group('RemoveDirectoryUseCase', () {
@@ -112,12 +118,13 @@ void main() {
       ).thenAnswer((_) async => media.cast<MediaEntity>());
       when(favoritesRepository.isFavorite(any)).thenAnswer((_) async => true);
       when(favoritesRepository.removeFavorite(any)).thenAnswer((_) async {});
-      when(mediaRepository.updateMediaTags(any, any))
-          .thenAnswer((_) async {});
-      when(directoryRepository.removeDirectory(directoryId))
-          .thenAnswer((_) async {});
-      when(mediaRepository.removeMediaForDirectory(directoryId))
-          .thenAnswer((_) async {});
+      when(mediaRepository.updateMediaTags(any, any)).thenAnswer((_) async {});
+      when(
+        directoryRepository.removeDirectory(directoryId),
+      ).thenAnswer((_) async {});
+      when(
+        mediaRepository.removeMediaForDirectory(directoryId),
+      ).thenAnswer((_) async {});
 
       await useCase(directoryId);
 
@@ -137,8 +144,9 @@ void main() {
     });
 
     test('returns early when directory is missing', () async {
-      when(directoryRepository.getDirectoryById(directoryId))
-          .thenAnswer((_) async => null);
+      when(
+        directoryRepository.getDirectoryById(directoryId),
+      ).thenAnswer((_) async => null);
 
       await useCase(directoryId);
 
@@ -166,8 +174,7 @@ void main() {
       verify(mediaRepository.pruneMissingMedia()).called(1);
     });
 
-    test('never falls back to the destructive directoryId-based prune',
-        () async {
+    test('never falls back to the destructive directoryId-based prune', () async {
       when(mediaRepository.pruneMissingMedia()).thenAnswer((_) async => 0);
 
       await useCase();

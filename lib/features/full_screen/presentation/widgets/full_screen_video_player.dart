@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/services/logging_service.dart';
+import '../../../../shared/utils/playback_speed_applier.dart';
+import '../../../../shared/utils/playback_speed_policy.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 
 /// Full-screen video player widget
@@ -19,6 +21,7 @@ class FullScreenVideoPlayer extends StatefulWidget {
     required this.onPositionUpdate,
     required this.onDurationUpdate,
     required this.onPlayingStateUpdate,
+    this.onPlaybackSpeedRejected,
   });
 
   final MediaEntity media;
@@ -29,6 +32,7 @@ class FullScreenVideoPlayer extends StatefulWidget {
   final ValueChanged<Duration> onPositionUpdate;
   final ValueChanged<Duration> onDurationUpdate;
   final ValueChanged<bool> onPlayingStateUpdate;
+  final PlaybackSpeedRejectedCallback? onPlaybackSpeedRejected;
 
   @override
   State<FullScreenVideoPlayer> createState() => FullScreenVideoPlayerState();
@@ -37,6 +41,7 @@ class FullScreenVideoPlayer extends StatefulWidget {
 class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   VideoPlayerController? _controller;
   Future<void>? _initialization;
+  PlaybackSpeedApplier? _playbackSpeedApplier;
 
   @override
   void initState() {
@@ -50,9 +55,7 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
 
     if (widget.media.id != oldWidget.media.id ||
         widget.media.path != oldWidget.media.path) {
-      unawaited(
-        _initializePlayer(widget.media, recreateController: true),
-      );
+      unawaited(_initializePlayer(widget.media, recreateController: true));
       return;
     }
 
@@ -65,7 +68,7 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
         _controller!.setLooping(widget.isLooping);
       }
       if (widget.playbackSpeed != oldWidget.playbackSpeed) {
-        _controller!.setPlaybackSpeed(widget.playbackSpeed);
+        _playbackSpeedApplier?.request(widget.playbackSpeed);
       }
       if (widget.isPlaying != oldWidget.isPlaying) {
         if (widget.isPlaying) {
@@ -77,14 +80,18 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     }
   }
 
-  Future<void> _initializePlayer(MediaEntity media,
-      {bool recreateController = false}) async {
+  Future<void> _initializePlayer(
+    MediaEntity media, {
+    bool recreateController = false,
+  }) async {
     if (_initialization != null) {
       await _initialization;
     }
 
-    final future = _performInitialization(media,
-        recreateController: recreateController);
+    final future = _performInitialization(
+      media,
+      recreateController: recreateController,
+    );
     _initialization = future;
     try {
       await future;
@@ -95,8 +102,10 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     }
   }
 
-  Future<void> _performInitialization(MediaEntity media,
-      {bool recreateController = false}) async {
+  Future<void> _performInitialization(
+    MediaEntity media, {
+    bool recreateController = false,
+  }) async {
     if (recreateController || _controller == null) {
       await _disposeController();
 
@@ -106,7 +115,9 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
         await controller.initialize();
         controller.setVolume(widget.isMuted ? 0.0 : 1.0);
         controller.setLooping(widget.isLooping);
-        await controller.setPlaybackSpeed(widget.playbackSpeed);
+        final initialPlaybackSpeed = await _applyInitialPlaybackSpeed(
+          controller,
+        );
         controller.addListener(_onVideoUpdate);
 
         if (widget.isPlaying) {
@@ -124,7 +135,16 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
 
         setState(() {
           _controller = controller;
+          _playbackSpeedApplier = _createPlaybackSpeedApplier(
+            controller,
+            initialPlaybackSpeed.speed,
+          );
         });
+
+        if (!initialPlaybackSpeed.wasRejected &&
+            widget.playbackSpeed != initialPlaybackSpeed.speed) {
+          _playbackSpeedApplier?.request(widget.playbackSpeed);
+        }
       } catch (error, stackTrace) {
         LoggingService.instance.error(
           'Failed to initialize video controller for ${media.path}: $error',
@@ -144,7 +164,7 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       _controller!.setVolume(1.0);
     }
     _controller!.setLooping(widget.isLooping);
-    unawaited(_controller!.setPlaybackSpeed(widget.playbackSpeed));
+    _playbackSpeedApplier?.request(widget.playbackSpeed);
     if (widget.isPlaying) {
       _controller!.play();
     } else {
@@ -162,6 +182,71 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     widget.onPositionUpdate(position);
     widget.onDurationUpdate(duration);
     widget.onPlayingStateUpdate(isPlaying);
+  }
+
+  Future<({double speed, bool wasRejected})> _applyInitialPlaybackSpeed(
+    VideoPlayerController controller,
+  ) async {
+    final requestedSpeed = widget.playbackSpeed;
+    const fallbackSpeed = 1.0;
+
+    try {
+      await controller.setPlaybackSpeed(requestedSpeed);
+      return (speed: requestedSpeed, wasRejected: false);
+    } catch (error, stackTrace) {
+      await _restoreInitialPlaybackSpeed(controller, fallbackSpeed);
+      _reportPlaybackSpeedRejection(
+        requestedSpeed,
+        fallbackSpeed,
+        error,
+        stackTrace,
+      );
+      return (speed: fallbackSpeed, wasRejected: true);
+    }
+  }
+
+  Future<void> _restoreInitialPlaybackSpeed(
+    VideoPlayerController controller,
+    double fallbackSpeed,
+  ) async {
+    try {
+      await controller.setPlaybackSpeed(fallbackSpeed);
+    } catch (error, stackTrace) {
+      LoggingService.instance.error(
+        'Failed to restore full-screen playback speed to '
+        '${PlaybackSpeedPolicy.format(fallbackSpeed)}x: $error',
+      );
+      LoggingService.instance.debug(
+        'Playback speed restore stack trace: $stackTrace',
+      );
+    }
+  }
+
+  PlaybackSpeedApplier _createPlaybackSpeedApplier(
+    VideoPlayerController controller,
+    double initialSpeed,
+  ) {
+    return PlaybackSpeedApplier(
+      apply: controller.setPlaybackSpeed,
+      initialSpeed: initialSpeed,
+      onRejected: _reportPlaybackSpeedRejection,
+    );
+  }
+
+  void _reportPlaybackSpeedRejection(
+    double attemptedSpeed,
+    double fallbackSpeed,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    LoggingService.instance.error(
+      'Failed to set full-screen playback speed to '
+      '${PlaybackSpeedPolicy.format(attemptedSpeed)}x: $error',
+    );
+    LoggingService.instance.debug('Playback speed stack trace: $stackTrace');
+    if (mounted) {
+      widget.onPlaybackSpeedRejected?.call(attemptedSpeed, fallbackSpeed);
+    }
   }
 
   @override
@@ -237,10 +322,7 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 18,
-              ),
+              style: TextStyle(color: colorScheme.onSurface, fontSize: 18),
             ),
           ),
         ],
@@ -250,6 +332,8 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
 
   Future<void> _disposeController() async {
     final controller = _controller;
+    _playbackSpeedApplier?.dispose();
+    _playbackSpeedApplier = null;
     if (controller == null) {
       return;
     }
@@ -269,9 +353,7 @@ class FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       LoggingService.instance.error(
         'Failed to dispose video controller for ${widget.media.path}: $error',
       );
-      LoggingService.instance.debug(
-        'Video dispose stack trace: $stackTrace',
-      );
+      LoggingService.instance.debug('Video dispose stack trace: $stackTrace');
     }
   }
 }

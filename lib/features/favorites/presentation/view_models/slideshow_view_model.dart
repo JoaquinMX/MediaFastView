@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../../shared/utils/playback_speed_policy.dart';
 import '../../../../shared/utils/tag_mutation_service.dart';
 import '../../../tagging/domain/entities/tag_entity.dart';
 import '../../../settings/domain/entities/playback_settings.dart';
@@ -638,9 +639,12 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
 
   /// Updates playback speed for video items.
   void setPlaybackSpeed(double speed) {
-    if (speed <= 0) return;
+    final normalizedSpeed = PlaybackSpeedPolicy.normalize(speed);
+    if (normalizedSpeed == null || normalizedSpeed == _playbackSpeed) {
+      return;
+    }
 
-    _playbackSpeed = speed;
+    _playbackSpeed = normalizedSpeed;
     state = switch (state) {
       SlideshowPlaying(
         :final currentIndex,
@@ -661,7 +665,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           progress: progress,
           isShuffleEnabled: isShuffleEnabled,
           imageDisplayDuration: imageDisplayDuration,
-          playbackSpeed: speed,
+          playbackSpeed: normalizedSpeed,
         ),
       SlideshowPaused(
         :final currentIndex,
@@ -680,7 +684,7 @@ class SlideshowViewModel extends StateNotifier<SlideshowState> {
           progress: progress,
           isShuffleEnabled: isShuffleEnabled,
           imageDisplayDuration: imageDisplayDuration,
-          playbackSpeed: speed,
+          playbackSpeed: normalizedSpeed,
         ),
       _ => state,
     };

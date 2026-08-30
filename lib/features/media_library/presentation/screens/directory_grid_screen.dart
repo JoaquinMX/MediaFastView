@@ -11,6 +11,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../core/services/directory_access_grant.dart';
+import '../../../../core/services/directory_browser_service.dart';
 import '../../../../core/services/directory_picker_service.dart';
 import '../../../duplicates/presentation/screens/duplicate_management_screen.dart';
 import '../../../profiles/presentation/widgets/profile_switcher.dart';
@@ -35,6 +37,7 @@ import '../view_models/directory_selection_view_model.dart';
 import '../widgets/directory_grid_item.dart';
 import '../widgets/directory_search_bar.dart';
 import '../widgets/column_selector_popup.dart';
+import '../widgets/add_directories_dialog.dart';
 import 'media_grid_screen.dart';
 
 /// Screen for displaying directories in a customizable grid layout.
@@ -291,6 +294,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   /// this app, so the entry point follows the same gate as the folder
   /// move/delete actions.
   bool get _isMacOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+
+  bool get _isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   AppBar _buildDirectorySelectionAppBar(
     int selectedCount,
@@ -1043,7 +1048,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
               SizedBox(height: UiSpacing.verticalGap),
               ElevatedButton(
                 onPressed: () => _showAddDirectoryDialog(context, ref),
-                child: const Text('Add Directory'),
+                child: const Text('Add Directories'),
               ),
             ],
           ),
@@ -1053,49 +1058,43 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
   }
 
   void _showAddDirectoryDialog(BuildContext context, WidgetRef ref) {
+    final description = _isMacOS
+        ? 'You can drag and drop one or more directories onto the screen, '
+              'or browse for directories one at a time.'
+        : _isIOS
+        ? 'Choose one parent folder, then select several folders inside it. '
+              'You can also add individual folders from different locations.'
+        : 'Browse for directories and stage them before adding them.';
+    const directoryPickerService = DirectoryPickerService();
+    final directoryBrowserService = DirectoryBrowserService();
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Directory'),
-        content: const Text(
-          'You can drag and drop directories onto the screen, or click below to browse and select a directory (or files on iOS).',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                final directoryPickerService = DirectoryPickerService();
-                final selectedPaths = await directoryPickerService
-                    .pickDirectories();
-                if (!context.mounted) {
-                  return;
-                }
-                if (selectedPaths.isEmpty) {
-                  return;
-                }
-                final viewModel = ref.read(directoryViewModelProvider.notifier);
-                for (final path in selectedPaths) {
-                  await viewModel.addDirectory(path);
-                }
-                if (context.mounted) {
-                  Navigator.of(context).pop();
-                }
-              } catch (e) {
-                if (!context.mounted) {
-                  return;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to select directory: $e')),
-                );
-              }
-            },
-            child: const Text('Browse'),
-          ),
-        ],
+      builder: (context) => AddDirectoriesDialog(
+        description: description,
+        pickDirectories: () async {
+          if (!_isIOS) {
+            return directoryPickerService.pickDirectories();
+          }
+          final grant = await directoryPickerService.pickSingleDirectory();
+          return grant == null
+              ? const <DirectoryAccessGrant>[]
+              : <DirectoryAccessGrant>[grant];
+        },
+        pickParentDirectory: _isIOS
+            ? () => directoryPickerService.pickSingleDirectory(
+                dialogTitle: 'Choose a Parent Folder',
+              )
+            : null,
+        listChildDirectories: _isIOS
+            ? directoryBrowserService.listChildren
+            : null,
+        createChildGrants: _isIOS ? directoryBrowserService.createGrants : null,
+        addDirectories: (grants) {
+          return ref
+              .read(directoryViewModelProvider.notifier)
+              .addDirectories(grants);
+        },
       ),
     );
   }
@@ -1190,8 +1189,8 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Re-grant Permissions'),
         content: Text(
-          'This will re-add ${inaccessibleDirectories.length} directory(ies) to restore access. '
-          'You will need to grant permissions again when prompted.',
+          'This will prompt you to re-select '
+          '${inaccessibleDirectories.length} directory(ies) to restore access.',
         ),
         actions: [
           TextButton(
@@ -1202,7 +1201,10 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             onPressed: () async {
               Navigator.of(context).pop();
               for (final directory in inaccessibleDirectories) {
-                await viewModel.reGrantDirectoryPermissions(directory.path);
+                await viewModel.recoverDirectoryBookmark(
+                  directory.id,
+                  directory.path,
+                );
               }
             },
             child: const Text('Re-grant Permissions'),

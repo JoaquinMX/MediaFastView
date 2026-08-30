@@ -12,7 +12,6 @@ import 'package:media_fast_view/shared/utils/tag_mutation_service.dart';
 import 'slideshow_view_model_test.mocks.dart';
 
 @GenerateMocks([TagMutationService])
-
 void main() {
   late MockTagMutationService tagMutationService;
   late List<MediaEntity> media;
@@ -110,8 +109,33 @@ void main() {
       expect(state.progress, equals(1.5));
     });
 
+    test('setPlaybackSpeed snaps, clamps, and rejects invalid values', () {
+      final viewModel = SlideshowViewModel(
+        media,
+        tagMutationService: tagMutationService,
+        playbackSettings: const PlaybackSettings.initial(),
+      );
+
+      viewModel.setPlaybackSpeed(2.6);
+      expect(viewModel.playbackSpeed, 2.5);
+
+      viewModel.setPlaybackSpeed(100);
+      expect(viewModel.playbackSpeed, 16.0);
+
+      viewModel.setPlaybackSpeed(0.1);
+      expect(viewModel.playbackSpeed, 0.5);
+
+      viewModel.setPlaybackSpeed(double.nan);
+      expect(viewModel.playbackSpeed, 0.5);
+    });
+
     test('toggleTag updates media and emits state change', () async {
-      final tag = TagEntity(id: 't1', name: 'Tag', color: 0xFF000000, createdAt: DateTime(2024, 1, 1));
+      final tag = TagEntity(
+        id: 't1',
+        name: 'Tag',
+        color: 0xFF000000,
+        createdAt: DateTime(2024, 1, 1),
+      );
       final updatedMedia = media.first.copyWith(tagIds: const ['t1']);
       when(tagMutationService.toggleTagForMedia(media.first, tag)).thenAnswer(
         (_) async => TagMutationResult(

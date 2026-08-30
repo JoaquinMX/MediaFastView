@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../../core/services/bookmark_service.dart';
+import '../../../../core/services/directory_access_grant.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../shared/providers/grid_columns_provider.dart';
 import '../../../../shared/providers/media_mutation_bus.dart';
@@ -763,8 +762,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
     state = const MediaLoading(); // Show loading state during recovery
 
     try {
-      final selectedPath = await _params.onPermissionRecoveryNeeded!();
-      if (selectedPath != null && selectedPath.isNotEmpty) {
+      final selectedDirectory = await _params.onPermissionRecoveryNeeded!();
+      if (selectedDirectory != null && selectedDirectory.path.isNotEmpty) {
+        final selectedPath = selectedDirectory.path;
         LoggingService.instance.info(
           'User selected new path: $selectedPath, updating directory path and reloading',
         );
@@ -773,6 +773,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
         final permissionService = PermissionService();
         final accessStatus = await permissionService.checkDirectoryAccess(
           selectedPath,
+          bookmarkData: selectedDirectory.bookmarkData,
         );
 
         if (accessStatus != PermissionStatus.granted) {
@@ -791,23 +792,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
               (element) => element.isNotEmpty,
               orElse: () => selectedPath,
             );
-        _bookmarkData = null; // Clear bookmark data since we're re-selecting
-
-        if (Platform.isMacOS) {
-          // Try to create a new bookmark for the selected directory.
-          try {
-            final bookmarkService = BookmarkService.instance;
-            _bookmarkData = await bookmarkService.createBookmark(_directoryPath);
-            LoggingService.instance.info(
-              'Created new bookmark for recovered directory',
-            );
-          } catch (e) {
-            LoggingService.instance.warning(
-              'Failed to create bookmark for recovered directory: $e',
-            );
-            // Continue without bookmark - it's not critical for basic functionality.
-          }
-        }
+        _bookmarkData = selectedDirectory.bookmarkData;
 
         await _updateDirectoryAccessUseCase(
           directoryId: originalDirectoryId,
@@ -846,6 +831,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
       final permissionService = PermissionService();
       final accessStatus = await permissionService.checkDirectoryAccess(
         _directoryPath,
+        bookmarkData: _bookmarkData,
       );
       final hasAccess = accessStatus == PermissionStatus.granted;
 
@@ -1035,8 +1021,9 @@ class MediaViewModel extends StateNotifier<MediaState> {
 
     // While a tag filter is on, `_cachedMedia` holds a filtered set. Appending
     // an item that doesn't match would break that.
-    if (state case MediaLoaded(:final selectedTagIds)
-        when selectedTagIds.isNotEmpty) {
+    if (state case MediaLoaded(
+      :final selectedTagIds,
+    ) when selectedTagIds.isNotEmpty) {
       return item.tagIds.any(selectedTagIds.contains);
     }
     return true;
@@ -1216,20 +1203,12 @@ class MediaViewModel extends StateNotifier<MediaState> {
         break;
       case MediaSortOption.taggedPercentageAscending:
         sorted.sort(
-          (a, b) => _compareByTaggedPercentage(
-            a,
-            b,
-            descending: false,
-          ),
+          (a, b) => _compareByTaggedPercentage(a, b, descending: false),
         );
         break;
       case MediaSortOption.taggedPercentageDescending:
         sorted.sort(
-          (a, b) => _compareByTaggedPercentage(
-            a,
-            b,
-            descending: true,
-          ),
+          (a, b) => _compareByTaggedPercentage(a, b, descending: true),
         );
         break;
     }
@@ -1297,11 +1276,7 @@ class MediaViewModel extends StateNotifier<MediaState> {
     return counts.taggedMediaCount / counts.totalMediaCount;
   }
 
-  int _orderedComparison(
-    num left,
-    num right, {
-    required bool descending,
-  }) {
+  int _orderedComparison(num left, num right, {required bool descending}) {
     return descending ? right.compareTo(left) : left.compareTo(right);
   }
 }
@@ -1369,11 +1344,11 @@ class MediaViewModelParams {
     String name,
     String? bookmarkData,
     List<DirectoryNavigationTarget>? siblingDirectories,
-    int? currentIndex,
-    {bool replaceCurrentRoute}
-  )?
+    int? currentIndex, {
+    bool replaceCurrentRoute,
+  })?
   navigateToDirectory;
-  final Future<String?> Function()? onPermissionRecoveryNeeded;
+  final Future<DirectoryAccessGrant?> Function()? onPermissionRecoveryNeeded;
 
   @override
   bool operator ==(Object other) =>

@@ -11,12 +11,18 @@ class AddDirectoryUseCase {
   /// Executes the use case to add a directory by path.
   /// Creates a DirectoryEntity and delegates validation to the repository.
   /// [silent] if true, skips recovery dialogs for bookmark failures (used for drag-and-drop).
-  Future<void> call(String path, {bool silent = false}) async {
+  Future<void> call(
+    String path, {
+    String? bookmarkData,
+    bool silent = false,
+  }) async {
     // Generate ID from path using a stable hash to keep repository layers aligned
     final id = generateDirectoryId(path);
 
     // Get directory name from path
-    final name = path.split('/').lastWhere((element) => element.isNotEmpty, orElse: () => path);
+    final name = path
+        .split('/')
+        .lastWhere((element) => element.isNotEmpty, orElse: () => path);
 
     final directoryEntity = DirectoryEntity(
       id: id,
@@ -25,6 +31,7 @@ class AddDirectoryUseCase {
       thumbnailPath: null,
       tagIds: const [],
       lastModified: DateTime.now(),
+      bookmarkData: bookmarkData,
     );
 
     await _repository.addDirectory(directoryEntity, silent: silent);
