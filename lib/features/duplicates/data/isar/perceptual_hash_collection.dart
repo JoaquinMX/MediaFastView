@@ -8,7 +8,7 @@ part 'perceptual_hash_collection.g.dart';
 /// The Isar primary key for the hash of the media identified by [mediaId].
 Id perceptualHashCollectionId(String mediaId) => isarIdFromKey(mediaId);
 
-/// Cached perceptual hash of one image.
+/// Cached perceptual hash of an image or generated video miniature.
 ///
 /// Keyed by [mediaId] with no profile scope: a file's perceptual hash is a
 /// property of its bytes, identical in every profile the file appears in, so the

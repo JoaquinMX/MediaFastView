@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
 
+import '../constants/media_extensions.dart';
 import '../error/app_error.dart';
 import '../utils/retry_utils.dart';
 
@@ -8,22 +9,22 @@ import '../utils/retry_utils.dart';
 class FileService {
   /// Deletes a file at the given path
   Future<void> deleteFile(String filePath) async {
-    await RetryUtils.retryWithBackoff(
-      () async {
-        final file = File(filePath);
-        if (!await file.exists()) {
-          throw FileNotFoundError('File does not exist: $filePath');
-        }
-        await file.delete();
-      },
-      shouldRetry: RetryUtils.shouldRetryFileOperation,
-    ).catchError((error) {
+    await RetryUtils.retryWithBackoff(() async {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        throw FileNotFoundError('File does not exist: $filePath');
+      }
+      await file.delete();
+    }, shouldRetry: RetryUtils.shouldRetryFileOperation).catchError((error) {
       if (error is FileNotFoundError) {
         throw error;
       }
       final errorString = error.toString().toLowerCase();
-      if (errorString.contains('permission denied') || errorString.contains('operation not permitted')) {
-        throw FileAccessDeniedError('Permission denied deleting file: $filePath');
+      if (errorString.contains('permission denied') ||
+          errorString.contains('operation not permitted')) {
+        throw FileAccessDeniedError(
+          'Permission denied deleting file: $filePath',
+        );
       } else if (errorString.contains('no such file')) {
         throw FileNotFoundError('File not found: $filePath');
       } else {
@@ -34,26 +35,31 @@ class FileService {
 
   /// Deletes a directory and all its contents recursively
   Future<void> deleteDirectory(String directoryPath) async {
-    await RetryUtils.retryWithBackoff(
-      () async {
-        final directory = Directory(directoryPath);
-        if (!await directory.exists()) {
-          throw DirectoryNotFoundError('Directory does not exist: $directoryPath');
-        }
-        await directory.delete(recursive: true);
-      },
-      shouldRetry: RetryUtils.shouldRetryFileOperation,
-    ).catchError((error) {
+    await RetryUtils.retryWithBackoff(() async {
+      final directory = Directory(directoryPath);
+      if (!await directory.exists()) {
+        throw DirectoryNotFoundError(
+          'Directory does not exist: $directoryPath',
+        );
+      }
+      await directory.delete(recursive: true);
+    }, shouldRetry: RetryUtils.shouldRetryFileOperation).catchError((error) {
       if (error is DirectoryNotFoundError) {
         throw error;
       }
       final errorString = error.toString().toLowerCase();
-      if (errorString.contains('permission denied') || errorString.contains('operation not permitted')) {
-        throw DirectoryAccessDeniedError('Permission denied deleting directory: $directoryPath');
-      } else if (errorString.contains('no such file') || errorString.contains('directory not found')) {
+      if (errorString.contains('permission denied') ||
+          errorString.contains('operation not permitted')) {
+        throw DirectoryAccessDeniedError(
+          'Permission denied deleting directory: $directoryPath',
+        );
+      } else if (errorString.contains('no such file') ||
+          errorString.contains('directory not found')) {
         throw DirectoryNotFoundError('Directory not found: $directoryPath');
       } else {
-        throw DirectoryError('Failed to delete directory $directoryPath: $error');
+        throw DirectoryError(
+          'Failed to delete directory $directoryPath: $error',
+        );
       }
     });
   }
@@ -70,8 +76,11 @@ class FileService {
       shouldRetry: RetryUtils.shouldRetryFileOperation,
     ).catchError((error) {
       final errorString = error.toString().toLowerCase();
-      if (errorString.contains('permission denied') || errorString.contains('operation not permitted')) {
-        throw FileAccessDeniedError('Permission denied accessing file: $filePath');
+      if (errorString.contains('permission denied') ||
+          errorString.contains('operation not permitted')) {
+        throw FileAccessDeniedError(
+          'Permission denied accessing file: $filePath',
+        );
       } else if (errorString.contains('no such file')) {
         throw FileNotFoundError('File not found: $filePath');
       } else {
@@ -84,24 +93,28 @@ class FileService {
   Future<List<FileSystemEntity>> getDirectoryContents(
     String directoryPath,
   ) async {
-    return await RetryUtils.retryWithBackoff(
-      () async {
-        final directory = Directory(directoryPath);
-        if (!await directory.exists()) {
-          throw DirectoryNotFoundError('Directory does not exist: $directoryPath');
-        }
-        return await directory.list().toList();
-      },
-      shouldRetry: RetryUtils.shouldRetryFileOperation,
-    ).catchError((error) {
+    return await RetryUtils.retryWithBackoff(() async {
+      final directory = Directory(directoryPath);
+      if (!await directory.exists()) {
+        throw DirectoryNotFoundError(
+          'Directory does not exist: $directoryPath',
+        );
+      }
+      return await directory.list().toList();
+    }, shouldRetry: RetryUtils.shouldRetryFileOperation).catchError((error) {
       if (error is DirectoryNotFoundError) {
         throw error;
       }
       final errorString = error.toString().toLowerCase();
-      if (errorString.contains('permission denied') || errorString.contains('operation not permitted')) {
-        throw DirectoryAccessDeniedError('Permission denied accessing directory: $directoryPath');
+      if (errorString.contains('permission denied') ||
+          errorString.contains('operation not permitted')) {
+        throw DirectoryAccessDeniedError(
+          'Permission denied accessing directory: $directoryPath',
+        );
       } else {
-        throw DirectoryScanError('Failed to read directory $directoryPath: $error');
+        throw DirectoryScanError(
+          'Failed to read directory $directoryPath: $error',
+        );
       }
     });
   }
@@ -133,43 +146,15 @@ class FileService {
   String getMediaTypeFromExtension(String filePath) {
     final extension = getFileExtension(filePath);
 
+    if (isSupportedImagePath(filePath)) {
+      return 'image';
+    }
+
+    if (isSupportedVideoPath(filePath)) {
+      return 'video';
+    }
+
     switch (extension) {
-      case '.jpg':
-      case '.jpeg':
-      case '.png':
-      case '.gif':
-      case '.bmp':
-      case '.webp':
-      case '.tiff':
-      case '.tif':
-      case '.heic':
-      case '.heif':
-      case '.heics':
-      case '.dng':
-      case '.nef':
-      case '.cr2':
-      case '.cr3':
-      case '.arw':
-      case '.raf':
-      case '.orf':
-      case '.rw2':
-      case '.sr2':
-      case '.pef':
-        return 'image';
-      case '.mp4':
-      case '.avi':
-      case '.mov':
-      case '.mkv':
-      case '.wmv':
-      case '.flv':
-      case '.webm':
-      case '.m4v':
-      case '.ts':
-      case '.mts':
-      case '.m2ts':
-      case '.mpg':
-      case '.mpeg':
-        return 'video';
       case '.mp3':
       case '.m4a':
       case '.aac':
@@ -204,32 +189,36 @@ class FileService {
 
   /// Gets directory size recursively
   Future<int> getDirectorySize(String directoryPath) async {
-    return await RetryUtils.retryWithBackoff(
-      () async {
-        final directory = Directory(directoryPath);
-        if (!await directory.exists()) {
-          throw DirectoryNotFoundError('Directory does not exist: $directoryPath');
-        }
+    return await RetryUtils.retryWithBackoff(() async {
+      final directory = Directory(directoryPath);
+      if (!await directory.exists()) {
+        throw DirectoryNotFoundError(
+          'Directory does not exist: $directoryPath',
+        );
+      }
 
-        int totalSize = 0;
-        await for (final entity in directory.list(recursive: true)) {
-          if (entity is File) {
-            final stat = await entity.stat();
-            totalSize += stat.size;
-          }
+      int totalSize = 0;
+      await for (final entity in directory.list(recursive: true)) {
+        if (entity is File) {
+          final stat = await entity.stat();
+          totalSize += stat.size;
         }
-        return totalSize;
-      },
-      shouldRetry: RetryUtils.shouldRetryFileOperation,
-    ).catchError((error) {
+      }
+      return totalSize;
+    }, shouldRetry: RetryUtils.shouldRetryFileOperation).catchError((error) {
       if (error is DirectoryNotFoundError) {
         throw error;
       }
       final errorString = error.toString().toLowerCase();
-      if (errorString.contains('permission denied') || errorString.contains('operation not permitted')) {
-        throw DirectoryAccessDeniedError('Permission denied accessing directory: $directoryPath');
+      if (errorString.contains('permission denied') ||
+          errorString.contains('operation not permitted')) {
+        throw DirectoryAccessDeniedError(
+          'Permission denied accessing directory: $directoryPath',
+        );
       } else {
-        throw DirectoryScanError('Failed to calculate directory size for $directoryPath: $error');
+        throw DirectoryScanError(
+          'Failed to calculate directory size for $directoryPath: $error',
+        );
       }
     });
   }

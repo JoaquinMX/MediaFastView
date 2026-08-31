@@ -25,6 +25,14 @@ final thumbnailDiskCacheEnabledProvider = Provider<bool>((ref) {
   );
 });
 
+final imageLookupHistoryEnabledProvider = Provider<bool>((ref) {
+  final settings = ref.watch(settingsProvider);
+  return settings.maybeWhen(
+    data: (value) => value.imageLookupHistoryEnabled,
+    orElse: () => const AppSettings.initial().imageLookupHistoryEnabled,
+  );
+});
+
 final deleteFromSourceProvider = Provider<bool>((ref) {
   final settings = ref.watch(settingsProvider);
   return settings.maybeWhen(

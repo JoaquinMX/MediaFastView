@@ -14,6 +14,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
       'thumbnail_disk_cache_enabled_v2';
   static const String _legacyThumbnailCachingKey = 'thumbnail_caching_enabled';
   static const String _deleteFromSourceKey = 'delete_from_source_enabled';
+  static const String _imageLookupHistoryKey = 'image_lookup_history_enabled';
   static const String _autoplayKey = 'video_autoplay_enabled';
   static const String _loopKey = 'video_loop_enabled';
   static const String _startMutedKey = 'video_start_muted';
@@ -39,6 +40,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
     }
     final deleteFromSourceEnabled =
         prefs.getBool(_deleteFromSourceKey) ?? false;
+    final imageLookupHistoryEnabled =
+        prefs.getBool(_imageLookupHistoryKey) ?? false;
     final autoNavigateSiblingDirectories =
         prefs.getBool(_autoNavigateKey) ?? false;
     final navigateToSiblingAfterDirectoryDelete =
@@ -60,6 +63,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
     return AppSettings(
       themeMode: ThemeMode.values[themeIndex],
       thumbnailDiskCacheEnabled: thumbnailDiskCacheEnabled,
+      imageLookupHistoryEnabled: imageLookupHistoryEnabled,
       deleteFromSourceEnabled: deleteFromSourceEnabled,
       playbackSettings: PlaybackSettings(
         autoplayVideos: autoplay,
@@ -90,6 +94,12 @@ class SettingsRepositoryImpl implements SettingsRepository {
   Future<void> saveDeleteFromSourceEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_deleteFromSourceKey, enabled);
+  }
+
+  @override
+  Future<void> saveImageLookupHistoryEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_imageLookupHistoryKey, enabled);
   }
 
   @override

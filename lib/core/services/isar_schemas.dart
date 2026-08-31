@@ -1,6 +1,7 @@
 import 'package:isar/isar.dart';
 
 import '../../features/duplicates/data/isar/dismissed_duplicate_group_collection.dart';
+import '../../features/duplicates/data/isar/image_lookup_history_collection.dart';
 import '../../features/duplicates/data/isar/perceptual_hash_collection.dart';
 import '../../features/favorites/data/isar/favorite_collection.dart';
 import '../../features/media_library/data/isar/directory_collection.dart';
@@ -26,4 +27,5 @@ const List<CollectionSchema<dynamic>> isarCollectionSchemas =
       ProfileCollectionSchema,
       PerceptualHashCollectionSchema,
       DismissedDuplicateGroupCollectionSchema,
+      ImageLookupHistoryCollectionSchema,
     ];

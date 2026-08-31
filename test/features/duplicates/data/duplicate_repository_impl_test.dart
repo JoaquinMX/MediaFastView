@@ -2,9 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/features/duplicates/data/data_sources/dismissed_group_data_source.dart';
 import 'package:media_fast_view/features/duplicates/data/data_sources/perceptual_hash_data_source.dart';
 import 'package:media_fast_view/features/duplicates/data/repositories/duplicate_repository_impl.dart';
+import 'package:media_fast_view/features/duplicates/data/services/perceptual_hasher.dart';
+import 'package:media_fast_view/features/duplicates/data/services/video_thumbnail_hasher.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_scan_progress.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_sensitivity.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/keeper_strategy.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_source.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_query.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/perceptual_hash.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
@@ -57,6 +61,38 @@ class _FakeDismissedDataSource implements DismissedGroupDataSource {
   Future<void> add(String signature) async => signatures.add(signature);
 }
 
+class _FakeHasher extends PerceptualHasher {
+  _FakeHasher(this.results);
+
+  final Map<String, ImageHashResult?> results;
+  final List<String> hashedPaths = <String>[];
+
+  @override
+  Future<ImageHashResult?> hashFile(String path) async {
+    hashedPaths.add(path);
+    return results[path];
+  }
+}
+
+class _FakeVideoThumbnailHasher implements VideoThumbnailHasher {
+  _FakeVideoThumbnailHasher(this.results);
+
+  final Map<String, ImageHashResult?> results;
+  final List<String> hashedPaths = <String>[];
+
+  @override
+  Future<ImageHashResult?> hashVideo({
+    required String path,
+    required int size,
+    required DateTime lastModified,
+    String? bookmarkData,
+    DuplicateScanCancellation? cancellation,
+  }) async {
+    hashedPaths.add(path);
+    return results[path];
+  }
+}
+
 PerceptualHash hashFor(
   MediaEntity media,
   int hash, {
@@ -68,7 +104,8 @@ PerceptualHash hashFor(
     hash: hash,
     width: width,
     height: height,
-    fingerprint: perceptualFingerprint(
+    fingerprint: visualPerceptualFingerprint(
+      mediaType: media.type,
       size: media.size,
       lastModified: media.lastModified,
     ),
@@ -214,6 +251,201 @@ void main() {
 
       expect(events.last.isCancelled, isTrue);
       expect(events.last.processed, lessThan(50));
+    });
+  });
+
+  group('DuplicateRepositoryImpl image lookup', () {
+    test('reports current cache coverage and excludes stale hashes', () async {
+      final current = buildMedia('current');
+      final stale = buildMedia('stale');
+      final repository = DuplicateRepositoryImpl(
+        mediaRepository: _FakeMediaRepository(<MediaEntity>[current, stale]),
+        hashDataSource: _FakeHashDataSource(<String, PerceptualHash>{
+          current.id: hashFor(current, 0),
+          stale.id: hashFor(stale, 0).copyWith(fingerprint: 'stale'),
+        }),
+        dismissedDataSource: _FakeDismissedDataSource(),
+      );
+
+      final coverage = await repository.getLibraryCoverage();
+
+      expect(coverage.totalImages, 2);
+      expect(coverage.readyImages, 1);
+      expect(coverage.pendingImages, 1);
+    });
+
+    test(
+      'matches multiple queries closest-first and includes exact matches',
+      () async {
+        final exact = buildMedia('exact');
+        final close = buildMedia('close');
+        final far = buildMedia('far');
+        final hasher = _FakeHasher(<String, ImageHashResult?>{
+          '/query-a.jpg': const ImageHashResult(
+            hash: 0,
+            width: 800,
+            height: 600,
+          ),
+          '/query-b.jpg': const ImageHashResult(
+            hash: 0xFFFF,
+            width: 900,
+            height: 700,
+          ),
+        });
+        final repository = DuplicateRepositoryImpl(
+          mediaRepository: _FakeMediaRepository(<MediaEntity>[
+            exact,
+            close,
+            far,
+          ]),
+          hashDataSource: _FakeHashDataSource(<String, PerceptualHash>{
+            exact.id: hashFor(exact, 0),
+            close.id: hashFor(close, 3),
+            far.id: hashFor(far, 0xFFFF),
+          }),
+          dismissedDataSource: _FakeDismissedDataSource()
+            ..signatures.add('${exact.id}|${close.id}'),
+          hasher: hasher,
+        );
+        final sources = <ImageLookupSource>[
+          ImageLookupSource(
+            path: '/query-a.jpg',
+            name: 'query-a.jpg',
+            size: 100,
+            lastModified: DateTime(2024),
+          ),
+          ImageLookupSource(
+            path: '/query-b.jpg',
+            name: 'query-b.jpg',
+            size: 200,
+            lastModified: DateTime(2024),
+          ),
+        ];
+
+        final batch = await repository.findImageMatches(
+          sources: sources,
+          sensitivity: DuplicateSensitivity.strict,
+        );
+
+        expect(batch.results, hasLength(2));
+        expect(
+          batch.results.first.matches.map((match) => match.candidate.id),
+          <String>[exact.id, close.id],
+        );
+        expect(
+          batch.results.first.matches.map((match) => match.distance),
+          <int>[0, 2],
+        );
+        expect(batch.results.last.matches.single.candidate.id, far.id);
+        expect(hasher.hashedPaths, <String>['/query-a.jpg', '/query-b.jpg']);
+      },
+    );
+
+    test('rematches existing queries without hashing them again', () async {
+      final close = buildMedia('close');
+      final hasher = _FakeHasher(<String, ImageHashResult?>{
+        '/query.jpg': const ImageHashResult(hash: 0, width: 800, height: 600),
+      });
+      final repository = DuplicateRepositoryImpl(
+        mediaRepository: _FakeMediaRepository(<MediaEntity>[close]),
+        hashDataSource: _FakeHashDataSource(<String, PerceptualHash>{
+          close.id: hashFor(close, 0xFF),
+        }),
+        dismissedDataSource: _FakeDismissedDataSource(),
+        hasher: hasher,
+      );
+      final source = ImageLookupSource(
+        path: '/query.jpg',
+        name: 'query.jpg',
+        size: 100,
+        lastModified: DateTime(2024),
+      );
+      final strict = await repository.findImageMatches(
+        sources: <ImageLookupSource>[source],
+        sensitivity: DuplicateSensitivity.strict,
+      );
+
+      final loose = await repository.rematchImageQueries(
+        queries: <ImageLookupQuery>[strict.results.single.query!],
+        sensitivity: DuplicateSensitivity.loose,
+      );
+
+      expect(strict.results.single.matches, isEmpty);
+      expect(loose.results.single.matches.single.candidate.id, close.id);
+      expect(hasher.hashedPaths, <String>['/query.jpg']);
+    });
+
+    test('matches video miniatures only against indexed videos', () async {
+      final exactVideo = buildMedia('video-exact', type: MediaType.video);
+      final closeVideo = buildMedia('video-close', type: MediaType.video);
+      final identicalImage = buildMedia('image-exact');
+      final videoHasher = _FakeVideoThumbnailHasher(<String, ImageHashResult?>{
+        '/query.mov': const ImageHashResult(hash: 0, width: 512, height: 288),
+      });
+      final repository = DuplicateRepositoryImpl(
+        mediaRepository: _FakeMediaRepository(<MediaEntity>[
+          exactVideo,
+          closeVideo,
+          identicalImage,
+        ]),
+        hashDataSource: _FakeHashDataSource(<String, PerceptualHash>{
+          exactVideo.id: hashFor(exactVideo, 0),
+          closeVideo.id: hashFor(closeVideo, 3),
+          identicalImage.id: hashFor(identicalImage, 0),
+        }),
+        dismissedDataSource: _FakeDismissedDataSource(),
+        videoThumbnailHasher: videoHasher,
+      );
+      final source = ImageLookupSource(
+        path: '/query.mov',
+        name: 'query.mov',
+        size: 5000,
+        lastModified: DateTime(2024),
+        mediaType: MediaType.video,
+      );
+
+      final batch = await repository.findImageMatches(
+        sources: <ImageLookupSource>[source],
+        sensitivity: DuplicateSensitivity.strict,
+      );
+
+      expect(
+        batch.results.single.matches.map((match) => match.candidate.id),
+        <String>[exactVideo.id, closeVideo.id],
+      );
+      expect(batch.searchedLibraryImages, 2);
+      expect(videoHasher.hashedPaths, <String>['/query.mov']);
+    });
+
+    test('prepares only requested video miniature hashes', () async {
+      final image = buildMedia('image');
+      final video = buildMedia('video', type: MediaType.video);
+      final imageHasher = _FakeHasher(<String, ImageHashResult?>{});
+      final videoHasher = _FakeVideoThumbnailHasher(<String, ImageHashResult?>{
+        video.path: const ImageHashResult(hash: 42, width: 512, height: 288),
+      });
+      final hashes = _FakeHashDataSource(<String, PerceptualHash>{});
+      final repository = DuplicateRepositoryImpl(
+        mediaRepository: _FakeMediaRepository(<MediaEntity>[image, video]),
+        hashDataSource: hashes,
+        dismissedDataSource: _FakeDismissedDataSource(),
+        hasher: imageHasher,
+        videoThumbnailHasher: videoHasher,
+      );
+
+      final events = await repository
+          .hashLibrary(mediaTypes: const <MediaType>{MediaType.video})
+          .toList();
+
+      expect(events.last.total, 1);
+      expect(events.last.isComplete, isTrue);
+      expect(imageHasher.hashedPaths, isEmpty);
+      expect(videoHasher.hashedPaths, <String>[video.path]);
+      expect(hashes.store[video.id]?.hash, 42);
+      expect(
+        hashes.store[video.id]?.fingerprint,
+        startsWith('video_thumbnail_v1_'),
+      );
     });
   });
 }

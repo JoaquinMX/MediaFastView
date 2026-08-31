@@ -9,10 +9,12 @@ class SensitivitySelector extends StatelessWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.enabled = true,
   });
 
   final DuplicateSensitivity value;
   final ValueChanged<DuplicateSensitivity> onChanged;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +34,9 @@ class SensitivitySelector extends StatelessWidget {
           ],
           selected: {value},
           showSelectedIcon: false,
-          onSelectionChanged: (selection) => onChanged(selection.first),
+          onSelectionChanged: enabled
+              ? (selection) => onChanged(selection.first)
+              : null,
         ),
         const SizedBox(height: 6),
         Text(

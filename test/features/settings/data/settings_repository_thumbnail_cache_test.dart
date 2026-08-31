@@ -30,4 +30,18 @@ void main() {
 
     expect(settings.thumbnailDiskCacheEnabled, isFalse);
   });
+
+  test('image lookup history defaults off and can be enabled', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    const repository = SettingsRepositoryImpl();
+
+    expect(
+      (await repository.loadSettings()).imageLookupHistoryEnabled,
+      isFalse,
+    );
+
+    await repository.saveImageLookupHistoryEnabled(true);
+
+    expect((await repository.loadSettings()).imageLookupHistoryEnabled, isTrue);
+  });
 }

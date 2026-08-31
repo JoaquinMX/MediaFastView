@@ -11,6 +11,7 @@ class AppSettings {
   const AppSettings({
     required this.themeMode,
     required this.thumbnailDiskCacheEnabled,
+    required this.imageLookupHistoryEnabled,
     required this.deleteFromSourceEnabled,
     required this.playbackSettings,
     required this.autoNavigateSiblingDirectories,
@@ -22,6 +23,7 @@ class AppSettings {
   const AppSettings.initial()
     : themeMode = ThemeMode.system,
       thumbnailDiskCacheEnabled = true,
+      imageLookupHistoryEnabled = false,
       deleteFromSourceEnabled = false,
       playbackSettings = const PlaybackSettings.initial(),
       autoNavigateSiblingDirectories = false,
@@ -33,6 +35,7 @@ class AppSettings {
 
   /// Whether generated image and video previews are persisted to disk.
   final bool thumbnailDiskCacheEnabled;
+  final bool imageLookupHistoryEnabled;
   final bool deleteFromSourceEnabled;
   final PlaybackSettings playbackSettings;
   final bool autoNavigateSiblingDirectories;
@@ -49,6 +52,7 @@ class AppSettings {
   AppSettings copyWith({
     ThemeMode? themeMode,
     bool? thumbnailDiskCacheEnabled,
+    bool? imageLookupHistoryEnabled,
     bool? deleteFromSourceEnabled,
     PlaybackSettings? playbackSettings,
     bool? autoNavigateSiblingDirectories,
@@ -60,6 +64,8 @@ class AppSettings {
       themeMode: themeMode ?? this.themeMode,
       thumbnailDiskCacheEnabled:
           thumbnailDiskCacheEnabled ?? this.thumbnailDiskCacheEnabled,
+      imageLookupHistoryEnabled:
+          imageLookupHistoryEnabled ?? this.imageLookupHistoryEnabled,
       deleteFromSourceEnabled:
           deleteFromSourceEnabled ?? this.deleteFromSourceEnabled,
       playbackSettings: playbackSettings ?? this.playbackSettings,

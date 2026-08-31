@@ -564,13 +564,12 @@ class BookmarkHandler: NSObject {
     private func createBookmark(for directoryPath: String) throws -> Data {
         let url = URL(fileURLWithPath: directoryPath)
 
-        // Check if the directory exists
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: directoryPath, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
+        // Both registered directories and user-selected lookup images need
+        // persistent access in the sandbox.
+        guard FileManager.default.fileExists(atPath: directoryPath) else {
             throw NSError(domain: "BookmarkHandler",
                           code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Directory does not exist or is not a directory"])
+                          userInfo: [NSLocalizedDescriptionKey: "Resource does not exist"])
         }
 
         // Create security-scoped bookmark

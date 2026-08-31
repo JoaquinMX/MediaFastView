@@ -65,8 +65,28 @@ class DuplicateScanProgress {
 /// [isCancelled] between images and stops early when it is set.
 class DuplicateScanCancellation {
   bool _isCancelled = false;
+  final Set<void Function()> _listeners = <void Function()>{};
 
   bool get isCancelled => _isCancelled;
 
-  void cancel() => _isCancelled = true;
+  void Function() addListener(void Function() listener) {
+    if (_isCancelled) {
+      listener();
+      return () {};
+    }
+    _listeners.add(listener);
+    return () => _listeners.remove(listener);
+  }
+
+  void cancel() {
+    if (_isCancelled) {
+      return;
+    }
+    _isCancelled = true;
+    final listeners = List<void Function()>.from(_listeners);
+    _listeners.clear();
+    for (final listener in listeners) {
+      listener();
+    }
+  }
 }

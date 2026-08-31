@@ -15,6 +15,8 @@ import '../../../../core/services/directory_access_grant.dart';
 import '../../../../core/services/directory_browser_service.dart';
 import '../../../../core/services/directory_picker_service.dart';
 import '../../../duplicates/presentation/screens/duplicate_management_screen.dart';
+import '../../../duplicates/presentation/screens/image_lookup_screen.dart';
+import '../../../duplicates/presentation/view_models/image_lookup_view_model.dart';
 import '../../../profiles/presentation/widgets/profile_switcher.dart';
 
 import '../../../../shared/providers/grid_columns_provider.dart';
@@ -243,6 +245,7 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
     DirectoryViewModel viewModel,
     WidgetRef ref,
   ) {
+    final imageLookupState = ref.watch(imageLookupViewModelProvider);
     return AppBar(
       title: const ProfileSwitcher(fallbackTitle: 'Directories'),
       actions: [
@@ -278,6 +281,23 @@ class _DirectoryGridScreenState extends ConsumerState<DirectoryGridScreen> {
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (context) => const DuplicateManagementScreen(),
+              ),
+            ),
+          ),
+        if (_isMacOS)
+          IconButton(
+            icon: Badge(
+              isLabelVisible:
+                  imageLookupState.isBusy ||
+                  imageLookupState.phase is ImageLookupResults,
+              child: const Icon(Icons.perm_media_outlined),
+            ),
+            tooltip: imageLookupState.isBusy
+                ? 'Media lookup running in background'
+                : 'Find matches for images or videos',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const ImageLookupScreen(),
               ),
             ),
           ),

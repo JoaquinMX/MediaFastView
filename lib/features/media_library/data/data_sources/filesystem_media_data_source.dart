@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 
+import '../../../../core/constants/media_extensions.dart';
 import '../../../../core/error/app_error.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/services/permission_service.dart';
@@ -46,50 +47,9 @@ class FilesystemMediaDataSource {
   ///
   /// Keep these in sync with [FileService.getMediaTypeFromExtension] to ensure
   /// consistent media detection across the app.
-  static const Set<String> _imageExtensions = {
-    'jpg',
-    'jpeg',
-    'png',
-    'gif',
-    'jfif',
-    'bmp',
-    'webp',
-    'tiff',
-    'tif',
-    'heic',
-    'heif',
-    'heics',
-    'dng',
-    'nef',
-    'cr2',
-    'cr3',
-    'arw',
-    'raf',
-    'orf',
-    'rw2',
-    'sr2',
-    'pef',
-  };
-
   /// Supported video file extensions.
   ///
   /// Keep these in sync with [FileService.getMediaTypeFromExtension].
-  static const Set<String> _videoExtensions = {
-    'mp4',
-    'mov',
-    'avi',
-    'mkv',
-    'wmv',
-    'flv',
-    'webm',
-    'm4v',
-    'ts',
-    'mts',
-    'm2ts',
-    'mpg',
-    'mpeg',
-  };
-
   /// Supported text file extensions
   static const Set<String> _textExtensions = {'txt', 'md', 'log'};
 
@@ -113,8 +73,8 @@ class FilesystemMediaDataSource {
 
   /// Supported media file extensions across images, videos, text, and audio.
   static const Set<String> supportedMediaExtensions = {
-    ..._imageExtensions,
-    ..._videoExtensions,
+    ...supportedImageExtensions,
+    ...supportedVideoExtensions,
     ..._textExtensions,
     ..._audioExtensions,
   };
@@ -565,9 +525,9 @@ class FilesystemMediaDataSource {
 
   /// Determines the media type from file extension.
   MediaType? _getMediaType(String extension) {
-    if (_imageExtensions.contains(extension)) {
+    if (supportedImageExtensions.contains(extension)) {
       return MediaType.image;
-    } else if (_videoExtensions.contains(extension)) {
+    } else if (supportedVideoExtensions.contains(extension)) {
       return MediaType.video;
     } else if (_textExtensions.contains(extension)) {
       return MediaType.text;

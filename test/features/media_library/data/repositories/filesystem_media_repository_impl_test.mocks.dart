@@ -521,6 +521,22 @@ class MockBookmarkService extends _i1.Mock implements _i12.BookmarkService {
       ) as _i7.Future<String>);
 
   @override
+  _i7.Future<String> createFileBookmark(String? filePath) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #createFileBookmark,
+          [filePath],
+        ),
+        returnValue: _i7.Future<String>.value(_i10.dummyValue<String>(
+          this,
+          Invocation.method(
+            #createFileBookmark,
+            [filePath],
+          ),
+        )),
+      ) as _i7.Future<String>);
+
+  @override
   _i7.Future<Map<String, dynamic>> selectDirectoryAndCreateBookmark(
           {String? initialDirectoryPath}) =>
       (super.noSuchMethod(

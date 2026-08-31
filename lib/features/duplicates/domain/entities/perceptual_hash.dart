@@ -1,5 +1,6 @@
-/// A perceptual (difference-hash) fingerprint of an image, plus the metadata the
-/// duplicate feature needs to reason about it.
+import '../../../media_library/domain/entities/media_entity.dart';
+
+/// A perceptual (difference-hash) fingerprint of visual media.
 ///
 /// The [hash] is a 64-bit dHash: the image is squashed to a fixed grid and each
 /// bit records whether one cell is brighter than its right-hand neighbour.
@@ -60,6 +61,16 @@ String perceptualFingerprint({
   required DateTime lastModified,
 }) {
   return '${size}_${lastModified.millisecondsSinceEpoch}';
+}
+
+/// The source fingerprint for an image or the generated video-miniature recipe.
+String visualPerceptualFingerprint({
+  required MediaType mediaType,
+  required int size,
+  required DateTime lastModified,
+}) {
+  final source = perceptualFingerprint(size: size, lastModified: lastModified);
+  return mediaType == MediaType.video ? 'video_thumbnail_v1_$source' : source;
 }
 
 /// The number of differing bits between two 64-bit hashes — the similarity

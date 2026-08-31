@@ -95,6 +95,10 @@ class SettingsScreen extends ConsumerWidget {
             settings.thumbnailDiskCacheEnabled,
             viewModel,
           ),
+          _buildImageLookupHistorySetting(
+            settings.imageLookupHistoryEnabled,
+            viewModel,
+          ),
           _buildGenerateThumbnailsTile(
             context,
             ref,
@@ -177,6 +181,23 @@ class SettingsScreen extends ConsumerWidget {
         onChanged: (bool value) {
           viewModel.updateThumbnailDiskCache(value);
         },
+      ),
+    );
+  }
+
+  Widget _buildImageLookupHistorySetting(
+    bool isEnabled,
+    SettingsViewModel viewModel,
+  ) {
+    return ListTile(
+      title: const Text('Save Media Lookup History'),
+      subtitle: const Text(
+        'Keep up to 10 completed lookup sessions for each profile. Original '
+        'query files are referenced in place and are not copied.',
+      ),
+      trailing: Switch(
+        value: isEnabled,
+        onChanged: viewModel.updateImageLookupHistory,
       ),
     );
   }

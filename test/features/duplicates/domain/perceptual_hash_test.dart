@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/perceptual_hash.dart';
+import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 
 void main() {
   group('hammingDistance', () {
@@ -55,6 +56,23 @@ void main() {
       );
       expect(base, isNot(biggerFile));
       expect(base, isNot(touched));
+    });
+
+    test('versions video miniatures without invalidating image hashes', () {
+      final modified = DateTime.fromMillisecondsSinceEpoch(5000);
+      final image = visualPerceptualFingerprint(
+        mediaType: MediaType.image,
+        size: 2048,
+        lastModified: modified,
+      );
+      final video = visualPerceptualFingerprint(
+        mediaType: MediaType.video,
+        size: 2048,
+        lastModified: modified,
+      );
+
+      expect(image, '2048_5000');
+      expect(video, 'video_thumbnail_v1_2048_5000');
     });
   });
 }

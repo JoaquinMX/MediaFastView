@@ -11,6 +11,8 @@ abstract class SettingsRepository {
 
   Future<void> saveThumbnailDiskCacheEnabled(bool enabled);
 
+  Future<void> saveImageLookupHistoryEnabled(bool enabled);
+
   Future<void> saveDeleteFromSourceEnabled(bool enabled);
 
   Future<void> savePlaybackSettings(PlaybackSettings settings);

@@ -82,6 +82,7 @@ import '../../features/settings/domain/repositories/settings_repository.dart';
 import '../../features/settings/domain/use_cases/get_app_settings_use_case.dart';
 import '../../features/settings/domain/use_cases/update_auto_navigate_sibling_directories_use_case.dart';
 import '../../features/settings/domain/use_cases/update_delete_from_source_use_case.dart';
+import '../../features/settings/domain/use_cases/update_image_lookup_history_use_case.dart';
 import '../../features/settings/domain/use_cases/update_navigate_to_sibling_after_directory_delete_use_case.dart';
 import '../../features/settings/domain/use_cases/update_playback_settings_use_case.dart';
 import '../../features/settings/domain/use_cases/update_show_directory_tagged_media_counts_use_case.dart';
@@ -633,6 +634,13 @@ final updateThumbnailDiskCacheUseCaseProvider =
 final updateDeleteFromSourceUseCaseProvider =
     Provider<UpdateDeleteFromSourceUseCase>((ref) {
       return UpdateDeleteFromSourceUseCase(
+        ref.watch(settingsRepositoryProvider),
+      );
+    });
+
+final updateImageLookupHistoryUseCaseProvider =
+    Provider<UpdateImageLookupHistoryUseCase>((ref) {
+      return UpdateImageLookupHistoryUseCase(
         ref.watch(settingsRepositoryProvider),
       );
     });

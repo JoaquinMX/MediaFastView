@@ -7,12 +7,14 @@ MediaEntity buildMedia(
   int size = 1000,
   DateTime? modified,
   String? path,
+  MediaType type = MediaType.image,
 }) {
+  final extension = type == MediaType.video ? 'mp4' : 'jpg';
   return MediaEntity(
     id: id,
-    path: path ?? '/library/$id.jpg',
-    name: '$id.jpg',
-    type: MediaType.image,
+    path: path ?? '/library/$id.$extension',
+    name: '$id.$extension',
+    type: type,
     size: size,
     lastModified: modified ?? DateTime(2020, 1, 1),
     tagIds: const [],

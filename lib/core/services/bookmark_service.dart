@@ -60,6 +60,28 @@ class BookmarkService {
     }
   }
 
+  /// Creates a persistent security-scoped bookmark for a user-selected file.
+  Future<String> createFileBookmark(String filePath) async {
+    try {
+      if (!Platform.isMacOS) {
+        throw UnsupportedError(
+          'File bookmarks are currently supported on macOS only',
+        );
+      }
+
+      final result = await _channel.invokeMethod<String>(_createBookmark, {
+        'directoryPath': filePath,
+      });
+      if (result == null) {
+        throw Exception('Failed to create file bookmark: null result');
+      }
+      return result;
+    } on PlatformException catch (error) {
+      _logError('Failed to create bookmark for file: $filePath', error);
+      throw Exception('Failed to create file bookmark: ${error.message}');
+    }
+  }
+
   /// Shows a directory selection panel and creates a security-scoped bookmark
   /// Returns a map containing 'directoryPath' and 'bookmarkData' on success
   Future<Map<String, dynamic>> selectDirectoryAndCreateBookmark({
@@ -316,14 +338,16 @@ class BookmarkService {
     }
 
     try {
-      final result = await _channel.invokeMethod<Map<Object?, Object?>>(method, {
-        'sourcePath': sourcePath,
-        'destinationPath': destinationPath,
-        if (sourceBookmarkData != null) 'sourceBookmarkData': sourceBookmarkData,
-        if (destinationBookmarkData != null)
-          'destinationBookmarkData': destinationBookmarkData,
-        'conflictStrategy': conflictStrategy.name,
-      });
+      final result = await _channel
+          .invokeMethod<Map<Object?, Object?>>(method, {
+            'sourcePath': sourcePath,
+            'destinationPath': destinationPath,
+            if (sourceBookmarkData != null)
+              'sourceBookmarkData': sourceBookmarkData,
+            if (destinationBookmarkData != null)
+              'destinationBookmarkData': destinationBookmarkData,
+            'conflictStrategy': conflictStrategy.name,
+          });
 
       if (result == null) {
         throw FileMoveError('The $label returned no result');
@@ -364,7 +388,9 @@ class BookmarkService {
       case 'BOOKMARK_ACCESS':
         return FileAccessDeniedError(message);
       default:
-        return label == 'move' ? FileMoveError(message) : FileCopyError(message);
+        return label == 'move'
+            ? FileMoveError(message)
+            : FileCopyError(message);
     }
   }
 
