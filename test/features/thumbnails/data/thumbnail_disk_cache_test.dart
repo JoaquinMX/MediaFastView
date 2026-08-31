@@ -10,14 +10,17 @@ ThumbnailRequest _request({
   int size = 10,
   DateTime? modified,
   ThumbnailSize thumbnailSize = ThumbnailSize.medium,
+  MediaType mediaType = MediaType.image,
+  double? videoPositionFraction,
 }) {
   return ThumbnailRequest(
     path: path,
-    mediaType: MediaType.image,
+    mediaType: mediaType,
     sourceSize: size,
     sourceLastModified: modified ?? DateTime.utc(2025),
     thumbnailSize: thumbnailSize,
     diskCacheEnabled: true,
+    videoPositionFraction: videoPositionFraction,
   );
 }
 
@@ -57,6 +60,16 @@ void main() {
     expect(
       cache.keyFor(_request(thumbnailSize: ThumbnailSize.large)),
       isNot(cache.keyFor(original)),
+    );
+    expect(
+      cache.keyFor(
+        _request(mediaType: MediaType.video, videoPositionFraction: 0.3),
+      ),
+      isNot(
+        cache.keyFor(
+          _request(mediaType: MediaType.video, videoPositionFraction: 0.5),
+        ),
+      ),
     );
   });
 

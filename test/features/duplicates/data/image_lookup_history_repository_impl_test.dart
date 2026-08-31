@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/models/media_lookup_mode.dart';
 import 'package:media_fast_view/features/duplicates/data/data_sources/image_lookup_history_data_source.dart';
 import 'package:media_fast_view/features/duplicates/data/isar/image_lookup_history_collection.dart';
 import 'package:media_fast_view/features/duplicates/data/repositories/image_lookup_history_repository_impl.dart';
@@ -10,6 +13,7 @@ import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_result.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_session.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_source.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/matched_video_frame.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 
 class _FakeHistoryDataSource implements ImageLookupHistoryDataSource {
@@ -48,6 +52,7 @@ ImageLookupSession _session(
   String profileId = 'profile-a',
   int day = 1,
   MediaType mediaType = MediaType.image,
+  MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
 }) {
   final extension = mediaType == MediaType.video ? 'mov' : 'jpg';
   final source = ImageLookupSource(
@@ -73,6 +78,7 @@ ImageLookupSession _session(
     profileId: profileId,
     createdAt: DateTime(2024, 1, day),
     sensitivity: DuplicateSensitivity.balanced,
+    lookupMode: lookupMode,
     hasPartialCoverage: true,
     searchedLibraryImages: 42,
     results: <ImageLookupResult>[
@@ -93,6 +99,12 @@ ImageLookupSession _session(
               hash: 3,
             ),
             distance: 1,
+            matchedVideoFrame: lookupMode == MediaLookupMode.videoFromFrame
+                ? const MatchedVideoFrame(
+                    positionPercent: 30,
+                    timestamp: Duration(seconds: 42),
+                  )
+                : null,
           ),
         ],
       ),
@@ -103,7 +115,11 @@ ImageLookupSession _session(
 void main() {
   test('serializer preserves the lookup snapshot and bookmark', () {
     const serializer = ImageLookupSessionSerializer();
-    final original = _session('session', mediaType: MediaType.video);
+    final original = _session(
+      'session',
+      mediaType: MediaType.video,
+      lookupMode: MediaLookupMode.videoFromFrame,
+    );
 
     final decoded = serializer.decode(serializer.encode(original));
 
@@ -111,6 +127,7 @@ void main() {
     expect(decoded.profileId, original.profileId);
     expect(decoded.hasPartialCoverage, isTrue);
     expect(decoded.searchedLibraryImages, 42);
+    expect(decoded.lookupMode, MediaLookupMode.videoFromFrame);
     expect(decoded.results.single.source.bookmarkData, 'bookmark-session');
     expect(decoded.results.single.source.mediaType, MediaType.video);
     expect(
@@ -120,9 +137,29 @@ void main() {
     expect(decoded.results.single.query!.hash, 7);
     expect(decoded.results.single.matches.single.distance, 1);
     expect(
+      decoded.results.single.matches.single.matchedVideoFrame?.positionPercent,
+      30,
+    );
+    expect(
+      decoded.results.single.matches.single.matchedVideoFrame?.timestamp,
+      const Duration(seconds: 42),
+    );
+    expect(
       decoded.results.single.matches.single.candidate.media.tagIds,
       const <String>['tag'],
     );
+  });
+
+  test('serializer defaults legacy snapshots to media matches', () {
+    const serializer = ImageLookupSessionSerializer();
+    final json = Map<String, dynamic>.from(
+      jsonDecode(serializer.encode(_session('legacy'))) as Map,
+    )..remove('lookupMode');
+
+    final decoded = serializer.decode(jsonEncode(json));
+
+    expect(decoded.lookupMode, MediaLookupMode.mediaMatches);
+    expect(decoded.results.single.matches.single.matchedVideoFrame, isNull);
   });
 
   test('repository retains only the newest ten sessions per profile', () async {

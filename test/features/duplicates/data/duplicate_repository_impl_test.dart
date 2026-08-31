@@ -1,15 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/models/media_lookup_mode.dart';
 import 'package:media_fast_view/features/duplicates/data/data_sources/dismissed_group_data_source.dart';
 import 'package:media_fast_view/features/duplicates/data/data_sources/perceptual_hash_data_source.dart';
+import 'package:media_fast_view/features/duplicates/data/data_sources/video_frame_hash_data_source.dart';
 import 'package:media_fast_view/features/duplicates/data/repositories/duplicate_repository_impl.dart';
 import 'package:media_fast_view/features/duplicates/data/services/perceptual_hasher.dart';
 import 'package:media_fast_view/features/duplicates/data/services/video_thumbnail_hasher.dart';
+import 'package:media_fast_view/features/duplicates/data/services/video_frame_hasher.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_scan_progress.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_sensitivity.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/keeper_strategy.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_source.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_query.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/perceptual_hash.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/video_frame_hash.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 import 'package:media_fast_view/features/media_library/domain/repositories/media_repository.dart';
 
@@ -93,6 +97,52 @@ class _FakeVideoThumbnailHasher implements VideoThumbnailHasher {
   }
 }
 
+class _FakeVideoFrameHashDataSource implements VideoFrameHashDataSource {
+  _FakeVideoFrameHashDataSource(this.store);
+
+  final Map<String, List<VideoFrameHash>> store;
+  final List<Map<String, List<VideoFrameHash>>> writes =
+      <Map<String, List<VideoFrameHash>>>[];
+
+  @override
+  Future<Map<String, List<VideoFrameHash>>> getByMediaIds(
+    Iterable<String> mediaIds,
+  ) async {
+    return <String, List<VideoFrameHash>>{
+      for (final mediaId in mediaIds)
+        if (store[mediaId] case final hashes?) mediaId: hashes,
+    };
+  }
+
+  @override
+  Future<void> replaceAll(
+    Map<String, List<VideoFrameHash>> hashesByMediaId,
+  ) async {
+    writes.add(hashesByMediaId);
+    store.addAll(hashesByMediaId);
+  }
+}
+
+class _FakeVideoFrameHasher implements VideoFrameHasher {
+  _FakeVideoFrameHasher(this.results);
+
+  final Map<String, List<VideoFrameHash>?> results;
+  final List<String> hashedPaths = <String>[];
+
+  @override
+  Future<List<VideoFrameHash>?> hashVideo({
+    required String mediaId,
+    required String path,
+    required int size,
+    required DateTime lastModified,
+    String? bookmarkData,
+    DuplicateScanCancellation? cancellation,
+  }) async {
+    hashedPaths.add(path);
+    return results[path];
+  }
+}
+
 PerceptualHash hashFor(
   MediaEntity media,
   int hash, {
@@ -110,6 +160,30 @@ PerceptualHash hashFor(
       lastModified: media.lastModified,
     ),
   );
+}
+
+List<VideoFrameHash> frameHashesFor(
+  MediaEntity video,
+  List<int> hashes, {
+  String? fingerprint,
+}) {
+  return <VideoFrameHash>[
+    for (var index = 0; index < videoFrameSamplePercents.length; index++)
+      VideoFrameHash(
+        mediaId: video.id,
+        positionPercent: videoFrameSamplePercents[index],
+        timestamp: Duration(seconds: (index + 1) * 10),
+        hash: hashes[index],
+        width: 512,
+        height: 288,
+        fingerprint:
+            fingerprint ??
+            videoFrameLookupFingerprint(
+              size: video.size,
+              lastModified: video.lastModified,
+            ),
+      ),
+  ];
 }
 
 void main() {
@@ -446,6 +520,129 @@ void main() {
         hashes.store[video.id]?.fingerprint,
         startsWith('video_thumbnail_v1_'),
       );
+    });
+  });
+
+  group('DuplicateRepositoryImpl video from frame lookup', () {
+    test(
+      'reports coverage only for complete current five-frame sets',
+      () async {
+        final ready = buildMedia('ready-video', type: MediaType.video);
+        final stale = buildMedia('stale-video', type: MediaType.video);
+        final image = buildMedia('image');
+        final frames = _FakeVideoFrameHashDataSource(
+          <String, List<VideoFrameHash>>{
+            ready.id: frameHashesFor(ready, <int>[0, 1, 2, 3, 4]),
+            stale.id: frameHashesFor(stale, <int>[
+              0,
+              1,
+              2,
+              3,
+              4,
+            ], fingerprint: 'stale'),
+          },
+        );
+        final repository = DuplicateRepositoryImpl(
+          mediaRepository: _FakeMediaRepository(<MediaEntity>[
+            ready,
+            stale,
+            image,
+          ]),
+          hashDataSource: _FakeHashDataSource(<String, PerceptualHash>{}),
+          dismissedDataSource: _FakeDismissedDataSource(),
+          videoFrameHashDataSource: frames,
+        );
+
+        final coverage = await repository.getVideoFrameIndexCoverage();
+
+        expect(coverage.totalVideos, 2);
+        expect(coverage.readyVideos, 1);
+        expect(coverage.pendingVideos, 1);
+      },
+    );
+
+    test(
+      'preparation reuses current videos and atomically stores new sets',
+      () async {
+        final ready = buildMedia('ready-video', type: MediaType.video);
+        final pending = buildMedia('pending-video', type: MediaType.video);
+        final generated = frameHashesFor(pending, <int>[10, 20, 30, 40, 50]);
+        final dataSource = _FakeVideoFrameHashDataSource(
+          <String, List<VideoFrameHash>>{
+            ready.id: frameHashesFor(ready, <int>[0, 1, 2, 3, 4]),
+          },
+        );
+        final hasher = _FakeVideoFrameHasher(<String, List<VideoFrameHash>?>{
+          pending.path: generated,
+        });
+        final repository = DuplicateRepositoryImpl(
+          mediaRepository: _FakeMediaRepository(<MediaEntity>[ready, pending]),
+          hashDataSource: _FakeHashDataSource(<String, PerceptualHash>{}),
+          dismissedDataSource: _FakeDismissedDataSource(),
+          videoFrameHashDataSource: dataSource,
+          videoFrameHasher: hasher,
+        );
+
+        final events = await repository.hashVideoFrames().toList();
+
+        expect(events.last.isComplete, isTrue);
+        expect(events.last.reused, 1);
+        expect(hasher.hashedPaths, <String>[pending.path]);
+        expect(dataSource.store[pending.id], generated);
+      },
+    );
+
+    test('returns each video once using its closest sampled frame', () async {
+      final first = buildMedia('first-video', type: MediaType.video);
+      final second = buildMedia('second-video', type: MediaType.video);
+      final image = buildMedia('identical-image');
+      final frameDataSource = _FakeVideoFrameHashDataSource(
+        <String, List<VideoFrameHash>>{
+          first.id: frameHashesFor(first, <int>[0xFF, 3, 0xFF, 0xFF, 0xFF]),
+          second.id: frameHashesFor(second, <int>[0xFF, 0xFF, 7, 0xFF, 0xFF]),
+        },
+      );
+      final queryHasher = _FakeHasher(<String, ImageHashResult?>{
+        '/frame.jpg': const ImageHashResult(hash: 0, width: 800, height: 600),
+      });
+      final repository = DuplicateRepositoryImpl(
+        mediaRepository: _FakeMediaRepository(<MediaEntity>[
+          first,
+          second,
+          image,
+        ]),
+        hashDataSource: _FakeHashDataSource(<String, PerceptualHash>{
+          image.id: hashFor(image, 0),
+        }),
+        dismissedDataSource: _FakeDismissedDataSource(),
+        videoFrameHashDataSource: frameDataSource,
+        hasher: queryHasher,
+      );
+      final source = ImageLookupSource(
+        path: '/frame.jpg',
+        name: 'frame.jpg',
+        size: 100,
+        lastModified: DateTime(2024),
+      );
+
+      final batch = await repository.findImageMatches(
+        sources: <ImageLookupSource>[source],
+        sensitivity: DuplicateSensitivity.strict,
+        lookupMode: MediaLookupMode.videoFromFrame,
+      );
+
+      final matches = batch.results.single.matches;
+      expect(matches.map((match) => match.candidate.id), <String>[
+        first.id,
+        second.id,
+      ]);
+      expect(matches.map((match) => match.distance), <int>[2, 3]);
+      expect(matches.first.matchedVideoFrame?.positionPercent, 30);
+      expect(
+        matches.first.matchedVideoFrame?.timestamp,
+        const Duration(seconds: 20),
+      );
+      expect(batch.searchedLibraryImages, 2);
     });
   });
 }

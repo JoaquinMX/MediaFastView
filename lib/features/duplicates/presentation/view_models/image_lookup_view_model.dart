@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/models/media_lookup_mode.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../shared/providers/active_profile_provider.dart';
 import '../../../../shared/providers/duplicate_providers.dart';
 import '../../../../shared/providers/repository_providers.dart';
 import '../../../../shared/providers/settings_providers.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
+import '../../../settings/presentation/view_models/settings_view_model.dart';
 import '../../data/services/image_lookup_file_picker.dart';
 import '../../domain/entities/duplicate_scan_progress.dart';
 import '../../domain/entities/duplicate_sensitivity.dart';
@@ -19,6 +21,8 @@ import '../../domain/entities/image_lookup_source.dart';
 import '../../domain/repositories/image_lookup_history_repository.dart';
 import '../../domain/use_cases/find_image_matches_use_case.dart';
 import '../../domain/use_cases/get_duplicate_library_coverage_use_case.dart';
+import '../../domain/use_cases/get_video_frame_index_coverage_use_case.dart';
+import '../../domain/use_cases/prepare_video_frame_index_use_case.dart';
 import '../../domain/use_cases/scan_for_duplicates_use_case.dart';
 
 sealed class ImageLookupPhase {
@@ -73,6 +77,7 @@ class ImageLookupViewState {
   const ImageLookupViewState({
     this.phase = const ImageLookupIdle(),
     this.sensitivity = DuplicateSensitivity.balanced,
+    this.lookupMode = MediaLookupMode.mediaMatches,
     this.history = const <ImageLookupSession>[],
     this.isHistoryLoading = true,
     this.isRunningInBackground = false,
@@ -80,6 +85,7 @@ class ImageLookupViewState {
 
   final ImageLookupPhase phase;
   final DuplicateSensitivity sensitivity;
+  final MediaLookupMode lookupMode;
   final List<ImageLookupSession> history;
   final bool isHistoryLoading;
   final bool isRunningInBackground;
@@ -90,6 +96,7 @@ class ImageLookupViewState {
   ImageLookupViewState copyWith({
     ImageLookupPhase? phase,
     DuplicateSensitivity? sensitivity,
+    MediaLookupMode? lookupMode,
     List<ImageLookupSession>? history,
     bool? isHistoryLoading,
     bool? isRunningInBackground,
@@ -97,6 +104,7 @@ class ImageLookupViewState {
     return ImageLookupViewState(
       phase: phase ?? this.phase,
       sensitivity: sensitivity ?? this.sensitivity,
+      lookupMode: lookupMode ?? this.lookupMode,
       history: history ?? this.history,
       isHistoryLoading: isHistoryLoading ?? this.isHistoryLoading,
       isRunningInBackground:
@@ -111,33 +119,49 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
     required String profileId,
     required ScanForDuplicatesUseCase scanUseCase,
     required GetDuplicateLibraryCoverageUseCase coverageUseCase,
+    required GetVideoFrameIndexCoverageUseCase videoFrameCoverageUseCase,
+    required PrepareVideoFrameIndexUseCase prepareVideoFramesUseCase,
     required FindImageMatchesUseCase findMatchesUseCase,
     required MediaLookupFilePicker filePicker,
     required ImageLookupHistoryRepository historyRepository,
     required BookmarkService bookmarkService,
     required bool Function() isHistoryEnabled,
+    required Future<void> Function(MediaLookupMode mode) saveLookupMode,
+    Future<MediaLookupMode> Function()? loadLookupMode,
+    MediaLookupMode initialLookupMode = MediaLookupMode.mediaMatches,
     Uuid uuid = const Uuid(),
   }) : _profileId = profileId,
        _scanUseCase = scanUseCase,
        _coverageUseCase = coverageUseCase,
+       _videoFrameCoverageUseCase = videoFrameCoverageUseCase,
+       _prepareVideoFramesUseCase = prepareVideoFramesUseCase,
        _findMatchesUseCase = findMatchesUseCase,
        _filePicker = filePicker,
        _historyRepository = historyRepository,
        _bookmarkService = bookmarkService,
        _isHistoryEnabled = isHistoryEnabled,
+       _saveLookupMode = saveLookupMode,
+       _loadLookupMode = loadLookupMode,
        _uuid = uuid,
-       super(const ImageLookupViewState()) {
+       super(ImageLookupViewState(lookupMode: initialLookupMode)) {
     unawaited(_loadHistory());
+    if (_loadLookupMode != null) {
+      unawaited(_restoreLookupMode());
+    }
   }
 
   final String _profileId;
   final ScanForDuplicatesUseCase _scanUseCase;
   final GetDuplicateLibraryCoverageUseCase _coverageUseCase;
+  final GetVideoFrameIndexCoverageUseCase _videoFrameCoverageUseCase;
+  final PrepareVideoFrameIndexUseCase _prepareVideoFramesUseCase;
   final FindImageMatchesUseCase _findMatchesUseCase;
   final MediaLookupFilePicker _filePicker;
   final ImageLookupHistoryRepository _historyRepository;
   final BookmarkService _bookmarkService;
   final bool Function() _isHistoryEnabled;
+  final Future<void> Function(MediaLookupMode mode) _saveLookupMode;
+  final Future<MediaLookupMode> Function()? _loadLookupMode;
   final Uuid _uuid;
 
   DuplicateScanCancellation? _cancellation;
@@ -147,7 +171,9 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
 
   Future<void> pickMedia() async {
     try {
-      final sources = await _filePicker.pickMedia();
+      final sources = await _filePicker.pickMedia(
+        allowedMediaTypes: _allowedQueryMediaTypes,
+      );
       if (sources.isNotEmpty) {
         await startLookup(sources);
       }
@@ -162,11 +188,16 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
 
   Future<void> startFromPaths(Iterable<String> paths) async {
     try {
-      final sources = await _filePicker.sourcesFromPaths(paths);
+      final sources = await _filePicker.sourcesFromPaths(
+        paths,
+        allowedMediaTypes: _allowedQueryMediaTypes,
+      );
       if (sources.isEmpty) {
         state = state.copyWith(
-          phase: const ImageLookupFailure(
-            'No supported image or video files were selected.',
+          phase: ImageLookupFailure(
+            state.lookupMode == MediaLookupMode.videoFromFrame
+                ? 'No supported image frames were selected.'
+                : 'No supported image or video files were selected.',
           ),
         );
         return;
@@ -202,6 +233,22 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
     );
 
     try {
+      if (state.lookupMode == MediaLookupMode.videoFromFrame) {
+        final coverage = await _videoFrameCoverageUseCase();
+        if (!mounted || operation != _operation) {
+          return;
+        }
+        if (coverage.isComplete) {
+          await _search(
+            operation: operation,
+            sources: activeSources,
+            hasPartialCoverage: false,
+          );
+          return;
+        }
+        await _prepareVideoFrames(operation, activeSources);
+        return;
+      }
       final mediaTypes = activeSources
           .map((source) => source.mediaType)
           .toSet();
@@ -225,6 +272,67 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
           isRunningInBackground: false,
         );
       }
+    }
+  }
+
+  Future<void> _prepareVideoFrames(
+    int operation,
+    List<ImageLookupSource> sources,
+  ) async {
+    final cancellation = DuplicateScanCancellation();
+    _cancellation = cancellation;
+    await for (final progress in _prepareVideoFramesUseCase(
+      cancellation: cancellation,
+    )) {
+      if (!mounted || operation != _operation) {
+        return;
+      }
+      state = state.copyWith(
+        phase: ImageLookupPreparing(sources: sources, progress: progress),
+      );
+    }
+    if (!mounted || operation != _operation) {
+      return;
+    }
+    final wasSkipped = _skipOperation == operation;
+    _skipOperation = null;
+    await _search(
+      operation: operation,
+      sources: sources,
+      hasPartialCoverage: wasSkipped,
+    );
+  }
+
+  Future<void> setLookupMode(MediaLookupMode mode) async {
+    if (mode == state.lookupMode || state.isBusy) {
+      return;
+    }
+    _operation++;
+    _skipOperation = null;
+    _cancellation?.cancel();
+    await _releaseBookmarks();
+    if (!mounted) {
+      return;
+    }
+    state = state.copyWith(
+      lookupMode: mode,
+      phase: const ImageLookupIdle(),
+      isRunningInBackground: false,
+    );
+    await _saveLookupMode(mode);
+  }
+
+  Future<void> _restoreLookupMode() async {
+    final operation = _operation;
+    try {
+      final mode = await _loadLookupMode!();
+      if (mounted &&
+          operation == _operation &&
+          state.phase is ImageLookupIdle) {
+        state = state.copyWith(lookupMode: mode);
+      }
+    } catch (_) {
+      // The safe default remains active when preferences cannot be read.
     }
   }
 
@@ -308,6 +416,7 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
     final batch = await _findMatchesUseCase(
       sources: sources,
       sensitivity: state.sensitivity,
+      lookupMode: state.lookupMode,
       cancellation: cancellation,
       onProgress: (processed, total) {
         if (!mounted || operation != _operation) {
@@ -332,6 +441,7 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
       profileId: _profileId,
       createdAt: DateTime.now(),
       sensitivity: state.sensitivity,
+      lookupMode: state.lookupMode,
       results: batch.results,
       hasPartialCoverage: hasPartialCoverage,
       searchedLibraryImages: batch.searchedLibraryImages,
@@ -380,6 +490,7 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
       final batch = await _findMatchesUseCase.rematch(
         queries: queries,
         sensitivity: sensitivity,
+        lookupMode: phase.session.lookupMode,
         cancellation: cancellation,
         onProgress: (processed, total) {
           if (!mounted || operation != _operation) {
@@ -446,8 +557,16 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
         isHistorySnapshot: true,
       ),
       sensitivity: session.sensitivity,
+      lookupMode: session.lookupMode,
       isRunningInBackground: false,
     );
+    await _saveLookupMode(session.lookupMode);
+  }
+
+  Set<MediaType> get _allowedQueryMediaTypes {
+    return state.lookupMode == MediaLookupMode.videoFromFrame
+        ? const <MediaType>{MediaType.image}
+        : const <MediaType>{MediaType.image, MediaType.video};
   }
 
   Future<void> deleteHistory(String sessionId) async {
@@ -537,14 +656,29 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
 final imageLookupViewModelProvider =
     StateNotifierProvider<ImageLookupViewModel, ImageLookupViewState>((ref) {
       final profileId = ref.watch(activeProfileIdProvider);
+      final initialLookupMode = ref.read(mediaLookupModeProvider);
       return ImageLookupViewModel(
         profileId: profileId,
         scanUseCase: ref.watch(scanForDuplicatesUseCaseProvider),
         coverageUseCase: ref.watch(getDuplicateLibraryCoverageUseCaseProvider),
+        videoFrameCoverageUseCase: ref.watch(
+          getVideoFrameIndexCoverageUseCaseProvider,
+        ),
+        prepareVideoFramesUseCase: ref.watch(
+          prepareVideoFrameIndexUseCaseProvider,
+        ),
         findMatchesUseCase: ref.watch(findImageMatchesUseCaseProvider),
         filePicker: ref.watch(mediaLookupFilePickerProvider),
         historyRepository: ref.watch(imageLookupHistoryRepositoryProvider),
         bookmarkService: ref.watch(bookmarkServiceProvider),
         isHistoryEnabled: () => ref.read(imageLookupHistoryEnabledProvider),
+        saveLookupMode: (mode) => ref
+            .read(settingsViewModelProvider.notifier)
+            .updateMediaLookupMode(mode),
+        loadLookupMode: () async {
+          final settings = await ref.read(settingsViewModelProvider.future);
+          return settings.mediaLookupMode;
+        },
+        initialLookupMode: initialLookupMode,
       );
     });

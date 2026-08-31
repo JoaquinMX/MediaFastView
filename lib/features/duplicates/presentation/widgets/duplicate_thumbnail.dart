@@ -9,16 +9,19 @@ class DuplicateThumbnail extends StatelessWidget {
     super.key,
     required this.media,
     this.fit = BoxFit.cover,
+    this.videoPositionFraction,
   });
 
   final MediaEntity media;
   final BoxFit fit;
+  final double? videoPositionFraction;
 
   @override
   Widget build(BuildContext context) {
     return MediaThumbnail(
       media: media,
       fit: fit,
+      videoPositionFraction: videoPositionFraction,
       placeholderBuilder: (context) => ColoredBox(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: const Center(child: CircularProgressIndicator()),

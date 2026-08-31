@@ -32,13 +32,18 @@ class ThumbnailRequest {
     required this.thumbnailSize,
     required this.diskCacheEnabled,
     this.bookmarkData,
-  });
+    this.videoPositionFraction,
+  }) : assert(
+         videoPositionFraction == null ||
+             (videoPositionFraction >= 0 && videoPositionFraction <= 1),
+       );
 
   factory ThumbnailRequest.fromMedia(
     MediaEntity media, {
     required ThumbnailSize thumbnailSize,
     required bool diskCacheEnabled,
     String? bookmarkData,
+    double? videoPositionFraction,
   }) {
     return ThumbnailRequest(
       path: media.path,
@@ -48,6 +53,7 @@ class ThumbnailRequest {
       thumbnailSize: thumbnailSize,
       diskCacheEnabled: diskCacheEnabled,
       bookmarkData: bookmarkData ?? media.bookmarkData,
+      videoPositionFraction: videoPositionFraction,
     );
   }
 
@@ -58,6 +64,9 @@ class ThumbnailRequest {
   final ThumbnailSize thumbnailSize;
   final bool diskCacheEnabled;
   final String? bookmarkData;
+
+  /// Optional video position from 0 to 1. Null preserves the default 10% frame.
+  final double? videoPositionFraction;
 
   bool get isSupported =>
       mediaType == MediaType.image || mediaType == MediaType.video;
@@ -72,7 +81,8 @@ class ThumbnailRequest {
             sourceLastModified == other.sourceLastModified &&
             thumbnailSize == other.thumbnailSize &&
             diskCacheEnabled == other.diskCacheEnabled &&
-            bookmarkData == other.bookmarkData;
+            bookmarkData == other.bookmarkData &&
+            videoPositionFraction == other.videoPositionFraction;
   }
 
   @override
@@ -84,5 +94,6 @@ class ThumbnailRequest {
     thumbnailSize,
     diskCacheEnabled,
     bookmarkData,
+    videoPositionFraction,
   );
 }

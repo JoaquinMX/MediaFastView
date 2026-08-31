@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/config/app_config.dart';
+import '../../../../core/models/media_lookup_mode.dart';
 import 'playback_settings.dart';
 
 const int slideshowControlsHideDelayMinSeconds = 1;
@@ -12,6 +13,7 @@ class AppSettings {
     required this.themeMode,
     required this.thumbnailDiskCacheEnabled,
     required this.imageLookupHistoryEnabled,
+    required this.mediaLookupMode,
     required this.deleteFromSourceEnabled,
     required this.playbackSettings,
     required this.autoNavigateSiblingDirectories,
@@ -24,6 +26,7 @@ class AppSettings {
     : themeMode = ThemeMode.system,
       thumbnailDiskCacheEnabled = true,
       imageLookupHistoryEnabled = false,
+      mediaLookupMode = MediaLookupMode.mediaMatches,
       deleteFromSourceEnabled = false,
       playbackSettings = const PlaybackSettings.initial(),
       autoNavigateSiblingDirectories = false,
@@ -36,6 +39,7 @@ class AppSettings {
   /// Whether generated image and video previews are persisted to disk.
   final bool thumbnailDiskCacheEnabled;
   final bool imageLookupHistoryEnabled;
+  final MediaLookupMode mediaLookupMode;
   final bool deleteFromSourceEnabled;
   final PlaybackSettings playbackSettings;
   final bool autoNavigateSiblingDirectories;
@@ -53,6 +57,7 @@ class AppSettings {
     ThemeMode? themeMode,
     bool? thumbnailDiskCacheEnabled,
     bool? imageLookupHistoryEnabled,
+    MediaLookupMode? mediaLookupMode,
     bool? deleteFromSourceEnabled,
     PlaybackSettings? playbackSettings,
     bool? autoNavigateSiblingDirectories,
@@ -66,6 +71,7 @@ class AppSettings {
           thumbnailDiskCacheEnabled ?? this.thumbnailDiskCacheEnabled,
       imageLookupHistoryEnabled:
           imageLookupHistoryEnabled ?? this.imageLookupHistoryEnabled,
+      mediaLookupMode: mediaLookupMode ?? this.mediaLookupMode,
       deleteFromSourceEnabled:
           deleteFromSourceEnabled ?? this.deleteFromSourceEnabled,
       playbackSettings: playbackSettings ?? this.playbackSettings,

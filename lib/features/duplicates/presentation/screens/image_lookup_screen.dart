@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:video_player/video_player.dart';
 
+import '../../../../core/constants/media_extensions.dart';
+import '../../../../core/models/media_lookup_mode.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/utils/file_size_formatter.dart';
 import '../../../../shared/widgets/app_bar.dart';
@@ -64,63 +66,94 @@ class _ImageLookupScreenState extends ConsumerState<ImageLookupScreen> {
             ),
           ),
           IconButton(
-            tooltip: 'Choose images or videos',
+            tooltip: state.lookupMode == MediaLookupMode.videoFromFrame
+                ? 'Choose image frames'
+                : 'Choose images or videos',
             onPressed: () => unawaited(viewModel.pickMedia()),
             icon: const Icon(Icons.perm_media_outlined),
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: DropTarget(
-        onDragEntered: (_) => setState(() => _isDragging = true),
-        onDragExited: (_) => setState(() => _isDragging = false),
-        onDragDone: (details) {
-          setState(() => _isDragging = false);
-          unawaited(
-            viewModel.startFromPaths(details.files.map((file) => file.path)),
-          );
-        },
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            switch (phase) {
-              ImageLookupIdle() => _IdleView(
-                onChoose: () => unawaited(viewModel.pickMedia()),
+      body: Column(
+        children: <Widget>[
+          _LookupModeBar(
+            mode: state.lookupMode,
+            enabled: !state.isBusy,
+            onChanged: (mode) => unawaited(viewModel.setLookupMode(mode)),
+          ),
+          Expanded(
+            child: DropTarget(
+              onDragEntered: (_) => setState(() => _isDragging = true),
+              onDragExited: (_) => setState(() => _isDragging = false),
+              onDragDone: (details) {
+                setState(() => _isDragging = false);
+                final paths = details.files
+                    .map((file) => file.path)
+                    .toList(growable: false);
+                if (state.lookupMode == MediaLookupMode.videoFromFrame) {
+                  final ignored = paths
+                      .where((path) => !isSupportedImagePath(path))
+                      .length;
+                  if (ignored > 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Ignored $ignored non-image '
+                          '${ignored == 1 ? 'file' : 'files'}.',
+                        ),
+                      ),
+                    );
+                  }
+                }
+                unawaited(viewModel.startFromPaths(paths));
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  switch (phase) {
+                    ImageLookupIdle() => _IdleView(
+                      mode: state.lookupMode,
+                      onChoose: () => unawaited(viewModel.pickMedia()),
+                    ),
+                    ImageLookupPreparing() => _PreparingView(
+                      phase: phase,
+                      mode: state.lookupMode,
+                      onSkip: viewModel.skipPreparation,
+                      onCancel: () => unawaited(viewModel.cancel()),
+                      onBackground: () => _runInBackground(context, viewModel),
+                    ),
+                    ImageLookupSearching() => _SearchingView(
+                      phase: phase,
+                      onCancel: () => unawaited(viewModel.cancel()),
+                      onBackground: () => _runInBackground(context, viewModel),
+                    ),
+                    ImageLookupResults() => _ResultsView(
+                      phase: phase,
+                      state: state,
+                      expandedQueries: _expandedQueries,
+                      onSensitivityChanged: (value) =>
+                          unawaited(viewModel.setSensitivity(value)),
+                      onChoose: () => unawaited(viewModel.pickMedia()),
+                      onToggleExpanded: (path) {
+                        setState(() {
+                          if (!_expandedQueries.add(path)) {
+                            _expandedQueries.remove(path);
+                          }
+                        });
+                      },
+                    ),
+                    ImageLookupFailure(:final message) => _FailureView(
+                      message: message,
+                      onChoose: () => unawaited(viewModel.pickMedia()),
+                    ),
+                  },
+                  if (_isDragging) _DropOverlay(mode: state.lookupMode),
+                ],
               ),
-              ImageLookupPreparing() => _PreparingView(
-                phase: phase,
-                onSkip: viewModel.skipPreparation,
-                onCancel: () => unawaited(viewModel.cancel()),
-                onBackground: () => _runInBackground(context, viewModel),
-              ),
-              ImageLookupSearching() => _SearchingView(
-                phase: phase,
-                onCancel: () => unawaited(viewModel.cancel()),
-                onBackground: () => _runInBackground(context, viewModel),
-              ),
-              ImageLookupResults() => _ResultsView(
-                phase: phase,
-                state: state,
-                expandedQueries: _expandedQueries,
-                onSensitivityChanged: (value) =>
-                    unawaited(viewModel.setSensitivity(value)),
-                onChoose: () => unawaited(viewModel.pickMedia()),
-                onToggleExpanded: (path) {
-                  setState(() {
-                    if (!_expandedQueries.add(path)) {
-                      _expandedQueries.remove(path);
-                    }
-                  });
-                },
-              ),
-              ImageLookupFailure(:final message) => _FailureView(
-                message: message,
-                onChoose: () => unawaited(viewModel.pickMedia()),
-              ),
-            },
-            if (_isDragging) const _DropOverlay(),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -150,9 +183,56 @@ class _ImageLookupScreenState extends ConsumerState<ImageLookupScreen> {
   }
 }
 
-class _IdleView extends StatelessWidget {
-  const _IdleView({required this.onChoose});
+class _LookupModeBar extends StatelessWidget {
+  const _LookupModeBar({
+    required this.mode,
+    required this.enabled,
+    required this.onChanged,
+  });
 
+  final MediaLookupMode mode;
+  final bool enabled;
+  final ValueChanged<MediaLookupMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        child: Row(
+          children: <Widget>[
+            Text('Lookup mode', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(width: 16),
+            SegmentedButton<MediaLookupMode>(
+              segments: const <ButtonSegment<MediaLookupMode>>[
+                ButtonSegment<MediaLookupMode>(
+                  value: MediaLookupMode.mediaMatches,
+                  icon: Icon(Icons.perm_media_outlined),
+                  label: Text('Media matches'),
+                ),
+                ButtonSegment<MediaLookupMode>(
+                  value: MediaLookupMode.videoFromFrame,
+                  icon: Icon(Icons.video_file_outlined),
+                  label: Text('Video from frame'),
+                ),
+              ],
+              selected: <MediaLookupMode>{mode},
+              onSelectionChanged: enabled
+                  ? (selection) => onChanged(selection.single)
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IdleView extends StatelessWidget {
+  const _IdleView({required this.mode, required this.onChoose});
+
+  final MediaLookupMode mode;
   final VoidCallback onChoose;
 
   @override
@@ -173,16 +253,22 @@ class _IdleView extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Text(
-                'Check images or videos against your library',
+                mode == MediaLookupMode.videoFromFrame
+                    ? 'Find a video from one of its frames'
+                    : 'Check images or videos against your library',
                 style: theme.textTheme.headlineSmall,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
               Text(
-                'Choose one or more images or videos, or drop them anywhere '
-                'in this window. Videos are compared using a generated frame '
-                'near 10% of each video. Results use media already indexed '
-                'for the active profile.',
+                mode == MediaLookupMode.videoFromFrame
+                    ? 'Choose one or more image frames. The app compares them '
+                          'with frames sampled at 10%, 30%, 50%, 70%, and 90% '
+                          'of every indexed video in the active profile.'
+                    : 'Choose one or more images or videos, or drop them '
+                          'anywhere in this window. Videos are compared using a '
+                          'generated frame near 10% of each video. Results use '
+                          'media already indexed for the active profile.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -192,7 +278,11 @@ class _IdleView extends StatelessWidget {
               FilledButton.icon(
                 onPressed: onChoose,
                 icon: const Icon(Icons.perm_media_outlined),
-                label: const Text('Choose Media'),
+                label: Text(
+                  mode == MediaLookupMode.videoFromFrame
+                      ? 'Choose Image Frames'
+                      : 'Choose Media',
+                ),
               ),
             ],
           ),
@@ -205,12 +295,14 @@ class _IdleView extends StatelessWidget {
 class _PreparingView extends StatelessWidget {
   const _PreparingView({
     required this.phase,
+    required this.mode,
     required this.onSkip,
     required this.onCancel,
     required this.onBackground,
   });
 
   final ImageLookupPreparing phase;
+  final MediaLookupMode mode;
   final VoidCallback onSkip;
   final VoidCallback onCancel;
   final VoidCallback onBackground;
@@ -223,7 +315,8 @@ class _PreparingView extends StatelessWidget {
       title: 'Preparing Library',
       description: progress.total == 0
           ? 'Checking indexed media…'
-          : 'Processed ${progress.processed} of ${progress.total} media items'
+          : 'Processed ${progress.processed} of ${progress.total} '
+                '${mode == MediaLookupMode.videoFromFrame ? 'videos' : 'media items'}'
                 '${progress.reused > 0 ? ' · ${progress.reused} reused' : ''}',
       progress: progress.total == 0 ? null : progress.fraction,
       actions: <Widget>[
@@ -647,13 +740,23 @@ class _MatchCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             GestureDetector(
-              onTap: () => _showPreview(context, media),
+              onTap: () => _showPreview(
+                context,
+                media,
+                startAt: match.matchedVideoFrame?.timestamp,
+              ),
               child: SizedBox(
                 height: 170,
                 child: Stack(
                   fit: StackFit.expand,
                   children: <Widget>[
-                    DuplicateThumbnail(media: media),
+                    DuplicateThumbnail(
+                      media: media,
+                      videoPositionFraction:
+                          match.matchedVideoFrame?.positionPercent == null
+                          ? null
+                          : match.matchedVideoFrame!.positionPercent / 100,
+                    ),
                     if (media.type == MediaType.video)
                       const _VideoThumbnailBadge(),
                   ],
@@ -685,6 +788,14 @@ class _MatchCard extends StatelessWidget {
                                     '${formatFileSize(media.size)}',
                           style: theme.textTheme.bodySmall,
                         ),
+                        if (match.matchedVideoFrame case final frame?)
+                          Text(
+                            'Matched around ${_formatDuration(frame.timestamp)} '
+                            '· ${frame.positionPercent}%',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
                         Text(
                           _formatDate(media.lastModified),
                           style: theme.textTheme.bodySmall,
@@ -700,7 +811,10 @@ class _MatchCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  _MediaActions(media: media),
+                  _MediaActions(
+                    media: media,
+                    startAt: match.matchedVideoFrame?.timestamp,
+                  ),
                 ],
               ),
             ),
@@ -712,9 +826,10 @@ class _MatchCard extends StatelessWidget {
 }
 
 class _MediaActions extends StatelessWidget {
-  const _MediaActions({required this.media});
+  const _MediaActions({required this.media, this.startAt});
 
   final MediaEntity media;
+  final Duration? startAt;
 
   @override
   Widget build(BuildContext context) {
@@ -723,7 +838,7 @@ class _MediaActions extends StatelessWidget {
       onSelected: (value) {
         switch (value) {
           case 'preview':
-            _showPreview(context, media);
+            _showPreview(context, media, startAt: startAt);
           case 'reveal':
             unawaited(revealMediaInFinder(context, media));
           case 'copy':
@@ -861,7 +976,9 @@ class _VideoThumbnailBadge extends StatelessWidget {
 }
 
 class _DropOverlay extends StatelessWidget {
-  const _DropOverlay();
+  const _DropOverlay({required this.mode});
+
+  final MediaLookupMode mode;
 
   @override
   Widget build(BuildContext context) {
@@ -876,12 +993,16 @@ class _DropOverlay extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: theme.colorScheme.primary, width: 2),
           ),
-          child: const Column(
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(Icons.add_photo_alternate_outlined, size: 56),
-              SizedBox(height: 12),
-              Text('Drop images or videos to start a new lookup'),
+              const Icon(Icons.add_photo_alternate_outlined, size: 56),
+              const SizedBox(height: 12),
+              Text(
+                mode == MediaLookupMode.videoFromFrame
+                    ? 'Drop image frames to search indexed videos'
+                    : 'Drop images or videos to start a new lookup',
+              ),
             ],
           ),
         ),
@@ -936,6 +1057,7 @@ class _HistoryDialogState extends State<_HistoryDialog> {
                     ),
                     subtitle: Text(
                       '${_formatDateTime(session.createdAt)} · '
+                      '${session.lookupMode.label} · '
                       '${session.sensitivity.label}'
                       '${session.hasPartialCoverage ? ' · partial' : ''}',
                     ),
@@ -976,9 +1098,10 @@ class _HistoryDialogState extends State<_HistoryDialog> {
 }
 
 class _VideoPreviewDialog extends StatefulWidget {
-  const _VideoPreviewDialog({required this.media});
+  const _VideoPreviewDialog({required this.media, this.startAt});
 
   final MediaEntity media;
+  final Duration? startAt;
 
   @override
   State<_VideoPreviewDialog> createState() => _VideoPreviewDialogState();
@@ -992,7 +1115,19 @@ class _VideoPreviewDialogState extends State<_VideoPreviewDialog> {
   void initState() {
     super.initState();
     _controller = VideoPlayerController.file(File(widget.media.path));
-    _initialization = _controller.initialize();
+    _initialization = _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _controller.initialize();
+    final startAt = widget.startAt;
+    if (startAt == null) {
+      return;
+    }
+    final duration = _controller.value.duration;
+    final target = startAt > duration ? duration : startAt;
+    await _controller.seekTo(target);
+    await _controller.play();
   }
 
   @override
@@ -1088,12 +1223,16 @@ MediaEntity _mediaFromSource(ImageLookupSource source) {
   );
 }
 
-void _showPreview(BuildContext context, MediaEntity media) {
+void _showPreview(
+  BuildContext context,
+  MediaEntity media, {
+  Duration? startAt,
+}) {
   if (media.type == MediaType.video) {
     showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.88),
-      builder: (context) => _VideoPreviewDialog(media: media),
+      builder: (context) => _VideoPreviewDialog(media: media, startAt: startAt),
     );
     return;
   }
@@ -1149,4 +1288,18 @@ String _formatDateTime(DateTime date) {
   return '${_formatDate(local)} '
       '${local.hour.toString().padLeft(2, '0')}:'
       '${local.minute.toString().padLeft(2, '0')}';
+}
+
+String _formatDuration(Duration duration) {
+  final totalSeconds = duration.inSeconds;
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return '${hours.toString().padLeft(2, '0')}:'
+        '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+  return '${minutes.toString().padLeft(2, '0')}:'
+      '${seconds.toString().padLeft(2, '0')}';
 }

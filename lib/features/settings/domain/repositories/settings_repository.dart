@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/models/media_lookup_mode.dart';
 import '../entities/app_settings.dart';
 import '../entities/playback_settings.dart';
 
@@ -12,6 +13,8 @@ abstract class SettingsRepository {
   Future<void> saveThumbnailDiskCacheEnabled(bool enabled);
 
   Future<void> saveImageLookupHistoryEnabled(bool enabled);
+
+  Future<void> saveMediaLookupMode(MediaLookupMode mode);
 
   Future<void> saveDeleteFromSourceEnabled(bool enabled);
 

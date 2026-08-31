@@ -48,6 +48,8 @@ class NativeThumbnailGenerator implements ThumbnailGenerator {
           'maxPixelSize': request.thumbnailSize.maxPixelSize,
           if (request.bookmarkData != null)
             'bookmarkData': request.bookmarkData,
+          if (request.videoPositionFraction != null)
+            'videoPositionFraction': request.videoPositionFraction,
         },
       );
       final bytes = response?['bytes'];

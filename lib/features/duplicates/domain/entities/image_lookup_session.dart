@@ -1,3 +1,4 @@
+import '../../../../core/models/media_lookup_mode.dart';
 import 'duplicate_sensitivity.dart';
 import 'image_lookup_result.dart';
 
@@ -8,6 +9,7 @@ class ImageLookupSession {
     required this.profileId,
     required this.createdAt,
     required this.sensitivity,
+    this.lookupMode = MediaLookupMode.mediaMatches,
     required this.results,
     required this.hasPartialCoverage,
     required this.searchedLibraryImages,
@@ -17,6 +19,7 @@ class ImageLookupSession {
   final String profileId;
   final DateTime createdAt;
   final DuplicateSensitivity sensitivity;
+  final MediaLookupMode lookupMode;
   final List<ImageLookupResult> results;
   final bool hasPartialCoverage;
   final int searchedLibraryImages;
@@ -28,6 +31,7 @@ class ImageLookupSession {
 
   ImageLookupSession copyWith({
     DuplicateSensitivity? sensitivity,
+    MediaLookupMode? lookupMode,
     List<ImageLookupResult>? results,
     bool? hasPartialCoverage,
     int? searchedLibraryImages,
@@ -37,6 +41,7 @@ class ImageLookupSession {
       profileId: profileId,
       createdAt: createdAt,
       sensitivity: sensitivity ?? this.sensitivity,
+      lookupMode: lookupMode ?? this.lookupMode,
       results: results ?? this.results,
       hasPartialCoverage: hasPartialCoverage ?? this.hasPartialCoverage,
       searchedLibraryImages:

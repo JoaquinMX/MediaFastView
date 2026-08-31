@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/models/media_lookup_mode.dart';
 import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/features/duplicates/data/services/image_lookup_file_picker.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_library_coverage.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_candidate.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_scan_progress.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_sensitivity.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_batch.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_session.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_match.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_query.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_result.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_source.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/matched_video_frame.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/video_frame_index_coverage.dart';
 import 'package:media_fast_view/features/duplicates/domain/repositories/duplicate_repository.dart';
 import 'package:media_fast_view/features/duplicates/domain/repositories/image_lookup_history_repository.dart';
 import 'package:media_fast_view/features/duplicates/domain/use_cases/find_image_matches_use_case.dart';
 import 'package:media_fast_view/features/duplicates/domain/use_cases/get_duplicate_library_coverage_use_case.dart';
+import 'package:media_fast_view/features/duplicates/domain/use_cases/get_video_frame_index_coverage_use_case.dart';
+import 'package:media_fast_view/features/duplicates/domain/use_cases/prepare_video_frame_index_use_case.dart';
 import 'package:media_fast_view/features/duplicates/domain/use_cases/scan_for_duplicates_use_case.dart';
 import 'package:media_fast_view/features/duplicates/presentation/screens/image_lookup_screen.dart';
 import 'package:media_fast_view/features/duplicates/presentation/view_models/image_lookup_view_model.dart';
@@ -30,6 +37,7 @@ class _UnusedDuplicateRepository implements DuplicateRepository {
   Future<ImageLookupBatch> findImageMatches({
     required List<ImageLookupSource> sources,
     required DuplicateSensitivity sensitivity,
+    MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
     DuplicateScanCancellation? cancellation,
     void Function(int processed, int total)? onProgress,
   }) async => const ImageLookupBatch(
@@ -38,19 +46,32 @@ class _UnusedDuplicateRepository implements DuplicateRepository {
   );
 
   @override
+  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage() async {
+    return const VideoFrameIndexCoverage(totalVideos: 0, readyVideos: 0);
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');
 }
 
 class _UnusedPicker implements MediaLookupFilePicker {
   @override
-  Future<List<ImageLookupSource>> pickMedia() async =>
-      const <ImageLookupSource>[];
+  Future<List<ImageLookupSource>> pickMedia({
+    Set<MediaType> allowedMediaTypes = const <MediaType>{
+      MediaType.image,
+      MediaType.video,
+    },
+  }) async => const <ImageLookupSource>[];
 
   @override
   Future<List<ImageLookupSource>> sourcesFromPaths(
-    Iterable<String> paths,
-  ) async => const <ImageLookupSource>[];
+    Iterable<String> paths, {
+    Set<MediaType> allowedMediaTypes = const <MediaType>{
+      MediaType.image,
+      MediaType.video,
+    },
+  }) async => const <ImageLookupSource>[];
 }
 
 class _EmptyHistory implements ImageLookupHistoryRepository {
@@ -76,6 +97,12 @@ class _TestImageLookupViewModel extends ImageLookupViewModel {
         coverageUseCase: GetDuplicateLibraryCoverageUseCase(
           _UnusedDuplicateRepository(),
         ),
+        videoFrameCoverageUseCase: GetVideoFrameIndexCoverageUseCase(
+          _UnusedDuplicateRepository(),
+        ),
+        prepareVideoFramesUseCase: PrepareVideoFrameIndexUseCase(
+          _UnusedDuplicateRepository(),
+        ),
         findMatchesUseCase: FindImageMatchesUseCase(
           _UnusedDuplicateRepository(),
         ),
@@ -83,6 +110,7 @@ class _TestImageLookupViewModel extends ImageLookupViewModel {
         historyRepository: _EmptyHistory(),
         bookmarkService: BookmarkService.instance,
         isHistoryEnabled: () => false,
+        saveLookupMode: (_) async {},
       );
 
   void emit(ImageLookupViewState value) {
@@ -117,6 +145,25 @@ void main() {
     );
     expect(find.text('Choose Media'), findsOneWidget);
     expect(find.byIcon(Icons.perm_media_outlined), findsWidgets);
+  });
+
+  testWidgets('video-from-frame mode explains five-frame image lookup', (
+    tester,
+  ) async {
+    final viewModel = _TestImageLookupViewModel();
+    viewModel.emit(
+      const ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.pump();
+
+    expect(find.text('Find a video from one of its frames'), findsOneWidget);
+    expect(find.text('Choose Image Frames'), findsOneWidget);
+    expect(find.textContaining('10%, 30%, 50%, 70%, and 90%'), findsOneWidget);
   });
 
   testWidgets('preparation exposes skip cancel and background controls', (
@@ -196,5 +243,73 @@ void main() {
       find.text('No matches found in the currently indexed library.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('frame results show the best sample timestamp', (tester) async {
+    final viewModel = _TestImageLookupViewModel();
+    final source = ImageLookupSource(
+      path: '/frame.jpg',
+      name: 'frame.jpg',
+      size: 100,
+      lastModified: DateTime(2024),
+    );
+    final video = MediaEntity(
+      id: 'video',
+      path: '/video.mov',
+      name: 'video.mov',
+      type: MediaType.video,
+      size: 5000,
+      lastModified: DateTime(2024),
+      tagIds: const <String>[],
+      directoryId: 'directory',
+    );
+    viewModel.emit(
+      ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+        phase: ImageLookupResults(
+          session: ImageLookupSession(
+            id: 'frame-session',
+            profileId: 'profile',
+            createdAt: DateTime(2024),
+            sensitivity: DuplicateSensitivity.balanced,
+            lookupMode: MediaLookupMode.videoFromFrame,
+            hasPartialCoverage: false,
+            searchedLibraryImages: 1,
+            results: <ImageLookupResult>[
+              ImageLookupResult(
+                source: source,
+                query: ImageLookupQuery(
+                  source: source,
+                  hash: 0,
+                  width: 800,
+                  height: 600,
+                ),
+                matches: <ImageLookupMatch>[
+                  ImageLookupMatch(
+                    candidate: DuplicateCandidate(
+                      media: video,
+                      width: 512,
+                      height: 288,
+                      hash: 0,
+                    ),
+                    distance: 0,
+                    matchedVideoFrame: const MatchedVideoFrame(
+                      positionPercent: 30,
+                      timestamp: Duration(minutes: 2, seconds: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.pump();
+
+    expect(find.text('Matched around 02:13 · 30%'), findsOneWidget);
   });
 }

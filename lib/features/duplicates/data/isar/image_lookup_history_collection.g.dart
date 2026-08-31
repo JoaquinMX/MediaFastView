@@ -11,7 +11,7 @@ part of 'image_lookup_history_collection.dart';
 
 extension GetImageLookupHistoryCollectionCollection on Isar {
   IsarCollection<ImageLookupHistoryCollection>
-      get imageLookupHistoryCollections => this.collection();
+  get imageLookupHistoryCollections => this.collection();
 }
 
 const ImageLookupHistoryCollectionSchema = CollectionSchema(
@@ -37,7 +37,7 @@ const ImageLookupHistoryCollectionSchema = CollectionSchema(
       id: 3,
       name: r'sessionId',
       type: IsarType.string,
-    )
+    ),
   },
   estimateSize: _imageLookupHistoryCollectionEstimateSize,
   serialize: _imageLookupHistoryCollectionSerialize,
@@ -55,7 +55,7 @@ const ImageLookupHistoryCollectionSchema = CollectionSchema(
           name: r'sessionId',
           type: IndexType.hash,
           caseSensitive: true,
-        )
+        ),
       ],
     ),
     r'profileId': IndexSchema(
@@ -68,9 +68,9 @@ const ImageLookupHistoryCollectionSchema = CollectionSchema(
           name: r'profileId',
           type: IndexType.hash,
           caseSensitive: true,
-        )
+        ),
       ],
-    )
+    ),
   },
   links: {},
   embeddedSchemas: {},
@@ -145,12 +145,16 @@ Id _imageLookupHistoryCollectionGetId(ImageLookupHistoryCollection object) {
 }
 
 List<IsarLinkBase<dynamic>> _imageLookupHistoryCollectionGetLinks(
-    ImageLookupHistoryCollection object) {
+  ImageLookupHistoryCollection object,
+) {
   return [];
 }
 
 void _imageLookupHistoryCollectionAttach(
-    IsarCollection<dynamic> col, Id id, ImageLookupHistoryCollection object) {
+  IsarCollection<dynamic> col,
+  Id id,
+  ImageLookupHistoryCollection object,
+) {
   object.id = id;
 }
 
@@ -173,13 +177,15 @@ extension ImageLookupHistoryCollectionByIndex
   }
 
   Future<List<ImageLookupHistoryCollection?>> getAllBySessionId(
-      List<String> sessionIdValues) {
+    List<String> sessionIdValues,
+  ) {
     final values = sessionIdValues.map((e) => [e]).toList();
     return getAllByIndex(r'sessionId', values);
   }
 
   List<ImageLookupHistoryCollection?> getAllBySessionIdSync(
-      List<String> sessionIdValues) {
+    List<String> sessionIdValues,
+  ) {
     final values = sessionIdValues.map((e) => [e]).toList();
     return getAllByIndexSync(r'sessionId', values);
   }
@@ -198,46 +204,70 @@ extension ImageLookupHistoryCollectionByIndex
     return putByIndex(r'sessionId', object);
   }
 
-  Id putBySessionIdSync(ImageLookupHistoryCollection object,
-      {bool saveLinks = true}) {
+  Id putBySessionIdSync(
+    ImageLookupHistoryCollection object, {
+    bool saveLinks = true,
+  }) {
     return putByIndexSync(r'sessionId', object, saveLinks: saveLinks);
   }
 
   Future<List<Id>> putAllBySessionId(
-      List<ImageLookupHistoryCollection> objects) {
+    List<ImageLookupHistoryCollection> objects,
+  ) {
     return putAllByIndex(r'sessionId', objects);
   }
 
-  List<Id> putAllBySessionIdSync(List<ImageLookupHistoryCollection> objects,
-      {bool saveLinks = true}) {
+  List<Id> putAllBySessionIdSync(
+    List<ImageLookupHistoryCollection> objects, {
+    bool saveLinks = true,
+  }) {
     return putAllByIndexSync(r'sessionId', objects, saveLinks: saveLinks);
   }
 }
 
-extension ImageLookupHistoryCollectionQueryWhereSort on QueryBuilder<
-    ImageLookupHistoryCollection, ImageLookupHistoryCollection, QWhere> {
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhere> anyId() {
+extension ImageLookupHistoryCollectionQueryWhereSort
+    on
+        QueryBuilder<
+          ImageLookupHistoryCollection,
+          ImageLookupHistoryCollection,
+          QWhere
+        > {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhere
+  >
+  anyId() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(const IdWhereClause.any());
     });
   }
 }
 
-extension ImageLookupHistoryCollectionQueryWhere on QueryBuilder<
-    ImageLookupHistoryCollection, ImageLookupHistoryCollection, QWhereClause> {
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhereClause> idEqualTo(Id id) {
+extension ImageLookupHistoryCollectionQueryWhere
+    on
+        QueryBuilder<
+          ImageLookupHistoryCollection,
+          ImageLookupHistoryCollection,
+          QWhereClause
+        > {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhereClause
+  >
+  idEqualTo(Id id) {
     return QueryBuilder.apply(this, (query) {
-      return query.addWhereClause(IdWhereClause.between(
-        lower: id,
-        upper: id,
-      ));
+      return query.addWhereClause(IdWhereClause.between(lower: id, upper: id));
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhereClause> idNotEqualTo(Id id) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhereClause
+  >
+  idNotEqualTo(Id id) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
@@ -259,8 +289,12 @@ extension ImageLookupHistoryCollectionQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhereClause> idGreaterThan(Id id, {bool include = false}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhereClause
+  >
+  idGreaterThan(Id id, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         IdWhereClause.greaterThan(lower: id, includeLower: include),
@@ -268,8 +302,12 @@ extension ImageLookupHistoryCollectionQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhereClause> idLessThan(Id id, {bool include = false}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhereClause
+  >
+  idLessThan(Id id, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         IdWhereClause.lessThan(upper: id, includeUpper: include),
@@ -277,278 +315,366 @@ extension ImageLookupHistoryCollectionQueryWhere on QueryBuilder<
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhereClause> idBetween(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhereClause
+  >
+  idBetween(
     Id lowerId,
     Id upperId, {
     bool includeLower = true,
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addWhereClause(IdWhereClause.between(
-        lower: lowerId,
-        includeLower: includeLower,
-        upper: upperId,
-        includeUpper: includeUpper,
-      ));
+      return query.addWhereClause(
+        IdWhereClause.between(
+          lower: lowerId,
+          includeLower: includeLower,
+          upper: upperId,
+          includeUpper: includeUpper,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhereClause> sessionIdEqualTo(String sessionId) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhereClause
+  >
+  sessionIdEqualTo(String sessionId) {
     return QueryBuilder.apply(this, (query) {
-      return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'sessionId',
-        value: [sessionId],
-      ));
+      return query.addWhereClause(
+        IndexWhereClause.equalTo(indexName: r'sessionId', value: [sessionId]),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhereClause> sessionIdNotEqualTo(String sessionId) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhereClause
+  >
+  sessionIdNotEqualTo(String sessionId) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'sessionId',
-              lower: [],
-              upper: [sessionId],
-              includeUpper: false,
-            ))
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'sessionId',
-              lower: [sessionId],
-              includeLower: false,
-              upper: [],
-            ));
+            .addWhereClause(
+              IndexWhereClause.between(
+                indexName: r'sessionId',
+                lower: [],
+                upper: [sessionId],
+                includeUpper: false,
+              ),
+            )
+            .addWhereClause(
+              IndexWhereClause.between(
+                indexName: r'sessionId',
+                lower: [sessionId],
+                includeLower: false,
+                upper: [],
+              ),
+            );
       } else {
         return query
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'sessionId',
-              lower: [sessionId],
-              includeLower: false,
-              upper: [],
-            ))
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'sessionId',
-              lower: [],
-              upper: [sessionId],
-              includeUpper: false,
-            ));
+            .addWhereClause(
+              IndexWhereClause.between(
+                indexName: r'sessionId',
+                lower: [sessionId],
+                includeLower: false,
+                upper: [],
+              ),
+            )
+            .addWhereClause(
+              IndexWhereClause.between(
+                indexName: r'sessionId',
+                lower: [],
+                upper: [sessionId],
+                includeUpper: false,
+              ),
+            );
       }
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhereClause> profileIdEqualTo(String profileId) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhereClause
+  >
+  profileIdEqualTo(String profileId) {
     return QueryBuilder.apply(this, (query) {
-      return query.addWhereClause(IndexWhereClause.equalTo(
-        indexName: r'profileId',
-        value: [profileId],
-      ));
+      return query.addWhereClause(
+        IndexWhereClause.equalTo(indexName: r'profileId', value: [profileId]),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterWhereClause> profileIdNotEqualTo(String profileId) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterWhereClause
+  >
+  profileIdNotEqualTo(String profileId) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'profileId',
-              lower: [],
-              upper: [profileId],
-              includeUpper: false,
-            ))
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'profileId',
-              lower: [profileId],
-              includeLower: false,
-              upper: [],
-            ));
+            .addWhereClause(
+              IndexWhereClause.between(
+                indexName: r'profileId',
+                lower: [],
+                upper: [profileId],
+                includeUpper: false,
+              ),
+            )
+            .addWhereClause(
+              IndexWhereClause.between(
+                indexName: r'profileId',
+                lower: [profileId],
+                includeLower: false,
+                upper: [],
+              ),
+            );
       } else {
         return query
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'profileId',
-              lower: [profileId],
-              includeLower: false,
-              upper: [],
-            ))
-            .addWhereClause(IndexWhereClause.between(
-              indexName: r'profileId',
-              lower: [],
-              upper: [profileId],
-              includeUpper: false,
-            ));
+            .addWhereClause(
+              IndexWhereClause.between(
+                indexName: r'profileId',
+                lower: [profileId],
+                includeLower: false,
+                upper: [],
+              ),
+            )
+            .addWhereClause(
+              IndexWhereClause.between(
+                indexName: r'profileId',
+                lower: [],
+                upper: [profileId],
+                includeUpper: false,
+              ),
+            );
       }
     });
   }
 }
 
-extension ImageLookupHistoryCollectionQueryFilter on QueryBuilder<
+extension ImageLookupHistoryCollectionQueryFilter
+    on
+        QueryBuilder<
+          ImageLookupHistoryCollection,
+          ImageLookupHistoryCollection,
+          QFilterCondition
+        > {
+  QueryBuilder<
     ImageLookupHistoryCollection,
     ImageLookupHistoryCollection,
-    QFilterCondition> {
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> createdAtEqualTo(DateTime value) {
+    QAfterFilterCondition
+  >
+  createdAtEqualTo(DateTime value) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'createdAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'createdAt', value: value),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> createdAtGreaterThan(
-    DateTime value, {
-    bool include = false,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  createdAtGreaterThan(DateTime value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'createdAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'createdAt',
+          value: value,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> createdAtLessThan(
-    DateTime value, {
-    bool include = false,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  createdAtLessThan(DateTime value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'createdAt',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'createdAt',
+          value: value,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> createdAtBetween(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  createdAtBetween(
     DateTime lower,
     DateTime upper, {
     bool includeLower = true,
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'createdAt',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'createdAt',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> idEqualTo(Id value) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  idEqualTo(Id value) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'id',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'id', value: value),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> idGreaterThan(
-    Id value, {
-    bool include = false,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  idGreaterThan(Id value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'id',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'id',
+          value: value,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> idLessThan(
-    Id value, {
-    bool include = false,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  idLessThan(Id value, {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'id',
-        value: value,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'id',
+          value: value,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> idBetween(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  idBetween(
     Id lower,
     Id upper, {
     bool includeLower = true,
     bool includeUpper = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'id',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'id',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> payloadJsonEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonEqualTo(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'payloadJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'payloadJson',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> payloadJsonGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'payloadJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> payloadJsonLessThan(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'payloadJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'payloadJson',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> payloadJsonBetween(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'payloadJson',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -556,137 +682,180 @@ extension ImageLookupHistoryCollectionQueryFilter on QueryBuilder<
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'payloadJson',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'payloadJson',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> payloadJsonStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonStartsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'payloadJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'payloadJson',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> payloadJsonEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonEndsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'payloadJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'payloadJson',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-          QAfterFilterCondition>
-      payloadJsonContains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'payloadJson',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'payloadJson',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-          QAfterFilterCondition>
-      payloadJsonMatches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'payloadJson',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'payloadJson',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> payloadJsonIsEmpty() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonIsEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'payloadJson',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'payloadJson', value: ''),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> payloadJsonIsNotEmpty() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  payloadJsonIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'payloadJson',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'payloadJson', value: ''),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> profileIdEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdEqualTo(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'profileId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'profileId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> profileIdGreaterThan(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'profileId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'profileId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> profileIdLessThan(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'profileId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'profileId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> profileIdBetween(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -694,137 +863,180 @@ extension ImageLookupHistoryCollectionQueryFilter on QueryBuilder<
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'profileId',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'profileId',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> profileIdStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdStartsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'profileId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'profileId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> profileIdEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdEndsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'profileId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'profileId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-          QAfterFilterCondition>
-      profileIdContains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'profileId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'profileId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-          QAfterFilterCondition>
-      profileIdMatches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'profileId',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'profileId',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> profileIdIsEmpty() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdIsEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'profileId',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'profileId', value: ''),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> profileIdIsNotEmpty() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  profileIdIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'profileId',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'profileId', value: ''),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> sessionIdEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdEqualTo(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sessionId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'sessionId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> sessionIdGreaterThan(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'sessionId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'sessionId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> sessionIdLessThan(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'sessionId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'sessionId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> sessionIdBetween(
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -832,297 +1044,433 @@ extension ImageLookupHistoryCollectionQueryFilter on QueryBuilder<
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'sessionId',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'sessionId',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> sessionIdStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdStartsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'sessionId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'sessionId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> sessionIdEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdEndsWith(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'sessionId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'sessionId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-          QAfterFilterCondition>
-      sessionIdContains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'sessionId',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'sessionId',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-          QAfterFilterCondition>
-      sessionIdMatches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'sessionId',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'sessionId',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> sessionIdIsEmpty() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdIsEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sessionId',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'sessionId', value: ''),
+      );
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterFilterCondition> sessionIdIsNotEmpty() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterFilterCondition
+  >
+  sessionIdIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'sessionId',
-        value: '',
-      ));
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'sessionId', value: ''),
+      );
     });
   }
 }
 
-extension ImageLookupHistoryCollectionQueryObject on QueryBuilder<
-    ImageLookupHistoryCollection,
-    ImageLookupHistoryCollection,
-    QFilterCondition> {}
+extension ImageLookupHistoryCollectionQueryObject
+    on
+        QueryBuilder<
+          ImageLookupHistoryCollection,
+          ImageLookupHistoryCollection,
+          QFilterCondition
+        > {}
 
-extension ImageLookupHistoryCollectionQueryLinks on QueryBuilder<
-    ImageLookupHistoryCollection,
-    ImageLookupHistoryCollection,
-    QFilterCondition> {}
+extension ImageLookupHistoryCollectionQueryLinks
+    on
+        QueryBuilder<
+          ImageLookupHistoryCollection,
+          ImageLookupHistoryCollection,
+          QFilterCondition
+        > {}
 
-extension ImageLookupHistoryCollectionQuerySortBy on QueryBuilder<
-    ImageLookupHistoryCollection, ImageLookupHistoryCollection, QSortBy> {
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> sortByCreatedAt() {
+extension ImageLookupHistoryCollectionQuerySortBy
+    on
+        QueryBuilder<
+          ImageLookupHistoryCollection,
+          ImageLookupHistoryCollection,
+          QSortBy
+        > {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  sortByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> sortByCreatedAtDesc() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  sortByCreatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.desc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> sortByPayloadJson() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  sortByPayloadJson() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'payloadJson', Sort.asc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> sortByPayloadJsonDesc() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  sortByPayloadJsonDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'payloadJson', Sort.desc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> sortByProfileId() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  sortByProfileId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'profileId', Sort.asc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> sortByProfileIdDesc() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  sortByProfileIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'profileId', Sort.desc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> sortBySessionId() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  sortBySessionId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'sessionId', Sort.asc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> sortBySessionIdDesc() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  sortBySessionIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'sessionId', Sort.desc);
     });
   }
 }
 
-extension ImageLookupHistoryCollectionQuerySortThenBy on QueryBuilder<
-    ImageLookupHistoryCollection, ImageLookupHistoryCollection, QSortThenBy> {
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenByCreatedAt() {
+extension ImageLookupHistoryCollectionQuerySortThenBy
+    on
+        QueryBuilder<
+          ImageLookupHistoryCollection,
+          ImageLookupHistoryCollection,
+          QSortThenBy
+        > {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.asc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenByCreatedAtDesc() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenByCreatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'createdAt', Sort.desc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenById() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenByIdDesc() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenByPayloadJson() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenByPayloadJson() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'payloadJson', Sort.asc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenByPayloadJsonDesc() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenByPayloadJsonDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'payloadJson', Sort.desc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenByProfileId() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenByProfileId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'profileId', Sort.asc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenByProfileIdDesc() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenByProfileIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'profileId', Sort.desc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenBySessionId() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenBySessionId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'sessionId', Sort.asc);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QAfterSortBy> thenBySessionIdDesc() {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QAfterSortBy
+  >
+  thenBySessionIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'sessionId', Sort.desc);
     });
   }
 }
 
-extension ImageLookupHistoryCollectionQueryWhereDistinct on QueryBuilder<
-    ImageLookupHistoryCollection, ImageLookupHistoryCollection, QDistinct> {
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QDistinct> distinctByCreatedAt() {
+extension ImageLookupHistoryCollectionQueryWhereDistinct
+    on
+        QueryBuilder<
+          ImageLookupHistoryCollection,
+          ImageLookupHistoryCollection,
+          QDistinct
+        > {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QDistinct
+  >
+  distinctByCreatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'createdAt');
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QDistinct> distinctByPayloadJson({bool caseSensitive = true}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QDistinct
+  >
+  distinctByPayloadJson({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'payloadJson', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QDistinct> distinctByProfileId({bool caseSensitive = true}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QDistinct
+  >
+  distinctByProfileId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'profileId', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<ImageLookupHistoryCollection, ImageLookupHistoryCollection,
-      QDistinct> distinctBySessionId({bool caseSensitive = true}) {
+  QueryBuilder<
+    ImageLookupHistoryCollection,
+    ImageLookupHistoryCollection,
+    QDistinct
+  >
+  distinctBySessionId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'sessionId', caseSensitive: caseSensitive);
     });
   }
 }
 
-extension ImageLookupHistoryCollectionQueryProperty on QueryBuilder<
-    ImageLookupHistoryCollection,
-    ImageLookupHistoryCollection,
-    QQueryProperty> {
+extension ImageLookupHistoryCollectionQueryProperty
+    on
+        QueryBuilder<
+          ImageLookupHistoryCollection,
+          ImageLookupHistoryCollection,
+          QQueryProperty
+        > {
   QueryBuilder<ImageLookupHistoryCollection, int, QQueryOperations>
-      idProperty() {
+  idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
     });
   }
 
   QueryBuilder<ImageLookupHistoryCollection, DateTime, QQueryOperations>
-      createdAtProperty() {
+  createdAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'createdAt');
     });
   }
 
   QueryBuilder<ImageLookupHistoryCollection, String, QQueryOperations>
-      payloadJsonProperty() {
+  payloadJsonProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'payloadJson');
     });
   }
 
   QueryBuilder<ImageLookupHistoryCollection, String, QQueryOperations>
-      profileIdProperty() {
+  profileIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'profileId');
     });
   }
 
   QueryBuilder<ImageLookupHistoryCollection, String, QQueryOperations>
-      sessionIdProperty() {
+  sessionIdProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'sessionId');
     });

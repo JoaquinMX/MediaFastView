@@ -33,6 +33,7 @@ class ThumbnailDiskCache {
       request.sourceSize,
       request.sourceLastModified.microsecondsSinceEpoch,
       request.thumbnailSize.maxPixelSize,
+      if (request.videoPositionFraction != null) request.videoPositionFraction!,
     ].join('\u0000');
     return sha256.convert(utf8.encode(fingerprint)).toString();
   }

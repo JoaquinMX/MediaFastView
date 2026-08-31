@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/models/media_lookup_mode.dart';
 import 'package:media_fast_view/features/settings/data/repositories/settings_repository_impl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -44,4 +45,24 @@ void main() {
 
     expect((await repository.loadSettings()).imageLookupHistoryEnabled, isTrue);
   });
+
+  test(
+    'media lookup mode defaults safely and remembers the last mode',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      const repository = SettingsRepositoryImpl();
+
+      expect(
+        (await repository.loadSettings()).mediaLookupMode,
+        MediaLookupMode.mediaMatches,
+      );
+
+      await repository.saveMediaLookupMode(MediaLookupMode.videoFromFrame);
+
+      expect(
+        (await repository.loadSettings()).mediaLookupMode,
+        MediaLookupMode.videoFromFrame,
+      );
+    },
+  );
 }

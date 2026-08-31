@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/models/media_lookup_mode.dart';
 import '../../domain/entities/app_settings.dart';
 import '../../domain/entities/playback_settings.dart';
 import '../../domain/repositories/settings_repository.dart';
@@ -15,6 +16,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const String _legacyThumbnailCachingKey = 'thumbnail_caching_enabled';
   static const String _deleteFromSourceKey = 'delete_from_source_enabled';
   static const String _imageLookupHistoryKey = 'image_lookup_history_enabled';
+  static const String _mediaLookupModeKey = 'media_lookup_mode';
   static const String _autoplayKey = 'video_autoplay_enabled';
   static const String _loopKey = 'video_loop_enabled';
   static const String _startMutedKey = 'video_start_muted';
@@ -42,6 +44,11 @@ class SettingsRepositoryImpl implements SettingsRepository {
         prefs.getBool(_deleteFromSourceKey) ?? false;
     final imageLookupHistoryEnabled =
         prefs.getBool(_imageLookupHistoryKey) ?? false;
+    final storedMediaLookupMode = prefs.getString(_mediaLookupModeKey);
+    final mediaLookupMode = MediaLookupMode.values.firstWhere(
+      (mode) => mode.name == storedMediaLookupMode,
+      orElse: () => MediaLookupMode.mediaMatches,
+    );
     final autoNavigateSiblingDirectories =
         prefs.getBool(_autoNavigateKey) ?? false;
     final navigateToSiblingAfterDirectoryDelete =
@@ -64,6 +71,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
       themeMode: ThemeMode.values[themeIndex],
       thumbnailDiskCacheEnabled: thumbnailDiskCacheEnabled,
       imageLookupHistoryEnabled: imageLookupHistoryEnabled,
+      mediaLookupMode: mediaLookupMode,
       deleteFromSourceEnabled: deleteFromSourceEnabled,
       playbackSettings: PlaybackSettings(
         autoplayVideos: autoplay,
@@ -100,6 +108,12 @@ class SettingsRepositoryImpl implements SettingsRepository {
   Future<void> saveImageLookupHistoryEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_imageLookupHistoryKey, enabled);
+  }
+
+  @override
+  Future<void> saveMediaLookupMode(MediaLookupMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_mediaLookupModeKey, mode.name);
   }
 
   @override

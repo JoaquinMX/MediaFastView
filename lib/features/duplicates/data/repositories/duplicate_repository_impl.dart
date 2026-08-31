@@ -1,3 +1,4 @@
+import '../../../../core/models/media_lookup_mode.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../../media_library/domain/entities/directory_entity.dart';
 import '../../../media_library/domain/repositories/directory_repository.dart';
@@ -14,13 +15,18 @@ import '../../domain/entities/image_lookup_query.dart';
 import '../../domain/entities/image_lookup_result.dart';
 import '../../domain/entities/image_lookup_source.dart';
 import '../../domain/entities/keeper_strategy.dart';
+import '../../domain/entities/matched_video_frame.dart';
 import '../../domain/entities/perceptual_hash.dart';
+import '../../domain/entities/video_frame_hash.dart';
+import '../../domain/entities/video_frame_index_coverage.dart';
 import '../../domain/repositories/duplicate_repository.dart';
 import '../data_sources/dismissed_group_data_source.dart';
 import '../data_sources/perceptual_hash_data_source.dart';
+import '../data_sources/video_frame_hash_data_source.dart';
 import '../services/duplicate_clusterer.dart';
 import '../services/perceptual_hasher.dart';
 import '../services/video_thumbnail_hasher.dart';
+import '../services/video_frame_hasher.dart';
 
 class DuplicateRepositoryImpl implements DuplicateRepository {
   DuplicateRepositoryImpl({
@@ -29,6 +35,8 @@ class DuplicateRepositoryImpl implements DuplicateRepository {
     required DismissedGroupDataSource dismissedDataSource,
     DirectoryRepository? directoryRepository,
     VideoThumbnailHasher? videoThumbnailHasher,
+    VideoFrameHashDataSource? videoFrameHashDataSource,
+    VideoFrameHasher? videoFrameHasher,
     PerceptualHasher hasher = const PerceptualHasher(),
     DuplicateClusterer clusterer = const DuplicateClusterer(),
   }) : _mediaRepository = mediaRepository,
@@ -36,6 +44,8 @@ class DuplicateRepositoryImpl implements DuplicateRepository {
        _dismissedDataSource = dismissedDataSource,
        _directoryRepository = directoryRepository,
        _videoThumbnailHasher = videoThumbnailHasher,
+       _videoFrameHashDataSource = videoFrameHashDataSource,
+       _videoFrameHasher = videoFrameHasher,
        _hasher = hasher,
        _clusterer = clusterer;
 
@@ -44,6 +54,8 @@ class DuplicateRepositoryImpl implements DuplicateRepository {
   final DismissedGroupDataSource _dismissedDataSource;
   final DirectoryRepository? _directoryRepository;
   final VideoThumbnailHasher? _videoThumbnailHasher;
+  final VideoFrameHashDataSource? _videoFrameHashDataSource;
+  final VideoFrameHasher? _videoFrameHasher;
   final PerceptualHasher _hasher;
   final DuplicateClusterer _clusterer;
 
@@ -199,9 +211,117 @@ class DuplicateRepositoryImpl implements DuplicateRepository {
   }
 
   @override
+  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage() async {
+    final videos = await _libraryMedia(const <MediaType>{MediaType.video});
+    if (videos.isEmpty) {
+      return const VideoFrameIndexCoverage(totalVideos: 0, readyVideos: 0);
+    }
+    final cached = await _videoFrameHashDataSource?.getByMediaIds(
+      videos.map((video) => video.id),
+    );
+    var ready = 0;
+    for (final video in videos) {
+      if (_hasCurrentVideoFrames(video, cached?[video.id])) {
+        ready++;
+      }
+    }
+    return VideoFrameIndexCoverage(
+      totalVideos: videos.length,
+      readyVideos: ready,
+    );
+  }
+
+  @override
+  Stream<DuplicateScanProgress> hashVideoFrames({
+    DuplicateScanCancellation? cancellation,
+  }) async* {
+    final videos = await _libraryMedia(const <MediaType>{MediaType.video});
+    final total = videos.length;
+    if (total == 0) {
+      yield const DuplicateScanProgress(
+        processed: 0,
+        total: 0,
+        isComplete: true,
+      );
+      return;
+    }
+    final cached = await _videoFrameHashDataSource?.getByMediaIds(
+      videos.map((video) => video.id),
+    );
+    final directories = await _loadDirectories();
+    var processed = 0;
+    var reused = 0;
+    var failed = 0;
+    final pending = <String, List<VideoFrameHash>>{};
+
+    for (var index = 0; index < videos.length; index++) {
+      if (cancellation?.isCancelled ?? false) {
+        await _flushVideoFrames(pending);
+        yield DuplicateScanProgress(
+          processed: processed,
+          total: total,
+          reused: reused,
+          failed: failed,
+          isCancelled: true,
+        );
+        return;
+      }
+      final video = videos[index];
+      if (_hasCurrentVideoFrames(video, cached?[video.id])) {
+        reused++;
+      } else {
+        final bookmark =
+            video.bookmarkData ??
+            resolveBookmarkForPath(video.path, directories);
+        final hashes = await _videoFrameHasher?.hashVideo(
+          mediaId: video.id,
+          path: video.path,
+          size: video.size,
+          lastModified: video.lastModified,
+          bookmarkData: bookmark,
+          cancellation: cancellation,
+        );
+        if (cancellation?.isCancelled ?? false) {
+          await _flushVideoFrames(pending);
+          yield DuplicateScanProgress(
+            processed: processed,
+            total: total,
+            reused: reused,
+            failed: failed,
+            isCancelled: true,
+          );
+          return;
+        }
+        if (hashes == null) {
+          failed++;
+        } else {
+          pending[video.id] = hashes;
+          if (pending.length >= _persistBatchSize) {
+            await _flushVideoFrames(pending);
+          }
+        }
+      }
+      processed++;
+      final isLast = index == videos.length - 1;
+      if (processed % _emitEvery == 0 || isLast) {
+        yield DuplicateScanProgress(
+          processed: processed,
+          total: total,
+          reused: reused,
+          failed: failed,
+          isComplete: isLast,
+        );
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+    await _flushVideoFrames(pending);
+  }
+
+  @override
   Future<ImageLookupBatch> findImageMatches({
     required List<ImageLookupSource> sources,
     required DuplicateSensitivity sensitivity,
+    MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
     DuplicateScanCancellation? cancellation,
     void Function(int processed, int total)? onProgress,
   }) async {
@@ -212,6 +332,16 @@ class DuplicateRepositoryImpl implements DuplicateRepository {
         break;
       }
       final source = sources[index];
+      if (lookupMode == MediaLookupMode.videoFromFrame &&
+          source.mediaType != MediaType.image) {
+        failedByPath[source.path] = ImageLookupResult(
+          source: source,
+          matches: const <ImageLookupMatch>[],
+          errorMessage: 'Video-from-frame lookup requires an image query.',
+        );
+        onProgress?.call(index + 1, sources.length);
+        continue;
+      }
       final hash = await _hashSource(source, cancellation: cancellation);
       if (cancellation?.isCancelled ?? false) {
         break;
@@ -246,6 +376,7 @@ class DuplicateRepositoryImpl implements DuplicateRepository {
     final matched = await rematchImageQueries(
       queries: queries,
       sensitivity: sensitivity,
+      lookupMode: lookupMode,
       cancellation: cancellation,
     );
     final matchedByPath = <String, ImageLookupResult>{
@@ -269,9 +400,18 @@ class DuplicateRepositoryImpl implements DuplicateRepository {
   Future<ImageLookupBatch> rematchImageQueries({
     required List<ImageLookupQuery> queries,
     required DuplicateSensitivity sensitivity,
+    MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
     DuplicateScanCancellation? cancellation,
     void Function(int processed, int total)? onProgress,
   }) async {
+    if (lookupMode == MediaLookupMode.videoFromFrame) {
+      return _rematchVideoFrames(
+        queries: queries,
+        sensitivity: sensitivity,
+        cancellation: cancellation,
+        onProgress: onProgress,
+      );
+    }
     final mediaTypes = queries.map((query) => query.source.mediaType).toSet();
     final candidates = await _loadLookupCandidates(mediaTypes);
     final results = <ImageLookupResult>[];
@@ -342,6 +482,99 @@ class DuplicateRepositoryImpl implements DuplicateRepository {
     return candidates;
   }
 
+  Future<ImageLookupBatch> _rematchVideoFrames({
+    required List<ImageLookupQuery> queries,
+    required DuplicateSensitivity sensitivity,
+    DuplicateScanCancellation? cancellation,
+    void Function(int processed, int total)? onProgress,
+  }) async {
+    final videos = await _libraryMedia(const <MediaType>{MediaType.video});
+    final cached = await _videoFrameHashDataSource?.getByMediaIds(
+      videos.map((video) => video.id),
+    );
+    final readyVideos = <({MediaEntity video, List<VideoFrameHash> frames})>[
+      for (final video in videos)
+        if (_hasCurrentVideoFrames(video, cached?[video.id]))
+          (video: video, frames: cached![video.id]!),
+    ];
+    final results = <ImageLookupResult>[];
+    for (var index = 0; index < queries.length; index++) {
+      if (cancellation?.isCancelled ?? false) {
+        break;
+      }
+      final query = queries[index];
+      final matches = <ImageLookupMatch>[];
+      for (final readyVideo in readyVideos) {
+        VideoFrameHash? bestFrame;
+        var bestDistance = 65;
+        for (final frame in readyVideo.frames) {
+          final distance = hammingDistance(query.hash, frame.hash);
+          if (distance < bestDistance ||
+              (distance == bestDistance &&
+                  (bestFrame == null ||
+                      frame.timestamp < bestFrame.timestamp))) {
+            bestFrame = frame;
+            bestDistance = distance;
+          }
+        }
+        if (bestFrame != null && bestDistance <= sensitivity.threshold) {
+          matches.add(
+            ImageLookupMatch(
+              candidate: DuplicateCandidate(
+                media: readyVideo.video,
+                width: bestFrame.width,
+                height: bestFrame.height,
+                hash: bestFrame.hash,
+              ),
+              distance: bestDistance,
+              matchedVideoFrame: MatchedVideoFrame(
+                positionPercent: bestFrame.positionPercent,
+                timestamp: bestFrame.timestamp,
+              ),
+            ),
+          );
+        }
+      }
+      matches.sort((first, second) {
+        final byDistance = first.distance.compareTo(second.distance);
+        if (byDistance != 0) {
+          return byDistance;
+        }
+        return first.candidate.media.path.compareTo(
+          second.candidate.media.path,
+        );
+      });
+      results.add(
+        ImageLookupResult(
+          source: query.source,
+          query: query,
+          matches: List<ImageLookupMatch>.unmodifiable(matches),
+        ),
+      );
+      onProgress?.call(index + 1, queries.length);
+      await Future<void>.delayed(Duration.zero);
+    }
+    return ImageLookupBatch(
+      results: List<ImageLookupResult>.unmodifiable(results),
+      searchedLibraryImages: readyVideos.length,
+    );
+  }
+
+  bool _hasCurrentVideoFrames(MediaEntity video, List<VideoFrameHash>? frames) {
+    if (frames == null || frames.length != videoFrameSamplePercents.length) {
+      return false;
+    }
+    final expectedFingerprint = videoFrameLookupFingerprint(
+      size: video.size,
+      lastModified: video.lastModified,
+    );
+    return frames.every((frame) => frame.fingerprint == expectedFingerprint) &&
+        frames
+            .map((frame) => frame.positionPercent)
+            .toSet()
+            .containsAll(videoFrameSamplePercents);
+  }
+
   Future<ImageHashResult?> _hashSource(
     ImageLookupSource source, {
     DuplicateScanCancellation? cancellation,
@@ -400,6 +633,21 @@ class DuplicateRepositoryImpl implements DuplicateRepository {
       return;
     }
     await _hashDataSource.putAll(List<PerceptualHash>.from(pending));
+    pending.clear();
+  }
+
+  Future<void> _flushVideoFrames(
+    Map<String, List<VideoFrameHash>> pending,
+  ) async {
+    if (pending.isEmpty) {
+      return;
+    }
+    final dataSource = _videoFrameHashDataSource;
+    if (dataSource != null) {
+      await dataSource.replaceAll(
+        Map<String, List<VideoFrameHash>>.from(pending),
+      );
+    }
     pending.clear();
   }
 

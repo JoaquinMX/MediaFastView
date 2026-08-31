@@ -38,6 +38,13 @@ void main() {
         MediaType.image,
         MediaType.video,
       ]);
+
+      final frameSources = await picker.sourcesFromPaths(
+        <String>[image.path, video.path],
+        allowedMediaTypes: const <MediaType>{MediaType.image},
+      );
+      expect(frameSources, hasLength(1));
+      expect(frameSources.single.mediaType, MediaType.image);
     },
   );
 }

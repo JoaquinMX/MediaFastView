@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../../../core/models/media_lookup_mode.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../domain/entities/duplicate_candidate.dart';
 import '../../domain/entities/duplicate_sensitivity.dart';
@@ -8,6 +9,7 @@ import '../../domain/entities/image_lookup_query.dart';
 import '../../domain/entities/image_lookup_result.dart';
 import '../../domain/entities/image_lookup_session.dart';
 import '../../domain/entities/image_lookup_source.dart';
+import '../../domain/entities/matched_video_frame.dart';
 
 /// Encodes lookup snapshots without persisting copies of the original images.
 class ImageLookupSessionSerializer {
@@ -27,6 +29,10 @@ class ImageLookupSessionSerializer {
         (value) => value.name == json['sensitivity'],
         orElse: () => DuplicateSensitivity.balanced,
       ),
+      lookupMode: MediaLookupMode.values.firstWhere(
+        (mode) => mode.name == json['lookupMode'],
+        orElse: () => MediaLookupMode.mediaMatches,
+      ),
       results: (json['results'] as List<dynamic>)
           .map(
             (value) => _result(
@@ -45,6 +51,7 @@ class ImageLookupSessionSerializer {
         'profileId': session.profileId,
         'createdAt': session.createdAt.toIso8601String(),
         'sensitivity': session.sensitivity.name,
+        'lookupMode': session.lookupMode.name,
         'hasPartialCoverage': session.hasPartialCoverage,
         'searchedLibraryImages': session.searchedLibraryImages,
         'results': session.results.map(_resultJson).toList(growable: false),
@@ -126,19 +133,37 @@ class ImageLookupSessionSerializer {
     'width': match.candidate.width,
     'height': match.candidate.height,
     'media': _mediaJson(match.candidate.media),
+    if (match.matchedVideoFrame case final frame?)
+      'matchedVideoFrame': <String, dynamic>{
+        'positionPercent': frame.positionPercent,
+        'timestampMilliseconds': frame.timestamp.inMilliseconds,
+      },
   };
 
-  ImageLookupMatch _match(Map<String, dynamic> json) => ImageLookupMatch(
-    distance: json['distance'] as int,
-    candidate: DuplicateCandidate(
-      media: _media(
-        Map<String, dynamic>.from(json['media'] as Map<dynamic, dynamic>),
+  ImageLookupMatch _match(Map<String, dynamic> json) {
+    final frameJson = json['matchedVideoFrame'];
+    return ImageLookupMatch(
+      distance: json['distance'] as int,
+      candidate: DuplicateCandidate(
+        media: _media(
+          Map<String, dynamic>.from(json['media'] as Map<dynamic, dynamic>),
+        ),
+        hash: json['hash'] as int,
+        width: json['width'] as int,
+        height: json['height'] as int,
       ),
-      hash: json['hash'] as int,
-      width: json['width'] as int,
-      height: json['height'] as int,
-    ),
-  );
+      matchedVideoFrame: frameJson == null
+          ? null
+          : MatchedVideoFrame(
+              positionPercent:
+                  (frameJson as Map<dynamic, dynamic>)['positionPercent']
+                      as int,
+              timestamp: Duration(
+                milliseconds: frameJson['timestampMilliseconds'] as int,
+              ),
+            ),
+    );
+  }
 
   Map<String, dynamic> _mediaJson(MediaEntity media) => <String, dynamic>{
     'id': media.id,

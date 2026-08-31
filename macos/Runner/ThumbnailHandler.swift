@@ -24,6 +24,8 @@ final class ThumbnailHandler: NSObject {
         switch call.method {
         case "generateThumbnail":
             generateThumbnail(call, result: result)
+        case "generateVideoFrames":
+            generateVideoFrames(call, result: result)
         case "cancelThumbnail":
             cancelThumbnail(call, result: result)
         default:
@@ -46,6 +48,7 @@ final class ThumbnailHandler: NSObject {
 
         let maxPixelSize = min(max(requestedMaxPixelSize, 64), 2048)
         let bookmarkData = arguments["bookmarkData"] as? String
+        let videoPositionFraction = arguments["videoPositionFraction"] as? Double
 
         switch mediaType {
         case "image":
@@ -61,6 +64,7 @@ final class ThumbnailHandler: NSObject {
                 requestId: requestId,
                 path: path,
                 maxPixelSize: maxPixelSize,
+                positionFraction: videoPositionFraction,
                 bookmarkData: bookmarkData,
                 result: result
             )
@@ -124,6 +128,7 @@ final class ThumbnailHandler: NSObject {
         requestId: String,
         path: String,
         maxPixelSize: Int,
+        positionFraction: Double?,
         bookmarkData: String?,
         result: @escaping FlutterResult
     ) {
@@ -145,7 +150,8 @@ final class ThumbnailHandler: NSObject {
             let durationSeconds = CMTimeGetSeconds(asset.duration)
             let requestedSeconds: Double
             if durationSeconds.isFinite && durationSeconds > 0 {
-                requestedSeconds = min(max(durationSeconds * 0.1, 0), max(durationSeconds - 0.05, 0))
+                let fraction = min(max(positionFraction ?? 0.1, 0), 1)
+                requestedSeconds = min(max(durationSeconds * fraction, 0), max(durationSeconds - 0.05, 0))
             } else {
                 requestedSeconds = 0
             }
@@ -181,6 +187,136 @@ final class ThumbnailHandler: NSObject {
                     self.finish(result, payload: self.payload(data, extension: "jpg"))
                 } catch {
                     self.finish(result, error: error)
+                }
+            }
+        } catch {
+            result(flutterError(for: error))
+        }
+    }
+
+    private func generateVideoFrames(
+        _ call: FlutterMethodCall,
+        result: @escaping FlutterResult
+    ) {
+        guard let arguments = call.arguments as? [String: Any],
+              let requestId = arguments["requestId"] as? String,
+              let path = arguments["path"] as? String,
+              let requestedMaxPixelSize = arguments["maxPixelSize"] as? Int,
+              let rawPositionPercents = arguments["positionPercents"] as? [NSNumber] else {
+            result(invalidVideoFramesArgumentsError())
+            return
+        }
+
+        let positionPercents = rawPositionPercents.map(\.intValue)
+        guard !positionPercents.isEmpty,
+              positionPercents.allSatisfy({ (0...100).contains($0) }),
+              Set(positionPercents).count == positionPercents.count else {
+            result(invalidVideoFramesArgumentsError())
+            return
+        }
+
+        let maxPixelSize = min(max(requestedMaxPixelSize, 64), 2048)
+        let bookmarkData = arguments["bookmarkData"] as? String
+
+        do {
+            let acquiredBookmark = try acquire(bookmarkData)
+            guard FileManager.default.fileExists(atPath: path) else {
+                release(acquiredBookmark)
+                result(flutterError(for: ThumbnailGenerationError.fileNotFound(path)))
+                return
+            }
+
+            let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+            let durationSeconds = CMTimeGetSeconds(asset.duration)
+            guard durationSeconds.isFinite && durationSeconds > 0 else {
+                release(acquiredBookmark)
+                result(flutterError(for: ThumbnailGenerationError.decodeFailed(path)))
+                return
+            }
+
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: maxPixelSize, height: maxPixelSize)
+            generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
+            generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+
+            let requestedSamples = positionPercents.map { positionPercent in
+                let requestedSeconds = min(
+                    max(durationSeconds * Double(positionPercent) / 100, 0),
+                    max(durationSeconds - 0.05, 0)
+                )
+                return (
+                    positionPercent: positionPercent,
+                    time: CMTime(seconds: requestedSeconds, preferredTimescale: 600)
+                )
+            }
+            let requestedTimes = requestedSamples.map { NSValue(time: $0.time) }
+            let stateQueue = DispatchQueue(
+                label: "com.joaquinmx.media_fast_view.thumbnail-video-frame-result"
+            )
+            var frames: [[String: Any]] = []
+            var firstError: Error?
+            var remaining = requestedSamples.count
+            var didFinish = false
+
+            setGenerator(generator, for: requestId)
+            generator.generateCGImagesAsynchronously(forTimes: requestedTimes) {
+                [weak self] requestedTime, image, actualTime, generationResult, error in
+                guard let self else { return }
+
+                var frame: [String: Any]?
+                var callbackError: Error?
+                if generationResult == .cancelled {
+                    callbackError = ThumbnailGenerationError.cancelled
+                } else if let error {
+                    callbackError = error
+                } else if let image {
+                    do {
+                        let data = try self.encode(
+                            image,
+                            type: "public.jpeg" as CFString,
+                            quality: 0.82
+                        )
+                        let requestedSeconds = CMTimeGetSeconds(requestedTime)
+                        let sample = requestedSamples.min { first, second in
+                            abs(CMTimeGetSeconds(first.time) - requestedSeconds)
+                                < abs(CMTimeGetSeconds(second.time) - requestedSeconds)
+                        }!
+                        let actualSeconds = max(CMTimeGetSeconds(actualTime), 0)
+                        frame = [
+                            "positionPercent": sample.positionPercent,
+                            "timestampMilliseconds": Int((actualSeconds * 1000).rounded()),
+                            "bytes": FlutterStandardTypedData(bytes: data),
+                        ]
+                    } catch {
+                        callbackError = error
+                    }
+                } else {
+                    callbackError = ThumbnailGenerationError.decodeFailed(path)
+                }
+
+                stateQueue.async {
+                    guard !didFinish else { return }
+                    if let frame {
+                        frames.append(frame)
+                    }
+                    if firstError == nil, let callbackError {
+                        firstError = callbackError
+                    }
+                    remaining -= 1
+                    guard remaining == 0 else { return }
+                    didFinish = true
+                    self.removeGenerator(for: requestId)
+                    self.release(acquiredBookmark)
+                    if let firstError {
+                        self.finish(result, error: firstError)
+                    } else {
+                        frames.sort {
+                            ($0["positionPercent"] as? Int ?? 0)
+                                < ($1["positionPercent"] as? Int ?? 0)
+                        }
+                        self.finish(result, payload: ["frames": frames])
+                    }
                 }
             }
         } catch {
@@ -268,6 +404,14 @@ final class ThumbnailHandler: NSObject {
         return FlutterError(
             code: "INVALID_ARGUMENTS",
             message: "requestId, path, mediaType, and maxPixelSize are required",
+            details: nil
+        )
+    }
+
+    private func invalidVideoFramesArgumentsError() -> FlutterError {
+        return FlutterError(
+            code: "INVALID_ARGUMENTS",
+            message: "requestId, path, maxPixelSize, and unique positionPercents are required",
             details: nil
         )
     }

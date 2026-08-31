@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_fast_view/core/models/media_lookup_mode.dart';
 import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/features/duplicates/data/services/image_lookup_file_picker.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_library_coverage.dart';
@@ -12,10 +13,13 @@ import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_result.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_session.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_source.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/video_frame_index_coverage.dart';
 import 'package:media_fast_view/features/duplicates/domain/repositories/duplicate_repository.dart';
 import 'package:media_fast_view/features/duplicates/domain/repositories/image_lookup_history_repository.dart';
 import 'package:media_fast_view/features/duplicates/domain/use_cases/find_image_matches_use_case.dart';
 import 'package:media_fast_view/features/duplicates/domain/use_cases/get_duplicate_library_coverage_use_case.dart';
+import 'package:media_fast_view/features/duplicates/domain/use_cases/get_video_frame_index_coverage_use_case.dart';
+import 'package:media_fast_view/features/duplicates/domain/use_cases/prepare_video_frame_index_use_case.dart';
 import 'package:media_fast_view/features/duplicates/domain/use_cases/scan_for_duplicates_use_case.dart';
 import 'package:media_fast_view/features/duplicates/presentation/view_models/image_lookup_view_model.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
@@ -25,22 +29,34 @@ class _FakeDuplicateRepository implements DuplicateRepository {
     totalImages: 1,
     readyImages: 1,
   );
+  VideoFrameIndexCoverage videoFrameCoverage = const VideoFrameIndexCoverage(
+    totalVideos: 0,
+    readyVideos: 0,
+  );
   late ImageLookupBatch batch;
   ImageLookupBatch? rematchedBatch;
   final Completer<void> scanGate = Completer<void>();
   var rematchCalls = 0;
   Set<MediaType>? coverageMediaTypes;
   Set<MediaType>? scanMediaTypes;
+  MediaLookupMode? lookupMode;
 
   @override
   Future<ImageLookupBatch> findImageMatches({
     required List<ImageLookupSource> sources,
     required DuplicateSensitivity sensitivity,
+    MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
     DuplicateScanCancellation? cancellation,
     void Function(int processed, int total)? onProgress,
   }) async {
+    this.lookupMode = lookupMode;
     onProgress?.call(sources.length, sources.length);
     return batch;
+  }
+
+  @override
+  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage() async {
+    return videoFrameCoverage;
   }
 
   @override
@@ -71,6 +87,7 @@ class _FakeDuplicateRepository implements DuplicateRepository {
   Future<ImageLookupBatch> rematchImageQueries({
     required List<ImageLookupQuery> queries,
     required DuplicateSensitivity sensitivity,
+    MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
     DuplicateScanCancellation? cancellation,
     void Function(int processed, int total)? onProgress,
   }) async {
@@ -88,14 +105,30 @@ class _FakeFilePicker implements MediaLookupFilePicker {
   _FakeFilePicker(this.sources);
 
   final List<ImageLookupSource> sources;
+  Set<MediaType>? allowedMediaTypes;
 
   @override
-  Future<List<ImageLookupSource>> pickMedia() async => sources;
+  Future<List<ImageLookupSource>> pickMedia({
+    Set<MediaType> allowedMediaTypes = const <MediaType>{
+      MediaType.image,
+      MediaType.video,
+    },
+  }) async {
+    this.allowedMediaTypes = allowedMediaTypes;
+    return sources;
+  }
 
   @override
   Future<List<ImageLookupSource>> sourcesFromPaths(
-    Iterable<String> paths,
-  ) async => sources;
+    Iterable<String> paths, {
+    Set<MediaType> allowedMediaTypes = const <MediaType>{
+      MediaType.image,
+      MediaType.video,
+    },
+  }) async {
+    this.allowedMediaTypes = allowedMediaTypes;
+    return sources;
+  }
 }
 
 class _FakeHistoryRepository implements ImageLookupHistoryRepository {
@@ -150,17 +183,28 @@ ImageLookupViewModel _viewModel({
   required _FakeDuplicateRepository duplicateRepository,
   required _FakeHistoryRepository historyRepository,
   bool historyEnabled = true,
+  MediaLookupMode initialLookupMode = MediaLookupMode.mediaMatches,
+  Future<void> Function(MediaLookupMode mode)? saveLookupMode,
+  _FakeFilePicker? filePicker,
 }) {
   final source = _source();
   return ImageLookupViewModel(
     profileId: 'profile-a',
     scanUseCase: ScanForDuplicatesUseCase(duplicateRepository),
     coverageUseCase: GetDuplicateLibraryCoverageUseCase(duplicateRepository),
+    videoFrameCoverageUseCase: GetVideoFrameIndexCoverageUseCase(
+      duplicateRepository,
+    ),
+    prepareVideoFramesUseCase: PrepareVideoFrameIndexUseCase(
+      duplicateRepository,
+    ),
     findMatchesUseCase: FindImageMatchesUseCase(duplicateRepository),
-    filePicker: _FakeFilePicker(<ImageLookupSource>[source]),
+    filePicker: filePicker ?? _FakeFilePicker(<ImageLookupSource>[source]),
     historyRepository: historyRepository,
     bookmarkService: BookmarkService.instance,
     isHistoryEnabled: () => historyEnabled,
+    saveLookupMode: saveLookupMode ?? (_) async {},
+    initialLookupMode: initialLookupMode,
   );
 }
 
@@ -195,11 +239,18 @@ void main() {
       profileId: 'profile-a',
       scanUseCase: ScanForDuplicatesUseCase(duplicateRepository),
       coverageUseCase: GetDuplicateLibraryCoverageUseCase(duplicateRepository),
+      videoFrameCoverageUseCase: GetVideoFrameIndexCoverageUseCase(
+        duplicateRepository,
+      ),
+      prepareVideoFramesUseCase: PrepareVideoFrameIndexUseCase(
+        duplicateRepository,
+      ),
       findMatchesUseCase: FindImageMatchesUseCase(duplicateRepository),
       filePicker: _FakeFilePicker(<ImageLookupSource>[source]),
       historyRepository: _FakeHistoryRepository(),
       bookmarkService: BookmarkService.instance,
       isHistoryEnabled: () => false,
+      saveLookupMode: (_) async {},
     );
 
     await viewModel.startLookup(<ImageLookupSource>[source]);
@@ -210,6 +261,58 @@ void main() {
     expect(viewModel.state.phase, isA<ImageLookupResults>());
     viewModel.dispose();
   });
+
+  test(
+    'video-from-frame mode searches the frame index and requests images',
+    () async {
+      final source = _source();
+      final picker = _FakeFilePicker(<ImageLookupSource>[source]);
+      final duplicateRepository = _FakeDuplicateRepository()
+        ..videoFrameCoverage = const VideoFrameIndexCoverage(
+          totalVideos: 2,
+          readyVideos: 2,
+        )
+        ..batch = _batch(source, searchedLibraryImages: 2);
+      final viewModel = _viewModel(
+        duplicateRepository: duplicateRepository,
+        historyRepository: _FakeHistoryRepository(),
+        historyEnabled: false,
+        initialLookupMode: MediaLookupMode.videoFromFrame,
+        filePicker: picker,
+      );
+
+      await viewModel.pickMedia();
+
+      expect(picker.allowedMediaTypes, <MediaType>{MediaType.image});
+      expect(duplicateRepository.lookupMode, MediaLookupMode.videoFromFrame);
+      final phase = viewModel.state.phase as ImageLookupResults;
+      expect(phase.session.lookupMode, MediaLookupMode.videoFromFrame);
+      viewModel.dispose();
+    },
+  );
+
+  test(
+    'changing lookup mode resets results and persists the preference',
+    () async {
+      final savedModes = <MediaLookupMode>[];
+      final source = _source();
+      final duplicateRepository = _FakeDuplicateRepository()
+        ..batch = _batch(source);
+      final viewModel = _viewModel(
+        duplicateRepository: duplicateRepository,
+        historyRepository: _FakeHistoryRepository(),
+        saveLookupMode: (mode) async => savedModes.add(mode),
+      );
+      await viewModel.startLookup(<ImageLookupSource>[source]);
+
+      await viewModel.setLookupMode(MediaLookupMode.videoFromFrame);
+
+      expect(viewModel.state.lookupMode, MediaLookupMode.videoFromFrame);
+      expect(viewModel.state.phase, isA<ImageLookupIdle>());
+      expect(savedModes, <MediaLookupMode>[MediaLookupMode.videoFromFrame]);
+      viewModel.dispose();
+    },
+  );
 
   test(
     'sensitivity rematches cached queries without a new query hash',

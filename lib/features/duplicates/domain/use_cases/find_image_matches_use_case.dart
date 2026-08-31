@@ -1,3 +1,4 @@
+import '../../../../core/models/media_lookup_mode.dart';
 import '../entities/duplicate_scan_progress.dart';
 import '../entities/duplicate_sensitivity.dart';
 import '../entities/image_lookup_batch.dart';
@@ -14,12 +15,14 @@ class FindImageMatchesUseCase {
   Future<ImageLookupBatch> call({
     required List<ImageLookupSource> sources,
     required DuplicateSensitivity sensitivity,
+    MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
     DuplicateScanCancellation? cancellation,
     void Function(int processed, int total)? onProgress,
   }) {
     return _repository.findImageMatches(
       sources: sources,
       sensitivity: sensitivity,
+      lookupMode: lookupMode,
       cancellation: cancellation,
       onProgress: onProgress,
     );
@@ -28,12 +31,14 @@ class FindImageMatchesUseCase {
   Future<ImageLookupBatch> rematch({
     required List<ImageLookupQuery> queries,
     required DuplicateSensitivity sensitivity,
+    MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
     DuplicateScanCancellation? cancellation,
     void Function(int processed, int total)? onProgress,
   }) {
     return _repository.rematchImageQueries(
       queries: queries,
       sensitivity: sensitivity,
+      lookupMode: lookupMode,
       cancellation: cancellation,
       onProgress: onProgress,
     );

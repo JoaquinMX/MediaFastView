@@ -10,9 +10,20 @@ import '../../domain/entities/image_lookup_source.dart';
 
 /// Selects and validates visual-media queries without copying source files.
 abstract interface class MediaLookupFilePicker {
-  Future<List<ImageLookupSource>> pickMedia();
+  Future<List<ImageLookupSource>> pickMedia({
+    Set<MediaType> allowedMediaTypes = const <MediaType>{
+      MediaType.image,
+      MediaType.video,
+    },
+  });
 
-  Future<List<ImageLookupSource>> sourcesFromPaths(Iterable<String> paths);
+  Future<List<ImageLookupSource>> sourcesFromPaths(
+    Iterable<String> paths, {
+    Set<MediaType> allowedMediaTypes = const <MediaType>{
+      MediaType.image,
+      MediaType.video,
+    },
+  });
 }
 
 /// macOS image/video implementation backed by the picker and bookmarks.
@@ -22,14 +33,23 @@ class MacOsMediaLookupFilePicker implements MediaLookupFilePicker {
   final BookmarkService _bookmarkService;
 
   @override
-  Future<List<ImageLookupSource>> pickMedia() async {
+  Future<List<ImageLookupSource>> pickMedia({
+    Set<MediaType> allowedMediaTypes = const <MediaType>{
+      MediaType.image,
+      MediaType.video,
+    },
+  }) async {
     if (!Platform.isMacOS) {
       throw UnsupportedError('Media lookup is currently supported on macOS.');
     }
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Choose Images or Videos to Match',
+      dialogTitle:
+          allowedMediaTypes.length == 1 &&
+              allowedMediaTypes.contains(MediaType.image)
+          ? 'Choose Image Frames to Match'
+          : 'Choose Images or Videos to Match',
       type: FileType.custom,
-      allowedExtensions: supportedVisualMediaExtensions.toList(growable: false),
+      allowedExtensions: _extensionsFor(allowedMediaTypes),
       allowMultiple: true,
     );
     if (result == null) {
@@ -37,19 +57,30 @@ class MacOsMediaLookupFilePicker implements MediaLookupFilePicker {
     }
     return sourcesFromPaths(
       result.files.map((file) => file.path).whereType<String>(),
+      allowedMediaTypes: allowedMediaTypes,
     );
   }
 
   @override
   Future<List<ImageLookupSource>> sourcesFromPaths(
-    Iterable<String> paths,
-  ) async {
+    Iterable<String> paths, {
+    Set<MediaType> allowedMediaTypes = const <MediaType>{
+      MediaType.image,
+      MediaType.video,
+    },
+  }) async {
     final uniquePaths = <String>{
       for (final path in paths) p.normalize(p.absolute(path)),
     };
     final sources = <ImageLookupSource>[];
     for (final path in uniquePaths) {
       if (!isSupportedVisualMediaPath(path)) {
+        continue;
+      }
+      final mediaType = isSupportedVideoPath(path)
+          ? MediaType.video
+          : MediaType.image;
+      if (!allowedMediaTypes.contains(mediaType)) {
         continue;
       }
       final file = File(path);
@@ -73,13 +104,18 @@ class MacOsMediaLookupFilePicker implements MediaLookupFilePicker {
           name: p.basename(path),
           size: stat.size,
           lastModified: stat.modified,
-          mediaType: isSupportedVideoPath(path)
-              ? MediaType.video
-              : MediaType.image,
+          mediaType: mediaType,
           bookmarkData: bookmarkData,
         ),
       );
     }
     return List<ImageLookupSource>.unmodifiable(sources);
+  }
+
+  List<String> _extensionsFor(Set<MediaType> mediaTypes) {
+    return <String>{
+      if (mediaTypes.contains(MediaType.image)) ...supportedImageExtensions,
+      if (mediaTypes.contains(MediaType.video)) ...supportedVideoExtensions,
+    }.toList(growable: false);
   }
 }

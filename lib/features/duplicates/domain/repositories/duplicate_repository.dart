@@ -1,7 +1,9 @@
+import '../../../../core/models/media_lookup_mode.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../entities/duplicate_group.dart';
 import '../entities/duplicate_library_coverage.dart';
 import '../entities/duplicate_scan_progress.dart';
+import '../entities/video_frame_index_coverage.dart';
 import '../entities/duplicate_sensitivity.dart';
 import '../entities/image_lookup_batch.dart';
 import '../entities/image_lookup_query.dart';
@@ -27,12 +29,21 @@ abstract class DuplicateRepository {
     Set<MediaType> mediaTypes = const <MediaType>{MediaType.image},
   });
 
+  /// Reports how many active-profile videos have all five current frame hashes.
+  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage();
+
+  /// Creates the five-frame lookup index for active-profile videos.
+  Stream<DuplicateScanProgress> hashVideoFrames({
+    DuplicateScanCancellation? cancellation,
+  });
+
   /// Hashes [sources] and finds their closest matches in the active profile's
   /// currently indexed, currently hashed library visual media. Each query is
   /// compared only with candidates of the same media type.
   Future<ImageLookupBatch> findImageMatches({
     required List<ImageLookupSource> sources,
     required DuplicateSensitivity sensitivity,
+    MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
     DuplicateScanCancellation? cancellation,
     void Function(int processed, int total)? onProgress,
   });
@@ -42,6 +53,7 @@ abstract class DuplicateRepository {
   Future<ImageLookupBatch> rematchImageQueries({
     required List<ImageLookupQuery> queries,
     required DuplicateSensitivity sensitivity,
+    MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
     DuplicateScanCancellation? cancellation,
     void Function(int processed, int total)? onProgress,
   });

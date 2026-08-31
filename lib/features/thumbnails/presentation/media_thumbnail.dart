@@ -20,11 +20,13 @@ class MediaThumbnail extends ConsumerWidget {
     required this.errorBuilder,
     this.bookmarkData,
     this.fit = BoxFit.cover,
+    this.videoPositionFraction,
   });
 
   final MediaEntity media;
   final String? bookmarkData;
   final BoxFit fit;
+  final double? videoPositionFraction;
   final ThumbnailFallbackBuilder placeholderBuilder;
   final ThumbnailFallbackBuilder errorBuilder;
 
@@ -61,6 +63,7 @@ class MediaThumbnail extends ConsumerWidget {
           thumbnailSize: ThumbnailSize.forPhysicalPixels(physicalPixels),
           diskCacheEnabled: ref.watch(thumbnailDiskCacheEnabledProvider),
           bookmarkData: effectiveBookmarkData,
+          videoPositionFraction: videoPositionFraction,
         );
         final thumbnail = ref.watch(thumbnailProvider(request));
 
