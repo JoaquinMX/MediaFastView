@@ -6,6 +6,7 @@ import '../../features/tagging/presentation/states/tag_state.dart';
 import '../providers/repository_providers.dart';
 import '../../features/tagging/presentation/view_models/tag_management_view_model.dart';
 import '../../features/tagging/presentation/widgets/tag_chip.dart';
+import '../../features/tagging/presentation/widgets/tag_color_edit_dialog.dart';
 
 typedef TagToggleCallback = Future<void> Function(TagEntity tag, bool isSelected);
 typedef TagDeletionCallback = Future<void> Function(BuildContext context, TagEntity tag);
@@ -279,6 +280,16 @@ class _TagSelectionDialogState<T>
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+        if (widget.showDeleteButtons)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Long press a tag to edit its color.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         if (widget.showCreateButton)
           Padding(
             padding: EdgeInsets.only(
@@ -343,6 +354,9 @@ class _TagSelectionDialogState<T>
                       tag: tag,
                       selected: _selectedTagIds.contains(tag.id),
                       onTap: () => _handleTagTapped(context, tag),
+                      onLongPress: widget.showDeleteButtons
+                          ? () => _handleTagLongPress(context, tag)
+                          : null,
                       showDeleteIcon: widget.showDeleteButtons,
                       onDeleted: widget.showDeleteButtons
                           ? () => widget.onDeleteTag?.call(context, tag)
@@ -562,6 +576,20 @@ class _TagSelectionDialogState<T>
       setState(() {
         _inFlightTagIds.remove(tag.id);
       });
+    }
+  }
+
+  Future<void> _handleTagLongPress(BuildContext context, TagEntity tag) async {
+    if (!widget.showDeleteButtons || _isProcessing) {
+      return;
+    }
+
+    final updated = await TagColorEditDialog.show(context, tag: tag);
+
+    if (updated == true && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text('Updated "${tag.name}" color')),
+      );
     }
   }
 }
