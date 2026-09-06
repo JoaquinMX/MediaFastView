@@ -20,6 +20,9 @@ import '../utils/bookmark_resolver.dart';
 /// the full-screen viewer's `FullScreenExitResult` is popped as `null`, and the
 /// grid awaiting it already bails on a null result.
 ///
+/// If the path came from outside the library, the action reports that instead
+/// of opening an empty, unregistered grid.
+///
 /// Reads providers through a container captured from `context` rather than a
 /// `WidgetRef`, for the same reason `confirmAndDeleteMedia` does: the calling
 /// widget is torn down by the `popUntil` below, so its `ref` cannot survive the
@@ -38,6 +41,24 @@ Future<void> revealMediaInLibrary(
   final directories = await container
       .read(directoryRepositoryProvider)
       .getDirectories();
+  final isRegistered = directories.any(
+    (directory) =>
+        p.equals(directory.path, directoryPath) ||
+        p.isWithin(directory.path, directoryPath),
+  );
+  if (!isRegistered) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'The directory containing "${media.name}" is not registered '
+            'in the library.',
+          ),
+        ),
+      );
+    }
+    return;
+  }
   final bookmarkData =
       resolveBookmarkForPath(directoryPath, directories) ?? media.bookmarkData;
 

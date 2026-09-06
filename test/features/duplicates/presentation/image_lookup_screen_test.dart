@@ -166,6 +166,61 @@ void main() {
     expect(find.textContaining('10%, 30%, 50%, 70%, and 90%'), findsOneWidget);
   });
 
+  testWidgets('video results show the active scope and searched video count', (
+    tester,
+  ) async {
+    final viewModel = _TestImageLookupViewModel();
+    final source = ImageLookupSource(
+      path: '/frame.jpg',
+      name: 'frame.jpg',
+      size: 100,
+      lastModified: DateTime(2024),
+    );
+    viewModel.emit(
+      ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+        phase: ImageLookupResults(
+          session: ImageLookupSession(
+            id: 'video-scope-session',
+            profileId: 'profile',
+            createdAt: DateTime(2024),
+            sensitivity: DuplicateSensitivity.balanced,
+            lookupMode: MediaLookupMode.videoFromFrame,
+            hasPartialCoverage: false,
+            searchedLibraryImages: 3,
+            results: <ImageLookupResult>[
+              ImageLookupResult(
+                source: source,
+                query: ImageLookupQuery(
+                  source: source,
+                  hash: 0,
+                  width: 800,
+                  height: 600,
+                ),
+                matches: const <ImageLookupMatch>[],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.pump();
+
+    expect(find.text('Lookup scope: Video from frame'), findsOneWidget);
+    expect(find.text('Searched 3 indexed videos'), findsOneWidget);
+    expect(
+      find.byTooltip('Active lookup mode: Video from frame'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('No matches found in the currently indexed library.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('preparation exposes skip cancel and background controls', (
     tester,
   ) async {

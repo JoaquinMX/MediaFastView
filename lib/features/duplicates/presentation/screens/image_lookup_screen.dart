@@ -14,6 +14,7 @@ import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/utils/file_size_formatter.dart';
 import '../../../../shared/widgets/app_bar.dart';
 import '../../../../shared/widgets/finder_media_actions.dart';
+import '../../../../shared/widgets/reveal_media_action.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../domain/entities/image_lookup_match.dart';
 import '../../domain/entities/duplicate_sensitivity.dart';
@@ -204,23 +205,28 @@ class _LookupModeBar extends StatelessWidget {
           children: <Widget>[
             Text('Lookup mode', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(width: 16),
-            SegmentedButton<MediaLookupMode>(
-              segments: const <ButtonSegment<MediaLookupMode>>[
-                ButtonSegment<MediaLookupMode>(
-                  value: MediaLookupMode.mediaMatches,
-                  icon: Icon(Icons.perm_media_outlined),
-                  label: Text('Media matches'),
+            Expanded(
+              child: Tooltip(
+                message: 'Active lookup mode: ${mode.label}',
+                child: SegmentedButton<MediaLookupMode>(
+                  segments: const <ButtonSegment<MediaLookupMode>>[
+                    ButtonSegment<MediaLookupMode>(
+                      value: MediaLookupMode.mediaMatches,
+                      icon: Icon(Icons.perm_media_outlined),
+                      label: Text('Media matches'),
+                    ),
+                    ButtonSegment<MediaLookupMode>(
+                      value: MediaLookupMode.videoFromFrame,
+                      icon: Icon(Icons.video_file_outlined),
+                      label: Text('Video from frame'),
+                    ),
+                  ],
+                  selected: <MediaLookupMode>{mode},
+                  onSelectionChanged: enabled
+                      ? (selection) => onChanged(selection.single)
+                      : null,
                 ),
-                ButtonSegment<MediaLookupMode>(
-                  value: MediaLookupMode.videoFromFrame,
-                  icon: Icon(Icons.video_file_outlined),
-                  label: Text('Video from frame'),
-                ),
-              ],
-              selected: <MediaLookupMode>{mode},
-              onSelectionChanged: enabled
-                  ? (selection) => onChanged(selection.single)
-                  : null,
+              ),
             ),
           ],
         ),
@@ -482,6 +488,7 @@ class _ResultsView extends StatelessWidget {
             ],
           ),
         ),
+        _LookupScopeSummary(session: session),
         if (session.hasPartialCoverage)
           Container(
             width: double.infinity,
@@ -489,7 +496,8 @@ class _ResultsView extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Text(
               'Library preparation was skipped. These results cover '
-              '${session.searchedLibraryImages} currently hashed media items and '
+              '${session.searchedLibraryImages} currently indexed '
+              '${_lookupCandidateNoun(session.lookupMode, count: session.searchedLibraryImages)} and '
               'may be incomplete.',
               style: TextStyle(color: theme.colorScheme.onTertiaryContainer),
             ),
@@ -521,6 +529,55 @@ class _ResultsView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LookupScopeSummary extends StatelessWidget {
+  const _LookupScopeSummary({required this.session});
+
+  final ImageLookupSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final mode = session.lookupMode;
+    final icon = mode == MediaLookupMode.videoFromFrame
+        ? Icons.video_file_outlined
+        : Icons.perm_media_outlined;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(icon, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'Lookup scope: ${mode.label}',
+                  style: theme.textTheme.titleSmall,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _searchedCandidateText(session),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -839,6 +896,8 @@ class _MediaActions extends StatelessWidget {
         switch (value) {
           case 'preview':
             _showPreview(context, media, startAt: startAt);
+          case 'directory':
+            unawaited(revealMediaInLibrary(context, media));
           case 'reveal':
             unawaited(revealMediaInFinder(context, media));
           case 'copy':
@@ -847,6 +906,10 @@ class _MediaActions extends StatelessWidget {
       },
       itemBuilder: (context) => const <PopupMenuEntry<String>>[
         PopupMenuItem<String>(value: 'preview', child: Text('Preview')),
+        PopupMenuItem<String>(
+          value: 'directory',
+          child: Text('Go to directory'),
+        ),
         PopupMenuItem<String>(value: 'reveal', child: Text('Reveal in Finder')),
         PopupMenuItem<String>(value: 'copy', child: Text('Copy Path')),
       ],
@@ -867,6 +930,8 @@ class _SourceActions extends StatelessWidget {
         switch (value) {
           case 'preview':
             _showPreview(context, _mediaFromSource(source));
+          case 'directory':
+            await revealMediaInLibrary(context, _mediaFromSource(source));
           case 'reveal':
             try {
               await BookmarkService.instance.revealInFinder(
@@ -891,6 +956,10 @@ class _SourceActions extends StatelessWidget {
       },
       itemBuilder: (context) => const <PopupMenuEntry<String>>[
         PopupMenuItem<String>(value: 'preview', child: Text('Preview')),
+        PopupMenuItem<String>(
+          value: 'directory',
+          child: Text('Go to directory'),
+        ),
         PopupMenuItem<String>(value: 'reveal', child: Text('Reveal in Finder')),
         PopupMenuItem<String>(value: 'copy', child: Text('Copy Path')),
       ],
@@ -1058,6 +1127,7 @@ class _HistoryDialogState extends State<_HistoryDialog> {
                     subtitle: Text(
                       '${_formatDateTime(session.createdAt)} · '
                       '${session.lookupMode.label} · '
+                      '${_searchedCandidateText(session)} · '
                       '${session.sensitivity.label}'
                       '${session.hasPartialCoverage ? ' · partial' : ''}',
                     ),
@@ -1276,6 +1346,18 @@ String _extension(String path) {
 
 String _mediaTypeName(MediaType mediaType) {
   return mediaType == MediaType.video ? 'Video' : 'Image';
+}
+
+String _lookupCandidateNoun(MediaLookupMode mode, {required int count}) {
+  if (mode == MediaLookupMode.videoFromFrame) {
+    return count == 1 ? 'video' : 'videos';
+  }
+  return count == 1 ? 'media item' : 'media items';
+}
+
+String _searchedCandidateText(ImageLookupSession session) {
+  return 'Searched ${session.searchedLibraryImages} indexed '
+      '${_lookupCandidateNoun(session.lookupMode, count: session.searchedLibraryImages)}';
 }
 
 String _formatDate(DateTime date) {
