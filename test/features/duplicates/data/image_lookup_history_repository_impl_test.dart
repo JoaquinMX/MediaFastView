@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/core/models/media_lookup_mode.dart';
+import 'package:media_fast_view/core/models/video_frame_lookup_precision.dart';
 import 'package:media_fast_view/features/duplicates/data/data_sources/image_lookup_history_data_source.dart';
 import 'package:media_fast_view/features/duplicates/data/isar/image_lookup_history_collection.dart';
 import 'package:media_fast_view/features/duplicates/data/repositories/image_lookup_history_repository_impl.dart';
@@ -13,7 +14,9 @@ import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_result.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_session.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_source.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_verification_summary.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/matched_video_frame.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/video_frame_presentation_time.dart';
 import 'package:media_fast_view/features/media_library/domain/entities/media_entity.dart';
 
 class _FakeHistoryDataSource implements ImageLookupHistoryDataSource {
@@ -53,6 +56,10 @@ ImageLookupSession _session(
   int day = 1,
   MediaType mediaType = MediaType.image,
   MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
+  VideoFrameLookupPrecision lookupPrecision =
+      VideoFrameLookupPrecision.standard,
+  double? visionDistance,
+  ImageLookupVerificationSummary? verificationSummary,
 }) {
   final extension = mediaType == MediaType.video ? 'mov' : 'jpg';
   final source = ImageLookupSource(
@@ -79,8 +86,10 @@ ImageLookupSession _session(
     createdAt: DateTime(2024, 1, day),
     sensitivity: DuplicateSensitivity.balanced,
     lookupMode: lookupMode,
+    lookupPrecision: lookupPrecision,
     hasPartialCoverage: true,
     searchedLibraryImages: 42,
+    verificationSummary: verificationSummary,
     results: <ImageLookupResult>[
       ImageLookupResult(
         source: source,
@@ -99,10 +108,15 @@ ImageLookupSession _session(
               hash: 3,
             ),
             distance: 1,
+            visionDistance: visionDistance,
             matchedVideoFrame: lookupMode == MediaLookupMode.videoFromFrame
                 ? const MatchedVideoFrame(
                     positionPercent: 30,
                     timestamp: Duration(seconds: 42),
+                    presentationTime: VideoFramePresentationTime(
+                      value: 1260000,
+                      timescale: 30000,
+                    ),
                   )
                 : null,
           ),
@@ -119,6 +133,16 @@ void main() {
       'session',
       mediaType: MediaType.video,
       lookupMode: MediaLookupMode.videoFromFrame,
+      lookupPrecision: VideoFrameLookupPrecision.maximum,
+      visionDistance: 0.25,
+      verificationSummary: const ImageLookupVerificationSummary(
+        eligibleVideoCount: 20,
+        verifiedVideoCount: 7,
+        failedVideoCount: 2,
+        invalidIndexVideoCount: 1,
+        stopped: true,
+        candidatePolicyVersion: 1,
+      ),
     );
 
     final decoded = serializer.decode(serializer.encode(original));
@@ -128,6 +152,12 @@ void main() {
     expect(decoded.hasPartialCoverage, isTrue);
     expect(decoded.searchedLibraryImages, 42);
     expect(decoded.lookupMode, MediaLookupMode.videoFromFrame);
+    expect(decoded.lookupPrecision, VideoFrameLookupPrecision.maximum);
+    expect(decoded.verificationSummary?.eligibleVideoCount, 20);
+    expect(decoded.verificationSummary?.verifiedVideoCount, 7);
+    expect(decoded.verificationSummary?.failedVideoCount, 2);
+    expect(decoded.verificationSummary?.invalidIndexVideoCount, 1);
+    expect(decoded.verificationSummary?.stopped, isTrue);
     expect(decoded.results.single.source.bookmarkData, 'bookmark-session');
     expect(decoded.results.single.source.mediaType, MediaType.video);
     expect(
@@ -137,6 +167,10 @@ void main() {
     expect(decoded.results.single.query!.hash, 7);
     expect(decoded.results.single.matches.single.distance, 1);
     expect(
+      decoded.results.single.matches.single.visionDistance,
+      closeTo(0.25, 0.0001),
+    );
+    expect(
       decoded.results.single.matches.single.matchedVideoFrame?.positionPercent,
       30,
     );
@@ -145,9 +179,37 @@ void main() {
       const Duration(seconds: 42),
     );
     expect(
+      decoded.results.single.matches.single.matchedVideoFrame?.presentationTime,
+      const VideoFramePresentationTime(value: 1260000, timescale: 30000),
+    );
+    expect(
       decoded.results.single.matches.single.candidate.media.tagIds,
       const <String>['tag'],
     );
+  });
+
+  test('legacy snapshots default precision and Vision score safely', () {
+    const serializer = ImageLookupSessionSerializer();
+    final json = Map<String, dynamic>.from(
+      jsonDecode(serializer.encode(_session('legacy-precision'))) as Map,
+    )..remove('lookupPrecision');
+
+    final decoded = serializer.decode(jsonEncode(json));
+
+    expect(decoded.lookupPrecision, VideoFrameLookupPrecision.standard);
+    expect(decoded.results.single.matches.single.visionDistance, isNull);
+  });
+
+  test('legacy snapshots without verification summary remain compatible', () {
+    const serializer = ImageLookupSessionSerializer();
+    final json = Map<String, dynamic>.from(
+      jsonDecode(serializer.encode(_session('legacy-summary'))) as Map,
+    )..remove('verificationSummary');
+
+    final decoded = serializer.decode(jsonEncode(json));
+
+    expect(decoded.verificationSummary, isNull);
+    expect(decoded.hasStoppedVerification, isFalse);
   });
 
   test('serializer defaults legacy snapshots to media matches', () {

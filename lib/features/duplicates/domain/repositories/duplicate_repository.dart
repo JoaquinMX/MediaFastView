@@ -1,4 +1,5 @@
 import '../../../../core/models/media_lookup_mode.dart';
+import '../../../../core/models/video_frame_lookup_precision.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../entities/duplicate_group.dart';
 import '../entities/duplicate_library_coverage.dart';
@@ -6,8 +7,10 @@ import '../entities/duplicate_scan_progress.dart';
 import '../entities/video_frame_index_coverage.dart';
 import '../entities/duplicate_sensitivity.dart';
 import '../entities/image_lookup_batch.dart';
+import '../entities/image_lookup_progress.dart';
 import '../entities/image_lookup_query.dart';
 import '../entities/image_lookup_source.dart';
+import '../entities/image_lookup_update.dart';
 import '../entities/keeper_strategy.dart';
 
 /// Finds and manages visually-similar image groups within the active profile's
@@ -30,11 +33,16 @@ abstract class DuplicateRepository {
   });
 
   /// Reports how many active-profile videos have all five current frame hashes.
-  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage();
+  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage({
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
+  });
 
   /// Creates the five-frame lookup index for active-profile videos.
   Stream<DuplicateScanProgress> hashVideoFrames({
     DuplicateScanCancellation? cancellation,
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
   });
 
   /// Hashes [sources] and finds their closest matches in the active profile's
@@ -44,8 +52,11 @@ abstract class DuplicateRepository {
     required List<ImageLookupSource> sources,
     required DuplicateSensitivity sensitivity,
     MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
     DuplicateScanCancellation? cancellation,
-    void Function(int processed, int total)? onProgress,
+    void Function(ImageLookupProgress progress)? onProgress,
+    void Function(ImageLookupUpdate update)? onUpdate,
   });
 
   /// Re-runs matching for already-hashed [queries], such as after sensitivity
@@ -54,8 +65,11 @@ abstract class DuplicateRepository {
     required List<ImageLookupQuery> queries,
     required DuplicateSensitivity sensitivity,
     MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
     DuplicateScanCancellation? cancellation,
-    void Function(int processed, int total)? onProgress,
+    void Function(ImageLookupProgress progress)? onProgress,
+    void Function(ImageLookupUpdate update)? onUpdate,
   });
 
   /// Clusters the cached hashes into duplicate groups at [sensitivity], choosing

@@ -2,17 +2,22 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/core/models/media_lookup_mode.dart';
+import 'package:media_fast_view/core/models/video_frame_lookup_precision.dart';
 import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/features/duplicates/data/services/image_lookup_file_picker.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_library_coverage.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_candidate.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_scan_progress.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_sensitivity.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_batch.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_match.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_progress.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_query.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_result.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_session.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_source.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_update.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_verification_summary.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/video_frame_index_coverage.dart';
 import 'package:media_fast_view/features/duplicates/domain/repositories/duplicate_repository.dart';
 import 'package:media_fast_view/features/duplicates/domain/repositories/image_lookup_history_repository.dart';
@@ -36,26 +41,66 @@ class _FakeDuplicateRepository implements DuplicateRepository {
   late ImageLookupBatch batch;
   ImageLookupBatch? rematchedBatch;
   final Completer<void> scanGate = Completer<void>();
+  final Completer<void> findStarted = Completer<void>();
+  Completer<void>? videoPreparationGate;
+  Completer<void>? findGate;
+  void Function(ImageLookupUpdate update)? findUpdate;
   var rematchCalls = 0;
   Set<MediaType>? coverageMediaTypes;
   Set<MediaType>? scanMediaTypes;
   MediaLookupMode? lookupMode;
+  VideoFrameLookupPrecision? lookupPrecision;
+  bool failVideoPreparation = false;
 
   @override
   Future<ImageLookupBatch> findImageMatches({
     required List<ImageLookupSource> sources,
     required DuplicateSensitivity sensitivity,
     MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
     DuplicateScanCancellation? cancellation,
-    void Function(int processed, int total)? onProgress,
+    void Function(ImageLookupProgress progress)? onProgress,
+    void Function(ImageLookupUpdate update)? onUpdate,
   }) async {
     this.lookupMode = lookupMode;
-    onProgress?.call(sources.length, sources.length);
+    this.lookupPrecision = lookupPrecision;
+    findUpdate = onUpdate;
+    if (!findStarted.isCompleted) {
+      findStarted.complete();
+    }
+    onProgress?.call(
+      ImageLookupProgress(
+        stage: ImageLookupProgressStage.searchingIndexedMedia,
+        processed: sources.length,
+        total: sources.length,
+      ),
+    );
+    final gate = findGate;
+    if (gate != null) {
+      await gate.future;
+    }
+    final summary =
+        batch.verificationSummary ?? const ImageLookupVerificationSummary();
+    onUpdate?.call(
+      ImageLookupUpdate(
+        progress: ImageLookupProgress(
+          stage: ImageLookupProgressStage.verifyingVideoFrames,
+          processed: summary.verifiedVideoCount,
+          total: summary.eligibleVideoCount,
+        ),
+        results: batch.results,
+        verificationSummary: summary,
+      ),
+    );
     return batch;
   }
 
   @override
-  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage() async {
+  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage({
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
+  }) async {
     return videoFrameCoverage;
   }
 
@@ -65,6 +110,27 @@ class _FakeDuplicateRepository implements DuplicateRepository {
   }) async {
     coverageMediaTypes = mediaTypes;
     return coverage;
+  }
+
+  @override
+  Stream<DuplicateScanProgress> hashVideoFrames({
+    DuplicateScanCancellation? cancellation,
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
+  }) async* {
+    this.lookupPrecision = lookupPrecision;
+    yield const DuplicateScanProgress(processed: 0, total: 1);
+    final gate = videoPreparationGate;
+    if (gate != null) {
+      await gate.future;
+    }
+    yield DuplicateScanProgress(
+      processed: 1,
+      total: 1,
+      failed: failVideoPreparation ? 1 : 0,
+      isComplete: !(cancellation?.isCancelled ?? false),
+      isCancelled: cancellation?.isCancelled ?? false,
+    );
   }
 
   @override
@@ -88,11 +154,33 @@ class _FakeDuplicateRepository implements DuplicateRepository {
     required List<ImageLookupQuery> queries,
     required DuplicateSensitivity sensitivity,
     MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
     DuplicateScanCancellation? cancellation,
-    void Function(int processed, int total)? onProgress,
+    void Function(ImageLookupProgress progress)? onProgress,
+    void Function(ImageLookupUpdate update)? onUpdate,
   }) async {
     rematchCalls++;
-    onProgress?.call(queries.length, queries.length);
+    onProgress?.call(
+      ImageLookupProgress(
+        stage: ImageLookupProgressStage.searchingIndexedMedia,
+        processed: queries.length,
+        total: queries.length,
+      ),
+    );
+    onUpdate?.call(
+      ImageLookupUpdate(
+        progress: ImageLookupProgress(
+          stage: ImageLookupProgressStage.searchingIndexedMedia,
+          processed: queries.length,
+          total: queries.length,
+        ),
+        results: (rematchedBatch ?? batch).results,
+        verificationSummary:
+            (rematchedBatch ?? batch).verificationSummary ??
+            const ImageLookupVerificationSummary(),
+      ),
+    );
     return rematchedBatch ?? batch;
   }
 
@@ -168,15 +256,37 @@ ImageLookupSource _source({MediaType mediaType = MediaType.image}) =>
 ImageLookupBatch _batch(
   ImageLookupSource source, {
   int searchedLibraryImages = 4,
+  List<ImageLookupMatch> matches = const <ImageLookupMatch>[],
+  ImageLookupVerificationSummary? verificationSummary,
 }) => ImageLookupBatch(
   searchedLibraryImages: searchedLibraryImages,
+  verificationSummary: verificationSummary,
   results: <ImageLookupResult>[
     ImageLookupResult(
       source: source,
       query: ImageLookupQuery(source: source, hash: 0, width: 800, height: 600),
-      matches: const <ImageLookupMatch>[],
+      matches: matches,
     ),
   ],
+);
+
+ImageLookupMatch _testMatch() => ImageLookupMatch(
+  candidate: DuplicateCandidate(
+    media: MediaEntity(
+      id: 'matched-media',
+      path: '/library/matched.jpg',
+      name: 'matched.jpg',
+      type: MediaType.image,
+      size: 200,
+      lastModified: DateTime(2024),
+      tagIds: const <String>[],
+      directoryId: 'directory',
+    ),
+    width: 800,
+    height: 600,
+    hash: 1,
+  ),
+  distance: 0,
 );
 
 ImageLookupViewModel _viewModel({
@@ -186,6 +296,10 @@ ImageLookupViewModel _viewModel({
   MediaLookupMode initialLookupMode = MediaLookupMode.mediaMatches,
   Future<void> Function(MediaLookupMode mode)? saveLookupMode,
   _FakeFilePicker? filePicker,
+  VideoFrameLookupPrecision initialLookupPrecision =
+      VideoFrameLookupPrecision.standard,
+  Future<void> Function(VideoFrameLookupPrecision precision)?
+  saveLookupPrecision,
 }) {
   final source = _source();
   return ImageLookupViewModel(
@@ -205,6 +319,8 @@ ImageLookupViewModel _viewModel({
     isHistoryEnabled: () => historyEnabled,
     saveLookupMode: saveLookupMode ?? (_) async {},
     initialLookupMode: initialLookupMode,
+    initialLookupPrecision: initialLookupPrecision,
+    saveLookupPrecision: saveLookupPrecision,
   );
 }
 
@@ -292,6 +408,73 @@ void main() {
   );
 
   test(
+    'maximum precision changes apply only after an explicit search again',
+    () async {
+      final source = _source();
+      final duplicateRepository = _FakeDuplicateRepository()
+        ..videoFrameCoverage = const VideoFrameIndexCoverage(
+          totalVideos: 1,
+          readyVideos: 1,
+        )
+        ..batch = _batch(source, searchedLibraryImages: 1);
+      final viewModel = _viewModel(
+        duplicateRepository: duplicateRepository,
+        historyRepository: _FakeHistoryRepository(),
+        historyEnabled: false,
+        initialLookupMode: MediaLookupMode.videoFromFrame,
+      );
+
+      await viewModel.startLookup(<ImageLookupSource>[source]);
+      await viewModel.setLookupPrecision(VideoFrameLookupPrecision.maximum);
+
+      expect(viewModel.canSearchAgain, isTrue);
+      expect(
+        (viewModel.state.phase as ImageLookupResults).session.lookupPrecision,
+        VideoFrameLookupPrecision.standard,
+      );
+
+      await viewModel.searchAgain();
+
+      expect(
+        duplicateRepository.lookupPrecision,
+        VideoFrameLookupPrecision.maximum,
+      );
+      expect(viewModel.canSearchAgain, isFalse);
+      viewModel.dispose();
+    },
+  );
+
+  test(
+    'maximum precision preparation failures remain visible for retry',
+    () async {
+      final source = _source();
+      final duplicateRepository = _FakeDuplicateRepository()
+        ..videoFrameCoverage = const VideoFrameIndexCoverage(
+          totalVideos: 1,
+          readyVideos: 0,
+        )
+        ..failVideoPreparation = true
+        ..batch = _batch(source);
+      final viewModel = _viewModel(
+        duplicateRepository: duplicateRepository,
+        historyRepository: _FakeHistoryRepository(),
+        historyEnabled: false,
+        initialLookupMode: MediaLookupMode.videoFromFrame,
+        initialLookupPrecision: VideoFrameLookupPrecision.maximum,
+      );
+
+      await viewModel.startLookup(<ImageLookupSource>[source]);
+
+      expect(viewModel.state.phase, isA<ImageLookupFailure>());
+      expect(
+        (viewModel.state.phase as ImageLookupFailure).message,
+        contains('could not be indexed'),
+      );
+      viewModel.dispose();
+    },
+  );
+
+  test(
     'changing lookup mode resets results and persists the preference',
     () async {
       final savedModes = <MediaLookupMode>[];
@@ -337,30 +520,303 @@ void main() {
     },
   );
 
-  test('skip stops preparation and marks the result as partial', () async {
+  test(
+    'skip starts maximum-precision search before preparation cleanup finishes',
+    () async {
+      final source = _source();
+      final duplicateRepository = _FakeDuplicateRepository()
+        ..videoFrameCoverage = const VideoFrameIndexCoverage(
+          totalVideos: 2,
+          readyVideos: 1,
+        )
+        ..videoPreparationGate = Completer<void>()
+        ..batch = _batch(source);
+      final viewModel = _viewModel(
+        duplicateRepository: duplicateRepository,
+        historyRepository: _FakeHistoryRepository(),
+        historyEnabled: false,
+        initialLookupMode: MediaLookupMode.videoFromFrame,
+        initialLookupPrecision: VideoFrameLookupPrecision.maximum,
+      );
+
+      final lookup = viewModel.startLookup(<ImageLookupSource>[source]);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(viewModel.state.phase, isA<ImageLookupPreparing>());
+
+      viewModel.skipPreparation();
+      final searchingPhase = viewModel.state.phase as ImageLookupSearching;
+      expect(searchingPhase.hasPartialCoverage, isTrue);
+      expect(duplicateRepository.videoPreparationGate!.isCompleted, isFalse);
+
+      await duplicateRepository.findStarted.future;
+      await Future<void>.delayed(Duration.zero);
+
+      final phase = viewModel.state.phase as ImageLookupResults;
+      expect(phase.session.hasPartialCoverage, isTrue);
+      expect(duplicateRepository.videoPreparationGate!.isCompleted, isFalse);
+
+      duplicateRepository.videoPreparationGate!.complete();
+      await lookup;
+      expect(viewModel.state.phase, same(phase));
+      viewModel.dispose();
+    },
+  );
+
+  test(
+    'progressive updates are retained and stop saves a partial snapshot',
+    () async {
+      final source = _source();
+      final duplicateRepository = _FakeDuplicateRepository()
+        ..batch = _batch(source, searchedLibraryImages: 3)
+        ..findGate = Completer<void>();
+      final historyRepository = _FakeHistoryRepository();
+      final viewModel = _viewModel(
+        duplicateRepository: duplicateRepository,
+        historyRepository: historyRepository,
+      );
+      final lookup = viewModel.startLookup(<ImageLookupSource>[source]);
+      await duplicateRepository.findStarted.future;
+      await Future<void>.delayed(Duration.zero);
+
+      final earlierMatch = _batch(
+        source,
+        matches: <ImageLookupMatch>[_testMatch()],
+      ).results.single;
+      final remainingSource = source.copyWith(
+        path: '/query-remaining.jpg',
+        name: 'query-remaining.jpg',
+      );
+      final remainingQuery = ImageLookupResult(
+        source: remainingSource,
+        query: ImageLookupQuery(
+          source: remainingSource,
+          hash: 1,
+          width: 800,
+          height: 600,
+        ),
+        matches: const <ImageLookupMatch>[],
+      );
+      final update = ImageLookupUpdate(
+        progress: const ImageLookupProgress(
+          stage: ImageLookupProgressStage.verifyingVideoFrames,
+          processed: 2,
+          total: 3,
+          currentItemProcessed: 2,
+          currentItemTotal: 4,
+          verificationPhase: ImageLookupVerificationPhase.remaining,
+        ),
+        results: <ImageLookupResult>[earlierMatch, remainingQuery],
+        verificationSummary: const ImageLookupVerificationSummary(
+          eligibleVideoCount: 3,
+          verifiedVideoCount: 2,
+        ),
+      );
+      duplicateRepository.findUpdate!.call(update);
+      await Future<void>.delayed(Duration.zero);
+
+      final searching = viewModel.state.phase as ImageLookupSearching;
+      expect(searching.results, hasLength(2));
+      expect(searching.results.first.matches, hasLength(1));
+      expect(searching.verificationSummary?.verifiedVideoCount, 2);
+      viewModel.syncLookupPrecisionFromSettings(
+        VideoFrameLookupPrecision.maximum,
+      );
+
+      await viewModel.stopAndKeepResults();
+
+      final results = viewModel.state.phase as ImageLookupResults;
+      expect(results.session.hasStoppedVerification, isTrue);
+      expect(results.session.hasPartialCoverage, isFalse);
+      expect(results.session.results, hasLength(2));
+      expect(results.session.results.first.matches, hasLength(1));
+      expect(
+        results.session.lookupPrecision,
+        VideoFrameLookupPrecision.standard,
+      );
+      expect(
+        viewModel.state.lookupPrecision,
+        VideoFrameLookupPrecision.maximum,
+      );
+      expect(historyRepository.sessions.single.hasStoppedVerification, isTrue);
+
+      final rematchedSummary = const ImageLookupVerificationSummary(
+        eligibleVideoCount: 8,
+        verifiedVideoCount: 8,
+      );
+      duplicateRepository.rematchedBatch = ImageLookupBatch(
+        results: results.session.results,
+        searchedLibraryImages: 8,
+        verificationSummary: rematchedSummary,
+      );
+      await viewModel.setSensitivity(DuplicateSensitivity.loose);
+
+      final rematched = viewModel.state.phase as ImageLookupResults;
+      expect(rematched.session.sensitivity, DuplicateSensitivity.loose);
+      expect(rematched.session.hasStoppedVerification, isFalse);
+      expect(rematched.session.verificationSummary, rematchedSummary);
+      expect(rematched.session.searchedLibraryImages, 8);
+      expect(historyRepository.sessions.single.hasStoppedVerification, isFalse);
+
+      duplicateRepository.findGate!.complete();
+      await lookup;
+      expect(viewModel.state.phase, isA<ImageLookupResults>());
+      viewModel.dispose();
+    },
+  );
+
+  test(
+    'cancel discards progressive results and ignores late callbacks',
+    () async {
+      final source = _source();
+      final duplicateRepository = _FakeDuplicateRepository()
+        ..batch = _batch(source)
+        ..findGate = Completer<void>();
+      final viewModel = _viewModel(
+        duplicateRepository: duplicateRepository,
+        historyRepository: _FakeHistoryRepository(),
+        historyEnabled: false,
+      );
+      final lookup = viewModel.startLookup(<ImageLookupSource>[source]);
+      await duplicateRepository.findStarted.future;
+      await Future<void>.delayed(Duration.zero);
+      duplicateRepository.findUpdate!.call(
+        ImageLookupUpdate(
+          progress: const ImageLookupProgress(
+            stage: ImageLookupProgressStage.verifyingVideoFrames,
+            processed: 1,
+            total: 2,
+          ),
+          results: _batch(source).results,
+          verificationSummary: const ImageLookupVerificationSummary(
+            eligibleVideoCount: 2,
+            verifiedVideoCount: 1,
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      await viewModel.cancel();
+      expect(viewModel.state.phase, isA<ImageLookupIdle>());
+      duplicateRepository.findUpdate!.call(
+        ImageLookupUpdate(
+          progress: const ImageLookupProgress(
+            stage: ImageLookupProgressStage.verifyingVideoFrames,
+            processed: 2,
+            total: 2,
+          ),
+          results: _batch(source).results,
+          verificationSummary: const ImageLookupVerificationSummary(),
+        ),
+      );
+      expect(viewModel.state.phase, isA<ImageLookupIdle>());
+
+      duplicateRepository.findGate!.complete();
+      await lookup;
+      viewModel.dispose();
+    },
+  );
+
+  test('early stop does not present query progress as video counts', () async {
     final source = _source();
     final duplicateRepository = _FakeDuplicateRepository()
-      ..coverage = const DuplicateLibraryCoverage(
-        totalImages: 2,
-        readyImages: 1,
-      )
-      ..batch = _batch(source);
+      ..batch = _batch(source)
+      ..findGate = Completer<void>();
     final viewModel = _viewModel(
       duplicateRepository: duplicateRepository,
       historyRepository: _FakeHistoryRepository(),
+      historyEnabled: false,
     );
-
     final lookup = viewModel.startLookup(<ImageLookupSource>[source]);
+    await duplicateRepository.findStarted.future;
     await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
-    expect(viewModel.state.phase, isA<ImageLookupPreparing>());
 
-    viewModel.skipPreparation();
-    duplicateRepository.scanGate.complete();
+    await viewModel.stopAndKeepResults();
+
+    final results = viewModel.state.phase as ImageLookupResults;
+    expect(results.session.hasStoppedVerification, isTrue);
+    expect(results.session.verificationSummary?.eligibleVideoCount, 0);
+    expect(results.session.verificationSummary?.verifiedVideoCount, 0);
+
+    duplicateRepository.findGate!.complete();
     await lookup;
-
-    final phase = viewModel.state.phase as ImageLookupResults;
-    expect(phase.session.hasPartialCoverage, isTrue);
     viewModel.dispose();
+  });
+
+  test(
+    'background search stays active until the terminal batch arrives',
+    () async {
+      final source = _source();
+      final duplicateRepository = _FakeDuplicateRepository()
+        ..batch = _batch(source)
+        ..findGate = Completer<void>();
+      final viewModel = _viewModel(
+        duplicateRepository: duplicateRepository,
+        historyRepository: _FakeHistoryRepository(),
+        historyEnabled: false,
+      );
+      final lookup = viewModel.startLookup(<ImageLookupSource>[source]);
+      await duplicateRepository.findStarted.future;
+      await Future<void>.delayed(Duration.zero);
+
+      viewModel.runInBackground();
+      expect(viewModel.state.isRunningInBackground, isTrue);
+      duplicateRepository.findUpdate!.call(
+        ImageLookupUpdate(
+          progress: const ImageLookupProgress(
+            stage: ImageLookupProgressStage.verifyingVideoFrames,
+            processed: 1,
+            total: 2,
+            verificationPhase: ImageLookupVerificationPhase.remaining,
+          ),
+          results: _batch(source).results,
+          verificationSummary: const ImageLookupVerificationSummary(
+            eligibleVideoCount: 2,
+            verifiedVideoCount: 1,
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(viewModel.state.isRunningInBackground, isTrue);
+
+      duplicateRepository.findGate!.complete();
+      await lookup;
+      expect(viewModel.state.isRunningInBackground, isFalse);
+      viewModel.dispose();
+    },
+  );
+
+  test('disposing during a delayed search ignores late updates', () async {
+    final source = _source();
+    final duplicateRepository = _FakeDuplicateRepository()
+      ..batch = _batch(source)
+      ..findGate = Completer<void>();
+    final viewModel = _viewModel(
+      duplicateRepository: duplicateRepository,
+      historyRepository: _FakeHistoryRepository(),
+      historyEnabled: false,
+    );
+    final lookup = viewModel.startLookup(<ImageLookupSource>[source]);
+    await duplicateRepository.findStarted.future;
+    await Future<void>.delayed(Duration.zero);
+    final update = duplicateRepository.findUpdate!;
+    viewModel.dispose();
+
+    update(
+      ImageLookupUpdate(
+        progress: const ImageLookupProgress(
+          stage: ImageLookupProgressStage.verifyingVideoFrames,
+          processed: 1,
+          total: 2,
+        ),
+        results: _batch(source).results,
+        verificationSummary: const ImageLookupVerificationSummary(
+          eligibleVideoCount: 2,
+          verifiedVideoCount: 1,
+        ),
+      ),
+    );
+    duplicateRepository.findGate!.complete();
+    await lookup;
   });
 }

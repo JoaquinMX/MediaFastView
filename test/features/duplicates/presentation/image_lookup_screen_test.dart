@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/core/models/media_lookup_mode.dart';
+import 'package:media_fast_view/core/models/video_frame_lookup_precision.dart';
 import 'package:media_fast_view/core/services/bookmark_service.dart';
 import 'package:media_fast_view/features/duplicates/data/services/image_lookup_file_picker.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_library_coverage.dart';
@@ -11,9 +12,12 @@ import 'package:media_fast_view/features/duplicates/domain/entities/duplicate_se
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_batch.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_session.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_match.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_progress.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_query.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_result.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_source.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_update.dart';
+import 'package:media_fast_view/features/duplicates/domain/entities/image_lookup_verification_summary.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/matched_video_frame.dart';
 import 'package:media_fast_view/features/duplicates/domain/entities/video_frame_index_coverage.dart';
 import 'package:media_fast_view/features/duplicates/domain/repositories/duplicate_repository.dart';
@@ -38,15 +42,21 @@ class _UnusedDuplicateRepository implements DuplicateRepository {
     required List<ImageLookupSource> sources,
     required DuplicateSensitivity sensitivity,
     MediaLookupMode lookupMode = MediaLookupMode.mediaMatches,
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
     DuplicateScanCancellation? cancellation,
-    void Function(int processed, int total)? onProgress,
+    void Function(ImageLookupProgress progress)? onProgress,
+    void Function(ImageLookupUpdate update)? onUpdate,
   }) async => const ImageLookupBatch(
     results: <ImageLookupResult>[],
     searchedLibraryImages: 0,
   );
 
   @override
-  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage() async {
+  Future<VideoFrameIndexCoverage> getVideoFrameIndexCoverage({
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
+  }) async {
     return const VideoFrameIndexCoverage(totalVideos: 0, readyVideos: 0);
   }
 
@@ -166,6 +176,33 @@ void main() {
     expect(find.textContaining('10%, 30%, 50%, 70%, and 90%'), findsOneWidget);
   });
 
+  testWidgets('lookup options exposes and toggles maximum precision', (
+    tester,
+  ) async {
+    final viewModel = _TestImageLookupViewModel();
+    viewModel.emit(
+      const ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.tap(find.byTooltip('Lookup options'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Maximum precision video-frame search'), findsOneWidget);
+    expect(
+      find.textContaining('requires additional cache space'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byType(Switch).last);
+    await tester.pump();
+
+    expect(viewModel.state.lookupPrecision, VideoFrameLookupPrecision.maximum);
+    expect(find.byType(Switch).last, findsOneWidget);
+  });
+
   testWidgets('video results show the active scope and searched video count', (
     tester,
   ) async {
@@ -245,9 +282,266 @@ void main() {
     await tester.pump();
 
     expect(find.text('Preparing Library'), findsOneWidget);
-    expect(find.text('Skip'), findsOneWidget);
+    expect(find.text('Skip & Search'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
     expect(find.text('Run in Background'), findsOneWidget);
+  });
+
+  testWidgets('partial matching identifies the indexed-video scope', (
+    tester,
+  ) async {
+    final viewModel = _TestImageLookupViewModel();
+    final source = ImageLookupSource(
+      path: '/query.jpg',
+      name: 'query.jpg',
+      size: 100,
+      lastModified: DateTime(2024),
+    );
+    viewModel.emit(
+      ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+        lookupPrecision: VideoFrameLookupPrecision.maximum,
+        phase: ImageLookupSearching(
+          sources: <ImageLookupSource>[source],
+          progress: const ImageLookupProgress.preparingQueries(
+            processed: 0,
+            total: 1,
+          ),
+          hasPartialCoverage: true,
+        ),
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.pump();
+
+    expect(find.text('Finding Matches in Indexed Videos'), findsOneWidget);
+    expect(
+      find.text('Preparing the query image before searching the index…'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      isNull,
+    );
+  });
+
+  testWidgets('ready query shows an active index-loading stage', (
+    tester,
+  ) async {
+    final viewModel = _TestImageLookupViewModel();
+    final source = ImageLookupSource(
+      path: '/query.jpg',
+      name: 'query.jpg',
+      size: 100,
+      lastModified: DateTime(2024),
+    );
+    viewModel.emit(
+      ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+        lookupPrecision: VideoFrameLookupPrecision.maximum,
+        phase: ImageLookupSearching(
+          sources: <ImageLookupSource>[source],
+          progress: const ImageLookupProgress.preparingQueries(
+            processed: 1,
+            total: 1,
+          ),
+          hasPartialCoverage: true,
+        ),
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.pump();
+
+    expect(
+      find.text('Query image ready. Loading the indexed library…'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Processed 1 of 1'), findsNothing);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      isNull,
+    );
+  });
+
+  testWidgets('maximum search displays live video and frame progress', (
+    tester,
+  ) async {
+    final viewModel = _TestImageLookupViewModel();
+    final source = ImageLookupSource(
+      path: '/query.jpg',
+      name: 'query.jpg',
+      size: 100,
+      lastModified: DateTime(2024),
+    );
+    viewModel.emit(
+      ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+        lookupPrecision: VideoFrameLookupPrecision.maximum,
+        phase: ImageLookupSearching(
+          sources: <ImageLookupSource>[source],
+          progress: const ImageLookupProgress(
+            stage: ImageLookupProgressStage.scanningVideoFrames,
+            processed: 1,
+            total: 4,
+            currentItemProcessed: 250,
+            currentItemTotal: 1000,
+          ),
+          hasPartialCoverage: true,
+        ),
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.pump();
+
+    expect(
+      find.text('Scanning video 2 of 4 · 250 of 1000 frames'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      closeTo(0.3125, 0.0001),
+    );
+  });
+
+  testWidgets('maximum search explains the bounded Vision verification pass', (
+    tester,
+  ) async {
+    final viewModel = _TestImageLookupViewModel();
+    final source = ImageLookupSource(
+      path: '/query.jpg',
+      name: 'query.jpg',
+      size: 100,
+      lastModified: DateTime(2024),
+    );
+    viewModel.emit(
+      ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+        lookupPrecision: VideoFrameLookupPrecision.maximum,
+        phase: ImageLookupSearching(
+          sources: <ImageLookupSource>[source],
+          progress: const ImageLookupProgress(
+            stage: ImageLookupProgressStage.verifyingVideoFrames,
+            processed: 0,
+            total: 1,
+            currentItemTotal: 12,
+          ),
+          hasPartialCoverage: true,
+        ),
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.pump();
+
+    expect(find.textContaining('Checking likely scenes'), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      isNull,
+    );
+  });
+
+  testWidgets('searching view shows accumulated results and stop action', (
+    tester,
+  ) async {
+    final viewModel = _TestImageLookupViewModel();
+    final source = ImageLookupSource(
+      path: '/query.jpg',
+      name: 'query.jpg',
+      size: 100,
+      lastModified: DateTime(2024),
+    );
+    final invalidSource = source.copyWith(
+      path: '/invalid.jpg',
+      name: 'invalid.jpg',
+    );
+    viewModel.emit(
+      ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+        phase: ImageLookupSearching(
+          sources: <ImageLookupSource>[source],
+          progress: const ImageLookupProgress(
+            stage: ImageLookupProgressStage.verifyingVideoFrames,
+            processed: 2,
+            total: 4,
+            currentItemProcessed: 2,
+            currentItemTotal: 4,
+            verificationPhase: ImageLookupVerificationPhase.remaining,
+          ),
+          hasPartialCoverage: false,
+          results: <ImageLookupResult>[
+            ImageLookupResult(
+              source: source,
+              query: ImageLookupQuery(
+                source: source,
+                hash: 0,
+                width: 800,
+                height: 600,
+              ),
+              matches: const <ImageLookupMatch>[],
+            ),
+            ImageLookupResult(
+              source: invalidSource,
+              errorMessage: 'The image could not be read or decoded.',
+              matches: const <ImageLookupMatch>[],
+            ),
+          ],
+          verificationSummary: const ImageLookupVerificationSummary(
+            eligibleVideoCount: 4,
+            verifiedVideoCount: 2,
+          ),
+          startedAt: DateTime(2024),
+        ),
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Checking likely scenes in the remaining videos · 2 of 4 videos checked · '
+        '2 of 4 videos in this pass…',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Checked 2 of 4 videos · 2 verified · 0 matches so far'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('1 result so far'), findsNothing);
+    expect(find.text('Stop & Keep Results'), findsOneWidget);
+    expect(find.text('query.jpg'), findsOneWidget);
+    expect(
+      find.text('Results will appear here as videos are checked.'),
+      findsNothing,
+    );
+    expect(
+      find.text('Still checking this query against the indexed library…'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('No matches found in the currently indexed library.'),
+      findsNothing,
+    );
+    final searching = viewModel.state.phase as ImageLookupSearching;
+    expect(searching.results, hasLength(2));
+    expect(searching.results.last.hasError, isTrue);
   });
 
   testWidgets('video results identify and render the generated miniature', (
@@ -297,6 +591,67 @@ void main() {
     expect(
       find.text('No matches found in the currently indexed library.'),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('stopped verification is distinct from skipped index coverage', (
+    tester,
+  ) async {
+    final viewModel = _TestImageLookupViewModel();
+    final source = ImageLookupSource(
+      path: '/query.jpg',
+      name: 'query.jpg',
+      size: 100,
+      lastModified: DateTime(2024),
+    );
+    viewModel.emit(
+      ImageLookupViewState(
+        isHistoryLoading: false,
+        lookupMode: MediaLookupMode.videoFromFrame,
+        phase: ImageLookupResults(
+          session: ImageLookupSession(
+            id: 'stopped-session',
+            profileId: 'profile',
+            createdAt: DateTime(2024),
+            sensitivity: DuplicateSensitivity.balanced,
+            lookupMode: MediaLookupMode.videoFromFrame,
+            hasPartialCoverage: false,
+            searchedLibraryImages: 4,
+            verificationSummary: const ImageLookupVerificationSummary(
+              eligibleVideoCount: 4,
+              verifiedVideoCount: 2,
+              stopped: true,
+            ),
+            results: <ImageLookupResult>[
+              ImageLookupResult(
+                source: source,
+                query: ImageLookupQuery(
+                  source: source,
+                  hash: 0,
+                  width: 800,
+                  height: 600,
+                ),
+                matches: const <ImageLookupMatch>[],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await _pumpScreen(tester, viewModel);
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Verification was stopped after checking 2 of 4 eligible videos. '
+        'The results below are partial.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Library preparation was skipped'),
+      findsNothing,
     );
   });
 

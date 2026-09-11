@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/widgets/app_bar.dart';
+import '../../../../shared/providers/duplicate_providers.dart';
 import '../../../thumbnails/presentation/thumbnail_batch_controller.dart';
 import '../../../thumbnails/presentation/thumbnail_batch_progress_dialog.dart';
 import '../../../thumbnails/presentation/thumbnail_providers.dart';
@@ -12,6 +13,7 @@ import '../../../sidecar/domain/entities/sidecar_import_preparation.dart';
 import '../../../sidecar/domain/entities/sidecar_result.dart';
 import '../../../sidecar/presentation/widgets/sidecar_root_mapping_dialog.dart';
 import '../../../../core/utils/file_size_formatter.dart';
+import '../../../../core/models/video_frame_lookup_precision.dart';
 import '../../domain/entities/app_settings.dart';
 import '../view_models/settings_view_model.dart';
 
@@ -79,6 +81,13 @@ class SettingsScreen extends ConsumerWidget {
             settings.slideshowControlsHideDelay,
             viewModel,
           ),
+          const Divider(),
+          _buildSectionHeader('Media Lookup'),
+          _buildVideoFramePrecisionSetting(
+            settings.videoFrameLookupPrecision,
+            viewModel,
+          ),
+          _buildMaximumPrecisionIndexTile(context, ref, viewModel),
           const Divider(),
           _buildSectionHeader('Navigation'),
           _buildSiblingNavigationSetting(
@@ -164,6 +173,97 @@ class SettingsScreen extends ConsumerWidget {
         }).toList(),
       ),
     );
+  }
+
+  Widget _buildVideoFramePrecisionSetting(
+    VideoFrameLookupPrecision precision,
+    SettingsViewModel viewModel,
+  ) {
+    return ListTile(
+      title: const Text('Maximum precision video-frame search'),
+      subtitle: Text(
+        precision == VideoFrameLookupPrecision.maximum
+            ? 'Search every decoded presentation frame. This takes longer and '
+                  'uses additional cache space.'
+            : 'Search five representative frames from each video.',
+      ),
+      trailing: Switch(
+        value: precision == VideoFrameLookupPrecision.maximum,
+        onChanged: (enabled) {
+          viewModel.updateVideoFrameLookupPrecision(
+            enabled
+                ? VideoFrameLookupPrecision.maximum
+                : VideoFrameLookupPrecision.standard,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMaximumPrecisionIndexTile(
+    BuildContext context,
+    WidgetRef ref,
+    SettingsViewModel viewModel,
+  ) {
+    final usage = ref.watch(maximumPrecisionCacheSizeProvider);
+    return ListTile(
+      title: const Text('Maximum-precision index'),
+      subtitle: Text(
+        usage.when(
+          data: (bytes) => '${formatFileSize(bytes)} currently stored',
+          loading: () => 'Calculating index size…',
+          error: (_, __) => 'Index size unavailable',
+        ),
+      ),
+      trailing: const Icon(Icons.delete_outline),
+      onTap: () =>
+          _showClearMaximumPrecisionIndexDialog(context, ref, viewModel),
+    );
+  }
+
+  Future<void> _showClearMaximumPrecisionIndexDialog(
+    BuildContext context,
+    WidgetRef ref,
+    SettingsViewModel viewModel,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear maximum-precision index'),
+        content: const Text(
+          'Remove every decoded-frame descriptor from the local cache? '
+          'Standard five-frame indexes and media files are not affected.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear index'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+    try {
+      await viewModel.clearMaximumPrecisionIndex();
+      ref.invalidate(maximumPrecisionCacheSizeProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Maximum-precision index cleared')),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not clear index: $error')),
+        );
+      }
+    }
   }
 
   Widget _buildThumbnailDiskCacheSetting(

@@ -25,6 +25,8 @@ pubspec.lock
 !lib/features/media_library/data/isar/directory_cover_collection.g.dart
 !lib/features/duplicates/data/isar/image_lookup_history_collection.g.dart
 !lib/features/duplicates/data/isar/video_frame_hash_collection.g.dart
+!lib/features/duplicates/data/isar/video_maximum_frame_index_status_collection.g.dart
+!lib/features/duplicates/data/isar/video_maximum_frame_index_chunk_collection.g.dart
 
 # iOS build artifacts
 ios/Pods

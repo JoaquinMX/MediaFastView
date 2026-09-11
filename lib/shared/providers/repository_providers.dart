@@ -6,6 +6,9 @@ import 'package:isar/isar.dart';
 
 import '../../features/favorites/data/repositories/favorites_repository_impl.dart';
 import '../../features/favorites/domain/repositories/favorites_repository.dart';
+import '../../features/duplicates/data/isar/video_maximum_frame_index_chunk_collection.dart';
+import '../../features/duplicates/data/isar/video_maximum_frame_index_status_collection.dart';
+import '../../features/duplicates/domain/entities/video_maximum_frame_index_status.dart';
 import '../../core/services/bookmark_service.dart';
 import '../../core/services/file_service.dart';
 import '../../core/services/permission_service.dart';
@@ -90,6 +93,7 @@ import '../../features/settings/domain/use_cases/update_show_directory_tagged_me
 import '../../features/settings/domain/use_cases/update_slideshow_controls_hide_delay_use_case.dart';
 import '../../features/settings/domain/use_cases/update_theme_mode_use_case.dart';
 import '../../features/settings/domain/use_cases/update_thumbnail_disk_cache_use_case.dart';
+import '../../features/settings/domain/use_cases/update_video_frame_lookup_precision_use_case.dart';
 import '../utils/tag_lookup.dart';
 
 /// Every migration the database needs, in the order it needs them.
@@ -109,6 +113,28 @@ Future<void> runIsarMigrations(
 ) async {
   await const IsarKeyMigration().run(isar, backUp: backUp);
   await const IsarProfileMigration().run(isar, backUp: backUp);
+  await _discardLegacyMaximumPrecisionIndex(isar);
+}
+
+/// Removes the disposable version-1 JSON frame cache after the packed binary
+/// format is installed. User-authored data is untouched, so this migration
+/// deliberately does not create a multi-gigabyte backup of derived data.
+Future<void> _discardLegacyMaximumPrecisionIndex(Isar isar) async {
+  final statuses = isar.collection<VideoMaximumFrameIndexStatusCollection>();
+  final storedVersions = await statuses
+      .where()
+      .descriptorVersionProperty()
+      .findAll();
+  final hasLegacyRows = storedVersions.any(
+    (version) => version != maximumVideoFrameDescriptorVersion,
+  );
+  if (!hasLegacyRows) {
+    return;
+  }
+  await isar.writeTxn(() async {
+    await statuses.clear();
+    await isar.collection<VideoMaximumFrameIndexChunkCollection>().clear();
+  });
 }
 
 // Isar database provider
@@ -284,6 +310,13 @@ final favoritesRepositoryProvider =
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return const SettingsRepositoryImpl();
 });
+
+final updateVideoFrameLookupPrecisionUseCaseProvider =
+    Provider<UpdateVideoFrameLookupPrecisionUseCase>((ref) {
+      return UpdateVideoFrameLookupPrecisionUseCase(
+        ref.watch(settingsRepositoryProvider),
+      );
+    });
 
 final fileOperationsRepositoryProvider = Provider<FileOperationsRepository>((
   ref,

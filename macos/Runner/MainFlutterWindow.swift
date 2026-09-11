@@ -3,6 +3,13 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
+    // Hosted native tests instantiate their own handlers. Starting Flutter here
+    // would run main.dart and open/migrate the user's real application database.
+    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        || NSClassFromString("XCTestCase") != nil {
+      super.awakeFromNib()
+      return
+    }
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
@@ -21,6 +28,11 @@ class MainFlutterWindow: NSWindow {
     let thumbnailChannel = FlutterMethodChannel(name: "com.joaquinmx.media_fast_view/thumbnails",
                                                 binaryMessenger: flutterViewController.engine.binaryMessenger)
     let thumbnailHandler = ThumbnailHandler(accessRegistry: accessRegistry)
+    thumbnailHandler.setVisionSessionProgressEmitter { payload in
+      DispatchQueue.main.async {
+        thumbnailChannel.invokeMethod("visionSessionUpdate", arguments: payload)
+      }
+    }
     thumbnailChannel.setMethodCallHandler(thumbnailHandler.handle)
 
     super.awakeFromNib()

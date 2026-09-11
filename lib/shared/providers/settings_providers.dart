@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/media_lookup_mode.dart';
+import '../../core/models/video_frame_lookup_precision.dart';
 import '../../features/settings/domain/entities/app_settings.dart';
 import '../../features/settings/domain/entities/playback_settings.dart';
 import '../../features/settings/presentation/view_models/settings_view_model.dart';
@@ -39,6 +40,16 @@ final mediaLookupModeProvider = Provider<MediaLookupMode>((ref) {
   return settings.maybeWhen(
     data: (value) => value.mediaLookupMode,
     orElse: () => const AppSettings.initial().mediaLookupMode,
+  );
+});
+
+final videoFrameLookupPrecisionProvider = Provider<VideoFrameLookupPrecision>((
+  ref,
+) {
+  final settings = ref.watch(settingsProvider);
+  return settings.maybeWhen(
+    data: (value) => value.videoFrameLookupPrecision,
+    orElse: () => const AppSettings.initial().videoFrameLookupPrecision,
   );
 });
 

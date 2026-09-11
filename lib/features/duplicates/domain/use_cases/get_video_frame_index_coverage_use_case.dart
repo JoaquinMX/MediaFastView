@@ -1,4 +1,5 @@
 import '../entities/video_frame_index_coverage.dart';
+import '../../../../core/models/video_frame_lookup_precision.dart';
 import '../repositories/duplicate_repository.dart';
 
 class GetVideoFrameIndexCoverageUseCase {
@@ -6,7 +7,12 @@ class GetVideoFrameIndexCoverageUseCase {
 
   final DuplicateRepository _repository;
 
-  Future<VideoFrameIndexCoverage> call() {
-    return _repository.getVideoFrameIndexCoverage();
+  Future<VideoFrameIndexCoverage> call({
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
+  }) {
+    return _repository.getVideoFrameIndexCoverage(
+      lookupPrecision: lookupPrecision,
+    );
   }
 }

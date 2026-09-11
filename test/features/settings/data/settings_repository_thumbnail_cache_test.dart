@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_fast_view/core/models/media_lookup_mode.dart';
+import 'package:media_fast_view/core/models/video_frame_lookup_precision.dart';
 import 'package:media_fast_view/features/settings/data/repositories/settings_repository_impl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -65,4 +66,36 @@ void main() {
       );
     },
   );
+
+  test('maximum precision defaults off and persists independently', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    const repository = SettingsRepositoryImpl();
+
+    expect(
+      (await repository.loadSettings()).videoFrameLookupPrecision,
+      VideoFrameLookupPrecision.standard,
+    );
+
+    await repository.saveVideoFrameLookupPrecision(
+      VideoFrameLookupPrecision.maximum,
+    );
+
+    expect(
+      (await repository.loadSettings()).videoFrameLookupPrecision,
+      VideoFrameLookupPrecision.maximum,
+    );
+  });
+
+  test('legacy precision values fall back to standard', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'video_frame_lookup_precision': 'future-value',
+    });
+
+    final settings = await const SettingsRepositoryImpl().loadSettings();
+
+    expect(
+      settings.videoFrameLookupPrecision,
+      VideoFrameLookupPrecision.standard,
+    );
+  });
 }

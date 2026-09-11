@@ -15,16 +15,25 @@ void main() {
     late MockIsar mockIsar;
 
     setUp(() async {
-      tempDirectory = await Directory.systemTemp.createTemp('isar_database_test');
+      tempDirectory = await Directory.systemTemp.createTemp(
+        'isar_database_test',
+      );
       mockIsar = MockIsar();
       when(mockIsar.isOpen).thenReturn(true);
-      when(mockIsar.close(deleteFromDisk: anyNamed('deleteFromDisk'))).thenAnswer((_) async => true);
+      when(
+        mockIsar.close(deleteFromDisk: anyNamed('deleteFromDisk')),
+      ).thenAnswer((_) async => true);
     });
 
     tearDown(() async {
       if (await tempDirectory.exists()) {
         await tempDirectory.delete(recursive: true);
       }
+    });
+
+    test('reserves enough map space for the every-frame video index', () {
+      expect(IsarDatabase.maximumSizeMiB, 64 * 1024);
+      expect(IsarDatabase.maximumSizeMiB, greaterThan(Isar.defaultMaxSizeMiB));
     });
 
     test('isOpen returns false before database is opened', () {
@@ -99,7 +108,8 @@ void main() {
       final database = IsarDatabase(
         schemas: const <CollectionSchema<dynamic>>[],
         directoryResolver: () async => tempDirectory,
-        openIsar: (schemas, {required String directory, String? name}) async => mockIsar,
+        openIsar: (schemas, {required String directory, String? name}) async =>
+            mockIsar,
       );
 
       // Act
@@ -116,7 +126,8 @@ void main() {
       final database = IsarDatabase(
         schemas: const <CollectionSchema<dynamic>>[],
         directoryResolver: () async => tempDirectory,
-        openIsar: (schemas, {required String directory, String? name}) async => mockIsar,
+        openIsar: (schemas, {required String directory, String? name}) async =>
+            mockIsar,
       );
 
       // Act
@@ -132,7 +143,8 @@ void main() {
       final database = IsarDatabase(
         schemas: const <CollectionSchema<dynamic>>[],
         directoryResolver: () async => tempDirectory,
-        openIsar: (schemas, {required String directory, String? name}) async => mockIsar,
+        openIsar: (schemas, {required String directory, String? name}) async =>
+            mockIsar,
       );
 
       // Act
@@ -160,7 +172,9 @@ void main() {
 
     test('open accepts custom directory parameter', () async {
       // Arrange
-      final customDirectory = await Directory.systemTemp.createTemp('custom_isar');
+      final customDirectory = await Directory.systemTemp.createTemp(
+        'custom_isar',
+      );
       addTearDown(() => customDirectory.delete(recursive: true));
 
       var capturedDirectory = '';
@@ -186,8 +200,9 @@ void main() {
         return IsarDatabase(
           schemas: const <CollectionSchema<dynamic>>[],
           directoryResolver: () async => tempDirectory,
-          openIsar: (schemas, {required String directory, String? name}) async =>
-              mockIsar,
+          openIsar:
+              (schemas, {required String directory, String? name}) async =>
+                  mockIsar,
           migrate: migrate,
         );
       }
@@ -217,24 +232,22 @@ void main() {
         var runs = 0;
         final database = databaseWith((isar, backUp) async => runs += 1);
 
-        await Future.wait([
-          database.open(),
-          database.open(),
-          database.open(),
-        ]);
+        await Future.wait([database.open(), database.open(), database.open()]);
 
         expect(runs, 1);
       });
 
-      test('a failing migration does not publish a half-migrated database',
-          () async {
-        final database = databaseWith(
-          (isar, backUp) async => throw StateError('migration blew up'),
-        );
+      test(
+        'a failing migration does not publish a half-migrated database',
+        () async {
+          final database = databaseWith(
+            (isar, backUp) async => throw StateError('migration blew up'),
+          );
 
-        await expectLater(database.open(), throwsStateError);
-        expect(database.isOpen, isFalse);
-      });
+          await expectLater(database.open(), throwsStateError);
+          expect(database.isOpen, isFalse);
+        },
+      );
     });
   });
 }

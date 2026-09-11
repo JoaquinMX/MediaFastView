@@ -7,12 +7,17 @@ class ImageLookupMatch {
     required this.candidate,
     required this.distance,
     this.matchedVideoFrame,
+    this.visionDistance,
   });
 
   final DuplicateCandidate candidate;
 
   /// Hamming distance from the query dHash. Lower values are closer matches.
   final int distance;
+
+  /// Apple Vision feature-print distance, when maximum precision verified this
+  /// match. Lower values indicate greater visual similarity.
+  final double? visionDistance;
 
   /// Present when an image frame matched a sampled frame from a video.
   final MatchedVideoFrame? matchedVideoFrame;

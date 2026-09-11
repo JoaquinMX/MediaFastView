@@ -10,6 +10,8 @@ class DuplicateScanProgress {
     required this.total,
     this.reused = 0,
     this.failed = 0,
+    this.currentItemProcessed = 0,
+    this.currentItemTotal = 0,
     this.isComplete = false,
     this.isCancelled = false,
   });
@@ -19,6 +21,8 @@ class DuplicateScanProgress {
       total = 0,
       reused = 0,
       failed = 0,
+      currentItemProcessed = 0,
+      currentItemTotal = 0,
       isComplete = false,
       isCancelled = false;
 
@@ -34,6 +38,13 @@ class DuplicateScanProgress {
   /// Images that could not be decoded (unsupported/corrupt) and were skipped.
   final int failed;
 
+  /// Work completed inside the currently decoded media item, when available.
+  final int currentItemProcessed;
+
+  /// Total work inside the current item, or zero when the native reader cannot
+  /// know it without a second pass.
+  final int currentItemTotal;
+
   final bool isComplete;
   final bool isCancelled;
 
@@ -47,6 +58,8 @@ class DuplicateScanProgress {
     int? total,
     int? reused,
     int? failed,
+    int? currentItemProcessed,
+    int? currentItemTotal,
     bool? isComplete,
     bool? isCancelled,
   }) {
@@ -55,6 +68,8 @@ class DuplicateScanProgress {
       total: total ?? this.total,
       reused: reused ?? this.reused,
       failed: failed ?? this.failed,
+      currentItemProcessed: currentItemProcessed ?? this.currentItemProcessed,
+      currentItemTotal: currentItemTotal ?? this.currentItemTotal,
       isComplete: isComplete ?? this.isComplete,
       isCancelled: isCancelled ?? this.isCancelled,
     );

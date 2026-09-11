@@ -1,5 +1,6 @@
 import '../entities/duplicate_scan_progress.dart';
 import '../repositories/duplicate_repository.dart';
+import '../../../../core/models/video_frame_lookup_precision.dart';
 
 class PrepareVideoFrameIndexUseCase {
   const PrepareVideoFrameIndexUseCase(this._repository);
@@ -8,7 +9,12 @@ class PrepareVideoFrameIndexUseCase {
 
   Stream<DuplicateScanProgress> call({
     DuplicateScanCancellation? cancellation,
+    VideoFrameLookupPrecision lookupPrecision =
+        VideoFrameLookupPrecision.standard,
   }) {
-    return _repository.hashVideoFrames(cancellation: cancellation);
+    return _repository.hashVideoFrames(
+      cancellation: cancellation,
+      lookupPrecision: lookupPrecision,
+    );
   }
 }

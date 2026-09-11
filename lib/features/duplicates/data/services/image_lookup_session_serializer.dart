@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../../../core/models/media_lookup_mode.dart';
+import '../../../../core/models/video_frame_lookup_precision.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../domain/entities/duplicate_candidate.dart';
 import '../../domain/entities/duplicate_sensitivity.dart';
@@ -9,7 +10,9 @@ import '../../domain/entities/image_lookup_query.dart';
 import '../../domain/entities/image_lookup_result.dart';
 import '../../domain/entities/image_lookup_session.dart';
 import '../../domain/entities/image_lookup_source.dart';
+import '../../domain/entities/image_lookup_verification_summary.dart';
 import '../../domain/entities/matched_video_frame.dart';
+import '../../domain/entities/video_frame_presentation_time.dart';
 
 /// Encodes lookup snapshots without persisting copies of the original images.
 class ImageLookupSessionSerializer {
@@ -33,6 +36,10 @@ class ImageLookupSessionSerializer {
         (mode) => mode.name == json['lookupMode'],
         orElse: () => MediaLookupMode.mediaMatches,
       ),
+      lookupPrecision: VideoFrameLookupPrecision.values.firstWhere(
+        (precision) => precision.name == json['lookupPrecision'],
+        orElse: () => VideoFrameLookupPrecision.standard,
+      ),
       results: (json['results'] as List<dynamic>)
           .map(
             (value) => _result(
@@ -42,6 +49,7 @@ class ImageLookupSessionSerializer {
           .toList(growable: false),
       hasPartialCoverage: json['hasPartialCoverage'] as bool? ?? false,
       searchedLibraryImages: json['searchedLibraryImages'] as int? ?? 0,
+      verificationSummary: _verificationSummary(json['verificationSummary']),
     );
   }
 
@@ -52,10 +60,38 @@ class ImageLookupSessionSerializer {
         'createdAt': session.createdAt.toIso8601String(),
         'sensitivity': session.sensitivity.name,
         'lookupMode': session.lookupMode.name,
+        'lookupPrecision': session.lookupPrecision.name,
         'hasPartialCoverage': session.hasPartialCoverage,
         'searchedLibraryImages': session.searchedLibraryImages,
+        if (session.verificationSummary case final summary?)
+          'verificationSummary': _verificationSummaryJson(summary),
         'results': session.results.map(_resultJson).toList(growable: false),
       };
+
+  Map<String, dynamic> _verificationSummaryJson(
+    ImageLookupVerificationSummary summary,
+  ) => <String, dynamic>{
+    'eligibleVideoCount': summary.eligibleVideoCount,
+    'verifiedVideoCount': summary.verifiedVideoCount,
+    'failedVideoCount': summary.failedVideoCount,
+    'invalidIndexVideoCount': summary.invalidIndexVideoCount,
+    'stopped': summary.stopped,
+    'candidatePolicyVersion': summary.candidatePolicyVersion,
+  };
+
+  ImageLookupVerificationSummary? _verificationSummary(Object? json) {
+    if (json is! Map) {
+      return null;
+    }
+    return ImageLookupVerificationSummary(
+      eligibleVideoCount: json['eligibleVideoCount'] as int? ?? 0,
+      verifiedVideoCount: json['verifiedVideoCount'] as int? ?? 0,
+      failedVideoCount: json['failedVideoCount'] as int? ?? 0,
+      invalidIndexVideoCount: json['invalidIndexVideoCount'] as int? ?? 0,
+      stopped: json['stopped'] as bool? ?? false,
+      candidatePolicyVersion: json['candidatePolicyVersion'] as int? ?? 1,
+    );
+  }
 
   Map<String, dynamic> _resultJson(ImageLookupResult result) =>
       <String, dynamic>{
@@ -129,6 +165,7 @@ class ImageLookupSessionSerializer {
 
   Map<String, dynamic> _matchJson(ImageLookupMatch match) => <String, dynamic>{
     'distance': match.distance,
+    if (match.visionDistance != null) 'visionDistance': match.visionDistance,
     'hash': match.candidate.hash,
     'width': match.candidate.width,
     'height': match.candidate.height,
@@ -137,6 +174,10 @@ class ImageLookupSessionSerializer {
       'matchedVideoFrame': <String, dynamic>{
         'positionPercent': frame.positionPercent,
         'timestampMilliseconds': frame.timestamp.inMilliseconds,
+        if (frame.presentationTime case final time?) ...<String, dynamic>{
+          'presentationTimeValue': time.value,
+          'presentationTimeScale': time.timescale,
+        },
       },
   };
 
@@ -144,6 +185,7 @@ class ImageLookupSessionSerializer {
     final frameJson = json['matchedVideoFrame'];
     return ImageLookupMatch(
       distance: json['distance'] as int,
+      visionDistance: (json['visionDistance'] as num?)?.toDouble(),
       candidate: DuplicateCandidate(
         media: _media(
           Map<String, dynamic>.from(json['media'] as Map<dynamic, dynamic>),
@@ -161,8 +203,18 @@ class ImageLookupSessionSerializer {
               timestamp: Duration(
                 milliseconds: frameJson['timestampMilliseconds'] as int,
               ),
+              presentationTime: _presentationTime(frameJson),
             ),
     );
+  }
+
+  VideoFramePresentationTime? _presentationTime(Map<dynamic, dynamic> json) {
+    final value = json['presentationTimeValue'];
+    final scale = json['presentationTimeScale'];
+    if (value is! int || scale is! int || scale == 0) {
+      return null;
+    }
+    return VideoFramePresentationTime(value: value, timescale: scale);
   }
 
   Map<String, dynamic> _mediaJson(MediaEntity media) => <String, dynamic>{

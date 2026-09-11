@@ -4,6 +4,8 @@ import '../../features/duplicates/data/isar/dismissed_duplicate_group_collection
 import '../../features/duplicates/data/isar/image_lookup_history_collection.dart';
 import '../../features/duplicates/data/isar/perceptual_hash_collection.dart';
 import '../../features/duplicates/data/isar/video_frame_hash_collection.dart';
+import '../../features/duplicates/data/isar/video_maximum_frame_index_chunk_collection.dart';
+import '../../features/duplicates/data/isar/video_maximum_frame_index_status_collection.dart';
 import '../../features/favorites/data/isar/favorite_collection.dart';
 import '../../features/media_library/data/isar/directory_collection.dart';
 import '../../features/media_library/data/isar/directory_cover_collection.dart';
@@ -28,6 +30,8 @@ const List<CollectionSchema<dynamic>> isarCollectionSchemas =
       ProfileCollectionSchema,
       PerceptualHashCollectionSchema,
       VideoFrameHashCollectionSchema,
+      VideoMaximumFrameIndexStatusCollectionSchema,
+      VideoMaximumFrameIndexChunkCollectionSchema,
       DismissedDuplicateGroupCollectionSchema,
       ImageLookupHistoryCollectionSchema,
     ];

@@ -11,11 +11,12 @@ typedef IsarDirectoryResolver = Future<Directory> Function();
 
 /// Signature for opening an [Isar] instance. The default implementation uses
 /// [Isar.open], but tests can inject a fake to avoid touching the filesystem.
-typedef IsarOpenCallback = Future<Isar> Function(
-  List<CollectionSchema<dynamic>> schemas, {
-  required String directory,
-  String name,
-});
+typedef IsarOpenCallback =
+    Future<Isar> Function(
+      List<CollectionSchema<dynamic>> schemas, {
+      required String directory,
+      String name,
+    });
 
 /// Signature for work that must run against a freshly opened [Isar] before any
 /// data source is allowed to touch it.
@@ -23,27 +24,32 @@ typedef IsarOpenCallback = Future<Isar> Function(
 /// [backUp] snapshots the database file. The migration is expected to call it
 /// immediately before it mutates anything, and not at all when it decides there
 /// is nothing to do — otherwise every launch would leave a backup behind.
-typedef IsarMigrationCallback = Future<void> Function(
-  Isar isar,
-  Future<void> Function() backUp,
-);
+typedef IsarMigrationCallback =
+    Future<void> Function(Isar isar, Future<void> Function() backUp);
 
 /// Handles lifecycle management for the shared [Isar] instance used across the
 /// application. The service centralises configuration so repositories and data
 /// sources can depend on a single entry point when interacting with the
 /// database.
 class IsarDatabase {
+  /// Maximum virtual map reserved for the database on 64-bit desktop builds.
+  ///
+  /// Isar's 1 GiB default is too small for the optional every-frame video
+  /// index. The map is sparse: this is an address-space ceiling, not a 64 GiB
+  /// disk allocation, and the database file grows only as data is written.
+  static const int maximumSizeMiB = 64 * 1024;
+
   IsarDatabase({
     required List<CollectionSchema<dynamic>> schemas,
     String name = 'media_fast_view',
     IsarDirectoryResolver? directoryResolver,
     IsarOpenCallback? openIsar,
     IsarMigrationCallback? migrate,
-  })  : _schemas = schemas,
-        _name = name,
-        _resolveDirectory = directoryResolver ?? _defaultDirectoryResolver,
-        _openIsar = openIsar ?? Isar.open,
-        _migrate = migrate;
+  }) : _schemas = schemas,
+       _name = name,
+       _resolveDirectory = directoryResolver ?? _defaultDirectoryResolver,
+       _openIsar = openIsar ?? _openDefault,
+       _migrate = migrate;
 
   final List<CollectionSchema<dynamic>> _schemas;
   final String _name;
@@ -164,5 +170,18 @@ class IsarDatabase {
       await isarDir.create(recursive: true);
     }
     return isarDir;
+  }
+
+  static Future<Isar> _openDefault(
+    List<CollectionSchema<dynamic>> schemas, {
+    required String directory,
+    String name = Isar.defaultName,
+  }) {
+    return Isar.open(
+      schemas,
+      directory: directory,
+      name: name,
+      maxSizeMiB: maximumSizeMiB,
+    );
   }
 }

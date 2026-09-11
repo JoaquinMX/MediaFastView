@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/media_lookup_mode.dart';
+import '../../../../core/models/video_frame_lookup_precision.dart';
 import '../../domain/entities/app_settings.dart';
 import '../../domain/entities/playback_settings.dart';
 import '../../domain/use_cases/get_app_settings_use_case.dart';
@@ -15,11 +16,13 @@ import '../../domain/use_cases/update_show_directory_tagged_media_counts_use_cas
 import '../../domain/use_cases/update_slideshow_controls_hide_delay_use_case.dart';
 import '../../domain/use_cases/update_theme_mode_use_case.dart';
 import '../../domain/use_cases/update_thumbnail_disk_cache_use_case.dart';
+import '../../domain/use_cases/update_video_frame_lookup_precision_use_case.dart';
 import '../../../media_library/domain/use_cases/clear_media_cache_use_case.dart';
 import '../../../media_library/domain/use_cases/rescan_library_use_case.dart';
 import '../../../tagging/domain/use_cases/clear_tag_assignments_use_case.dart';
 import '../../../tagging/domain/use_cases/clear_tags_use_case.dart';
 import '../../../../shared/providers/repository_providers.dart';
+import '../../../../shared/providers/duplicate_providers.dart';
 import '../../../../shared/providers/sidecar_providers.dart';
 import '../../../../shared/utils/tag_cache_refresher.dart';
 import '../../../favorites/presentation/view_models/favorites_view_model.dart';
@@ -54,6 +57,10 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
       ref.read(updateImageLookupHistoryUseCaseProvider);
   late final UpdateMediaLookupModeUseCase _updateMediaLookupModeUseCase = ref
       .read(updateMediaLookupModeUseCaseProvider);
+  late final UpdateVideoFrameLookupPrecisionUseCase
+  _updateVideoFrameLookupPrecisionUseCase = ref.read(
+    updateVideoFrameLookupPrecisionUseCaseProvider,
+  );
   late final UpdatePlaybackSettingsUseCase _updatePlaybackSettingsUseCase = ref
       .read(updatePlaybackSettingsUseCaseProvider);
   late final UpdateAutoNavigateSiblingDirectoriesUseCase
@@ -143,6 +150,24 @@ class SettingsViewModel extends AsyncNotifier<AppSettings> {
       () => _updateMediaLookupModeUseCase(mode),
       (settings) => settings.copyWith(mediaLookupMode: mode),
     );
+  }
+
+  Future<void> updateVideoFrameLookupPrecision(
+    VideoFrameLookupPrecision precision,
+  ) async {
+    await _updateSetting(
+      () => _updateVideoFrameLookupPrecisionUseCase(precision),
+      (settings) => settings.copyWith(videoFrameLookupPrecision: precision),
+    );
+  }
+
+  Future<int> maximumPrecisionIndexCacheSize() {
+    return ref.read(videoMaximumFrameIndexDataSourceProvider).getCacheSize();
+  }
+
+  Future<void> clearMaximumPrecisionIndex() async {
+    await ref.read(videoMaximumFrameIndexDataSourceProvider).clear();
+    ref.invalidate(maximumPrecisionCacheSizeProvider);
   }
 
   Future<void> updateAutoplayVideos(bool enabled) async {

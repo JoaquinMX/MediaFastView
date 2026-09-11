@@ -4,12 +4,16 @@ import '../../features/duplicates/data/data_sources/dismissed_group_data_source.
 import '../../features/duplicates/data/data_sources/image_lookup_history_data_source.dart';
 import '../../features/duplicates/data/data_sources/perceptual_hash_data_source.dart';
 import '../../features/duplicates/data/data_sources/video_frame_hash_data_source.dart';
+import '../../features/duplicates/data/data_sources/video_maximum_frame_index_data_source.dart';
 import '../../features/duplicates/data/repositories/image_lookup_history_repository_impl.dart';
 import '../../features/duplicates/data/repositories/duplicate_repository_impl.dart';
 import '../../features/duplicates/data/services/image_lookup_file_picker.dart';
 import '../../features/duplicates/data/services/native_video_frame_generator.dart';
 import '../../features/duplicates/data/services/video_frame_hasher.dart';
 import '../../features/duplicates/data/services/video_thumbnail_hasher.dart';
+import '../../features/duplicates/data/services/native_compact_descriptor_generator.dart';
+import '../../features/duplicates/data/services/native_maximum_video_frame_indexer.dart';
+import '../../features/duplicates/data/services/native_vision_frame_matcher.dart';
 import '../../features/duplicates/domain/repositories/duplicate_repository.dart';
 import '../../features/duplicates/domain/repositories/image_lookup_history_repository.dart';
 import '../../features/duplicates/domain/use_cases/dismiss_duplicate_group_use_case.dart';
@@ -40,6 +44,30 @@ final videoFrameHashDataSourceProvider = Provider<VideoFrameHashDataSource>((
 final videoFrameHasherProvider = Provider<VideoFrameHasher>((ref) {
   return const NativeVideoFrameHasher(generator: NativeVideoFrameGenerator());
 });
+
+final videoMaximumFrameIndexDataSourceProvider =
+    Provider<VideoMaximumFrameIndexDataSource>((ref) {
+      return IsarVideoMaximumFrameIndexDataSource(
+        ref.watch(isarDatabaseProvider),
+      );
+    });
+
+final maximumPrecisionCacheSizeProvider = FutureProvider.autoDispose<int>(
+  (ref) => ref.watch(videoMaximumFrameIndexDataSourceProvider).getCacheSize(),
+);
+
+final maximumVideoFrameIndexerProvider = Provider<MaximumVideoFrameIndexer>(
+  (ref) => NativeMaximumVideoFrameIndexer(),
+);
+
+final compactImageDescriptorGeneratorProvider =
+    Provider<CompactImageDescriptorGenerator>(
+      (ref) => const NativeCompactImageDescriptorGenerator(),
+    );
+
+final visionFrameMatcherProvider = Provider<VisionFrameMatcher>(
+  (ref) => NativeVisionFrameMatcher(),
+);
 
 /// Dismissed "not duplicates" signatures. Global, keyed by group membership.
 final dismissedGroupDataSourceProvider = Provider<DismissedGroupDataSource>((
@@ -82,6 +110,14 @@ final duplicateRepositoryProvider = Provider.autoDispose<DuplicateRepository>((
     ),
     videoFrameHashDataSource: ref.watch(videoFrameHashDataSourceProvider),
     videoFrameHasher: ref.watch(videoFrameHasherProvider),
+    videoMaximumFrameIndexDataSource: ref.watch(
+      videoMaximumFrameIndexDataSourceProvider,
+    ),
+    maximumVideoFrameIndexer: ref.watch(maximumVideoFrameIndexerProvider),
+    compactDescriptorGenerator: ref.watch(
+      compactImageDescriptorGeneratorProvider,
+    ),
+    visionFrameMatcher: ref.watch(visionFrameMatcherProvider),
   );
 });
 

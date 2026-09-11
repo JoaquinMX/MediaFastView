@@ -14,6 +14,26 @@ extension DuplicateSensitivityX on DuplicateSensitivity {
     DuplicateSensitivity.loose => 12,
   };
 
+  /// Maximum Apple Vision feature-print distance accepted after verification.
+  ///
+  /// These are fixed revision-1 thresholds. Coarse dHash thresholds are used
+  /// only for candidate shortlisting and never replace this check.
+  double get visionThreshold => switch (this) {
+    // Revision-1 distances were calibrated against the generated native
+    // fixtures in RunnerTests (exact, H.264 recompressed, resized, cropped,
+    // and unrelated frames). Vision distances are not normalized to 0...1.
+    DuplicateSensitivity.strict => 18.0,
+    DuplicateSensitivity.balanced => 25.0,
+    DuplicateSensitivity.loose => 35.0,
+  };
+
+  /// Generous compact-hash threshold used before Vision verification.
+  int get coarseThreshold => switch (this) {
+    DuplicateSensitivity.strict => 12,
+    DuplicateSensitivity.balanced => 20,
+    DuplicateSensitivity.loose => 28,
+  };
+
   String get label => switch (this) {
     DuplicateSensitivity.strict => 'Strict',
     DuplicateSensitivity.balanced => 'Balanced',

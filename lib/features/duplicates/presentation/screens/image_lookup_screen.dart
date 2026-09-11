@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../../core/constants/media_extensions.dart';
 import '../../../../core/models/media_lookup_mode.dart';
+import '../../../../core/models/video_frame_lookup_precision.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../core/utils/file_size_formatter.dart';
 import '../../../../shared/widgets/app_bar.dart';
@@ -17,10 +18,12 @@ import '../../../../shared/widgets/finder_media_actions.dart';
 import '../../../../shared/widgets/reveal_media_action.dart';
 import '../../../media_library/domain/entities/media_entity.dart';
 import '../../domain/entities/image_lookup_match.dart';
+import '../../domain/entities/image_lookup_progress.dart';
 import '../../domain/entities/duplicate_sensitivity.dart';
 import '../../domain/entities/image_lookup_result.dart';
 import '../../domain/entities/image_lookup_session.dart';
 import '../../domain/entities/image_lookup_source.dart';
+import '../../domain/entities/image_lookup_verification_summary.dart';
 import '../view_models/image_lookup_view_model.dart';
 import '../widgets/duplicate_thumbnail.dart';
 import '../widgets/sensitivity_selector.dart';
@@ -67,6 +70,11 @@ class _ImageLookupScreenState extends ConsumerState<ImageLookupScreen> {
             ),
           ),
           IconButton(
+            tooltip: 'Lookup options',
+            onPressed: () => _showLookupOptions(context, state, viewModel),
+            icon: const Icon(Icons.tune),
+          ),
+          IconButton(
             tooltip: state.lookupMode == MediaLookupMode.videoFromFrame
                 ? 'Choose image frames'
                 : 'Choose images or videos',
@@ -80,6 +88,7 @@ class _ImageLookupScreenState extends ConsumerState<ImageLookupScreen> {
         children: <Widget>[
           _LookupModeBar(
             mode: state.lookupMode,
+            precision: state.lookupPrecision,
             enabled: !state.isBusy,
             onChanged: (mode) => unawaited(viewModel.setLookupMode(mode)),
           ),
@@ -120,14 +129,29 @@ class _ImageLookupScreenState extends ConsumerState<ImageLookupScreen> {
                     ImageLookupPreparing() => _PreparingView(
                       phase: phase,
                       mode: state.lookupMode,
+                      precision: state.lookupPrecision,
                       onSkip: viewModel.skipPreparation,
                       onCancel: () => unawaited(viewModel.cancel()),
                       onBackground: () => _runInBackground(context, viewModel),
                     ),
                     ImageLookupSearching() => _SearchingView(
                       phase: phase,
+                      mode: state.lookupMode,
                       onCancel: () => unawaited(viewModel.cancel()),
+                      onStopAndKeepResults:
+                          phase.progress.stage ==
+                              ImageLookupProgressStage.verifyingVideoFrames
+                          ? () => unawaited(viewModel.stopAndKeepResults())
+                          : null,
                       onBackground: () => _runInBackground(context, viewModel),
+                      expandedQueries: _expandedQueries,
+                      onToggleExpanded: (path) {
+                        setState(() {
+                          if (!_expandedQueries.add(path)) {
+                            _expandedQueries.remove(path);
+                          }
+                        });
+                      },
                     ),
                     ImageLookupResults() => _ResultsView(
                       phase: phase,
@@ -135,6 +159,9 @@ class _ImageLookupScreenState extends ConsumerState<ImageLookupScreen> {
                       expandedQueries: _expandedQueries,
                       onSensitivityChanged: (value) =>
                           unawaited(viewModel.setSensitivity(value)),
+                      onSearchAgain: viewModel.canSearchAgain
+                          ? () => unawaited(viewModel.searchAgain())
+                          : null,
                       onChoose: () => unawaited(viewModel.pickMedia()),
                       onToggleExpanded: (path) {
                         setState(() {
@@ -144,10 +171,14 @@ class _ImageLookupScreenState extends ConsumerState<ImageLookupScreen> {
                         });
                       },
                     ),
-                    ImageLookupFailure(:final message) => _FailureView(
-                      message: message,
-                      onChoose: () => unawaited(viewModel.pickMedia()),
-                    ),
+                    ImageLookupFailure(:final message, :final sources) =>
+                      _FailureView(
+                        message: message,
+                        onChoose: () => unawaited(viewModel.pickMedia()),
+                        onRetry: sources.isEmpty
+                            ? null
+                            : () => unawaited(viewModel.retryPreparation()),
+                      ),
                   },
                   if (_isDragging) _DropOverlay(mode: state.lookupMode),
                 ],
@@ -182,16 +213,75 @@ class _ImageLookupScreenState extends ConsumerState<ImageLookupScreen> {
       ),
     );
   }
+
+  Future<void> _showLookupOptions(
+    BuildContext context,
+    ImageLookupViewState state,
+    ImageLookupViewModel viewModel,
+  ) async {
+    var precision = state.lookupPrecision;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Lookup options'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Maximum precision video-frame search'),
+                  subtitle: Text(
+                    '${VideoFrameLookupPrecision.maximum.description} '
+                    'The selected tier applies to the next Video from frame '
+                    'lookup.',
+                  ),
+                  value: precision == VideoFrameLookupPrecision.maximum,
+                  onChanged: state.isBusy
+                      ? null
+                      : (enabled) {
+                          final next = enabled
+                              ? VideoFrameLookupPrecision.maximum
+                              : VideoFrameLookupPrecision.standard;
+                          setDialogState(() => precision = next);
+                          unawaited(viewModel.setLookupPrecision(next));
+                        },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Maximum precision works offline on macOS and keeps a '
+                  'separate frame cache. It can take considerably longer and '
+                  'requires additional cache space.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _LookupModeBar extends StatelessWidget {
   const _LookupModeBar({
     required this.mode,
+    required this.precision,
     required this.enabled,
     required this.onChanged,
   });
 
   final MediaLookupMode mode;
+  final VideoFrameLookupPrecision precision;
   final bool enabled;
   final ValueChanged<MediaLookupMode> onChanged;
 
@@ -228,6 +318,17 @@ class _LookupModeBar extends StatelessWidget {
                 ),
               ),
             ),
+            if (mode == MediaLookupMode.videoFromFrame) ...[
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text(
+                  '${mode.label} · ${precision.label}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -268,12 +369,13 @@ class _IdleView extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 mode == MediaLookupMode.videoFromFrame
-                    ? 'Choose one or more image frames. The app compares them '
-                          'with frames sampled at 10%, 30%, 50%, 70%, and 90% '
-                          'of every indexed video in the active profile.'
+                    ? 'Choose one or more image frames. Standard compares '
+                          'frames sampled at 10%, 30%, 50%, 70%, and 90% '
+                          'of each indexed video. Maximum precision checks '
+                          'several likely scenes in each indexed video.'
                     : 'Choose one or more images or videos, or drop them '
                           'anywhere in this window. Videos are compared using a '
-                          'generated frame near 10% of each video. Results use '
+                          'generated frame from each video. Results use '
                           'media already indexed for the active profile.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
@@ -302,6 +404,7 @@ class _PreparingView extends StatelessWidget {
   const _PreparingView({
     required this.phase,
     required this.mode,
+    required this.precision,
     required this.onSkip,
     required this.onCancel,
     required this.onBackground,
@@ -309,6 +412,7 @@ class _PreparingView extends StatelessWidget {
 
   final ImageLookupPreparing phase;
   final MediaLookupMode mode;
+  final VideoFrameLookupPrecision precision;
   final VoidCallback onSkip;
   final VoidCallback onCancel;
   final VoidCallback onBackground;
@@ -316,6 +420,10 @@ class _PreparingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = phase.progress;
+    final inVideoFramePass =
+        mode == MediaLookupMode.videoFromFrame &&
+        precision == VideoFrameLookupPrecision.maximum &&
+        progress.currentItemProcessed > 0;
     return _OperationView(
       icon: Icons.photo_library_outlined,
       title: 'Preparing Library',
@@ -323,11 +431,12 @@ class _PreparingView extends StatelessWidget {
           ? 'Checking indexed media…'
           : 'Processed ${progress.processed} of ${progress.total} '
                 '${mode == MediaLookupMode.videoFromFrame ? 'videos' : 'media items'}'
-                '${progress.reused > 0 ? ' · ${progress.reused} reused' : ''}',
+                '${progress.reused > 0 ? ' · ${progress.reused} reused' : ''}'
+                '${inVideoFramePass ? ' · ${progress.currentItemProcessed} frames in current video' : ''}',
       progress: progress.total == 0 ? null : progress.fraction,
       actions: <Widget>[
         TextButton(onPressed: onCancel, child: const Text('Cancel')),
-        OutlinedButton(onPressed: onSkip, child: const Text('Skip')),
+        OutlinedButton(onPressed: onSkip, child: const Text('Skip & Search')),
         FilledButton.icon(
           onPressed: onBackground,
           icon: const Icon(Icons.arrow_back),
@@ -338,34 +447,305 @@ class _PreparingView extends StatelessWidget {
   }
 }
 
-class _SearchingView extends StatelessWidget {
+class _SearchingView extends StatefulWidget {
   const _SearchingView({
     required this.phase,
+    required this.mode,
     required this.onCancel,
+    required this.onStopAndKeepResults,
     required this.onBackground,
+    required this.expandedQueries,
+    required this.onToggleExpanded,
   });
 
   final ImageLookupSearching phase;
+  final MediaLookupMode mode;
   final VoidCallback onCancel;
+  final VoidCallback? onStopAndKeepResults;
   final VoidCallback onBackground;
+  final Set<String> expandedQueries;
+  final ValueChanged<String> onToggleExpanded;
+
+  @override
+  State<_SearchingView> createState() => _SearchingViewState();
+}
+
+class _SearchingViewState extends State<_SearchingView> {
+  Timer? _elapsedTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startElapsedTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SearchingView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.phase.startedAt != widget.phase.startedAt) {
+      _startElapsedTimer();
+    }
+  }
+
+  void _startElapsedTimer() {
+    _elapsedTimer?.cancel();
+    if (widget.phase.startedAt == null) {
+      return;
+    }
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _elapsedTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return _OperationView(
-      icon: Icons.manage_search,
-      title: 'Finding Matches',
-      description: phase.total == 0
-          ? 'Preparing selected media…'
-          : 'Processed ${phase.processed} of ${phase.total} queries',
-      progress: phase.total == 0 ? null : phase.fraction,
-      actions: <Widget>[
-        TextButton(onPressed: onCancel, child: const Text('Cancel')),
-        FilledButton.icon(
-          onPressed: onBackground,
-          icon: const Icon(Icons.arrow_back),
-          label: const Text('Run in Background'),
+    final phase = widget.phase;
+    final title = phase.hasPartialCoverage
+        ? widget.mode == MediaLookupMode.videoFromFrame
+              ? 'Finding Matches in Indexed Videos'
+              : 'Finding Matches in Indexed Media'
+        : 'Finding Matches';
+    return Column(
+      children: <Widget>[
+        _LiveSearchBanner(
+          title: title,
+          description: _description,
+          progress: _indicatorValue,
+          elapsed: _elapsed,
+          summary: phase.verificationSummary,
+          matchCount: _accumulatedMatchCount(phase.results),
+          actions: <Widget>[
+            TextButton(onPressed: widget.onCancel, child: const Text('Cancel')),
+            if (widget.onStopAndKeepResults != null)
+              OutlinedButton.icon(
+                onPressed: widget.onStopAndKeepResults,
+                icon: const Icon(Icons.pause_circle_outline),
+                label: const Text('Stop & Keep Results'),
+              ),
+            FilledButton.icon(
+              onPressed: widget.onBackground,
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Run in Background'),
+            ),
+          ],
+        ),
+        Expanded(
+          child: phase.results.isEmpty
+              ? Center(
+                  child: Text(
+                    'Results will appear here as videos are checked.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: phase.results.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 18),
+                  itemBuilder: (context, index) {
+                    final result = phase.results[index];
+                    return _LookupResultRow(
+                      result: result,
+                      isSearching: true,
+                      isExpanded: widget.expandedQueries.contains(
+                        result.source.path,
+                      ),
+                      onToggleExpanded: () =>
+                          widget.onToggleExpanded(result.source.path),
+                    );
+                  },
+                ),
         ),
       ],
+    );
+  }
+
+  Duration get _elapsed {
+    final startedAt = widget.phase.startedAt;
+    if (startedAt == null) {
+      return Duration.zero;
+    }
+    final elapsed = DateTime.now().difference(startedAt);
+    return elapsed.isNegative ? Duration.zero : elapsed;
+  }
+
+  String get _description {
+    final progress = widget.phase.progress;
+    return switch (progress.stage) {
+      ImageLookupProgressStage.preparingQueries => _preparingQueriesDescription(
+        progress,
+      ),
+      ImageLookupProgressStage.preparingDescriptors =>
+        _preparingDescriptorsDescription(progress),
+      ImageLookupProgressStage.searchingIndexedMedia =>
+        _searchingMediaDescription(progress),
+      ImageLookupProgressStage.scanningVideoFrames => _scanningVideoDescription(
+        progress,
+      ),
+      ImageLookupProgressStage.verifyingVideoFrames =>
+        _verifyingVideoDescription(progress),
+    };
+  }
+
+  double? get _indicatorValue {
+    final progress = widget.phase.progress;
+    if (progress.total <= 0 ||
+        progress.stage == ImageLookupProgressStage.verifyingVideoFrames) {
+      return null;
+    }
+    if (progress.stage == ImageLookupProgressStage.scanningVideoFrames) {
+      if (progress.currentItemProcessed <= 0 ||
+          progress.currentItemTotal <= 0) {
+        return null;
+      }
+      final currentFraction =
+          progress.currentItemProcessed / progress.currentItemTotal;
+      return ((progress.processed + currentFraction) / progress.total)
+          .clamp(0, 1)
+          .toDouble();
+    }
+    if (progress.processed <= 0 || progress.processed >= progress.total) {
+      return null;
+    }
+    return progress.fraction;
+  }
+
+  String _preparingQueriesDescription(ImageLookupProgress progress) {
+    if (progress.total <= 1) {
+      return progress.processed == 0
+          ? 'Preparing the query image before searching the index…'
+          : 'Query image ready. Loading the indexed library…';
+    }
+    return 'Preparing query images · ${progress.processed} of '
+        '${progress.total} ready';
+  }
+
+  String _preparingDescriptorsDescription(ImageLookupProgress progress) {
+    if (progress.total <= 1) {
+      return progress.processed == 0
+          ? 'Preparing the query for maximum-precision matching…'
+          : 'Query ready. Loading completed video indexes…';
+    }
+    return 'Preparing maximum-precision queries · ${progress.processed} of '
+        '${progress.total} ready';
+  }
+
+  String _searchingMediaDescription(ImageLookupProgress progress) {
+    if (progress.total <= 0) {
+      return 'Searching indexed media for matches…';
+    }
+    if (progress.processed >= progress.total) {
+      return 'Finalizing matches…';
+    }
+    return 'Comparing query ${progress.processed + 1} of ${progress.total} '
+        'against indexed media…';
+  }
+
+  String _scanningVideoDescription(ImageLookupProgress progress) {
+    if (progress.total <= 0) {
+      return 'Checking for completed video indexes…';
+    }
+    final videoNumber = (progress.processed + 1).clamp(1, progress.total);
+    if (progress.currentItemTotal > 0 && progress.currentItemProcessed > 0) {
+      return 'Scanning video $videoNumber of ${progress.total} · '
+          '${progress.currentItemProcessed} of '
+          '${progress.currentItemTotal} frames';
+    }
+    return 'Scanning video $videoNumber of ${progress.total}…';
+  }
+
+  String _verifyingVideoDescription(ImageLookupProgress progress) {
+    final passDescription = switch (progress.verificationPhase) {
+      ImageLookupVerificationPhase.initial =>
+        'Checking likely scenes in the '
+            'highest-ranked videos',
+      ImageLookupVerificationPhase.remaining =>
+        'Checking likely scenes in '
+            'the remaining videos',
+      null => 'Checking likely scenes',
+    };
+    if (progress.total <= 0) {
+      return '$passDescription…';
+    }
+    if (progress.processed >= progress.total) {
+      return 'Finalizing verified matches…';
+    }
+    if (progress.currentItemTotal > 0 && progress.currentItemProcessed > 0) {
+      return '$passDescription · ${progress.processed} of '
+          '${progress.total} videos checked · '
+          '${progress.currentItemProcessed} of ${progress.currentItemTotal} '
+          'videos in this pass…';
+    }
+    return '$passDescription · ${progress.processed} of '
+        '${progress.total} videos checked…';
+  }
+}
+
+class _LiveSearchBanner extends StatelessWidget {
+  const _LiveSearchBanner({
+    required this.title,
+    required this.description,
+    required this.progress,
+    required this.elapsed,
+    required this.summary,
+    required this.matchCount,
+    required this.actions,
+  });
+
+  final String title;
+  final String description;
+  final double? progress;
+  final Duration elapsed;
+  final ImageLookupVerificationSummary? summary;
+  final int matchCount;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final summaryText = _verificationProgressText(summary);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+      color: theme.colorScheme.surfaceContainerLow,
+      child: Column(
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.manage_search, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              Expanded(child: Text(title, style: theme.textTheme.titleLarge)),
+              Text(
+                'Elapsed ${_formatElapsed(elapsed)}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(value: progress),
+          const SizedBox(height: 8),
+          Text(description, textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(
+            summaryText == null
+                ? '$matchCount match${matchCount == 1 ? '' : 'es'} so far'
+                : '$summaryText · $matchCount match${matchCount == 1 ? '' : 'es'} so far',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(spacing: 10, runSpacing: 10, children: actions),
+        ],
+      ),
     );
   }
 }
@@ -414,10 +794,15 @@ class _OperationView extends StatelessWidget {
 }
 
 class _FailureView extends StatelessWidget {
-  const _FailureView({required this.message, required this.onChoose});
+  const _FailureView({
+    required this.message,
+    required this.onChoose,
+    this.onRetry,
+  });
 
   final String message;
   final VoidCallback onChoose;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -432,10 +817,23 @@ class _FailureView extends StatelessWidget {
             const SizedBox(height: 16),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: onChoose,
-              icon: const Icon(Icons.perm_media_outlined),
-              label: const Text('Choose Media'),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: <Widget>[
+                if (onRetry != null)
+                  OutlinedButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry preparation'),
+                  ),
+                FilledButton.icon(
+                  onPressed: onChoose,
+                  icon: const Icon(Icons.perm_media_outlined),
+                  label: const Text('Choose Media'),
+                ),
+              ],
             ),
           ],
         ),
@@ -450,6 +848,7 @@ class _ResultsView extends StatelessWidget {
     required this.state,
     required this.expandedQueries,
     required this.onSensitivityChanged,
+    required this.onSearchAgain,
     required this.onChoose,
     required this.onToggleExpanded,
   });
@@ -458,6 +857,7 @@ class _ResultsView extends StatelessWidget {
   final ImageLookupViewState state;
   final Set<String> expandedQueries;
   final ValueChanged<DuplicateSensitivity> onSensitivityChanged;
+  final VoidCallback? onSearchAgain;
   final VoidCallback onChoose;
   final ValueChanged<String> onToggleExpanded;
 
@@ -485,6 +885,14 @@ class _ResultsView extends StatelessWidget {
                 icon: const Icon(Icons.perm_media_outlined),
                 label: const Text('New Lookup'),
               ),
+              if (onSearchAgain != null) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: onSearchAgain,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Search again'),
+                ),
+              ],
             ],
           ),
         ),
@@ -501,6 +909,27 @@ class _ResultsView extends StatelessWidget {
               'may be incomplete.',
               style: TextStyle(color: theme.colorScheme.onTertiaryContainer),
             ),
+          ),
+        if (session.hasStoppedVerification)
+          _ResultNotice(
+            color: theme.colorScheme.tertiaryContainer,
+            foregroundColor: theme.colorScheme.onTertiaryContainer,
+            icon: Icons.pause_circle_outline,
+            message: _stoppedVerificationText(session),
+          ),
+        if ((session.verificationSummary?.failedVideoCount ?? 0) > 0)
+          _ResultNotice(
+            color: theme.colorScheme.errorContainer,
+            foregroundColor: theme.colorScheme.onErrorContainer,
+            icon: Icons.warning_amber_outlined,
+            message: _failedVerificationText(session),
+          ),
+        if ((session.verificationSummary?.invalidIndexVideoCount ?? 0) > 0)
+          _ResultNotice(
+            color: theme.colorScheme.errorContainer,
+            foregroundColor: theme.colorScheme.onErrorContainer,
+            icon: Icons.rule_folder_outlined,
+            message: _invalidIndexText(session),
           ),
         if (phase.isHistorySnapshot)
           Container(
@@ -529,6 +958,38 @@ class _ResultsView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ResultNotice extends StatelessWidget {
+  const _ResultNotice({
+    required this.color,
+    required this.foregroundColor,
+    required this.icon,
+    required this.message,
+  });
+
+  final Color color;
+  final Color foregroundColor;
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: color,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: Row(
+        children: <Widget>[
+          Icon(icon, color: foregroundColor, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(message, style: TextStyle(color: foregroundColor)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -573,6 +1034,14 @@ class _LookupScopeSummary extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (mode == MediaLookupMode.videoFromFrame)
+                  Text(
+                    '${session.lookupPrecision.label} · '
+                    '${session.lookupPrecision == VideoFrameLookupPrecision.maximum ? 'Several likely scenes checked per video' : 'Five representative frames per video'}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -587,11 +1056,13 @@ class _LookupResultRow extends StatelessWidget {
     required this.result,
     required this.isExpanded,
     required this.onToggleExpanded,
+    this.isSearching = false,
   });
 
   static const int _initialMatchCount = 10;
 
   final ImageLookupResult result;
+  final bool isSearching;
   final bool isExpanded;
   final VoidCallback onToggleExpanded;
 
@@ -614,6 +1085,7 @@ class _LookupResultRow extends StatelessWidget {
               child: _MatchArea(
                 result: result,
                 shownMatches: shownMatches,
+                isSearching: isSearching,
                 isExpanded: isExpanded,
                 onToggleExpanded: onToggleExpanded,
               ),
@@ -627,6 +1099,7 @@ class _LookupResultRow extends StatelessWidget {
                   _MatchArea(
                     result: result,
                     shownMatches: shownMatches,
+                    isSearching: isSearching,
                     isExpanded: isExpanded,
                     onToggleExpanded: onToggleExpanded,
                   ),
@@ -719,12 +1192,14 @@ class _MatchArea extends StatelessWidget {
   const _MatchArea({
     required this.result,
     required this.shownMatches,
+    required this.isSearching,
     required this.isExpanded,
     required this.onToggleExpanded,
   });
 
   final ImageLookupResult result;
   final List<ImageLookupMatch> shownMatches;
+  final bool isSearching;
   final bool isExpanded;
   final VoidCallback onToggleExpanded;
 
@@ -738,9 +1213,11 @@ class _MatchArea extends StatelessWidget {
       );
     }
     if (result.matches.isEmpty) {
-      return const _InlineMessage(
+      return _InlineMessage(
         icon: Icons.search_off,
-        message: 'No matches found in the currently indexed library.',
+        message: isSearching
+            ? 'Still checking this query against the indexed library…'
+            : 'No matches found in the currently indexed library.',
       );
     }
     return Column(
@@ -847,8 +1324,11 @@ class _MatchCard extends StatelessWidget {
                         ),
                         if (match.matchedVideoFrame case final frame?)
                           Text(
-                            'Matched around ${_formatDuration(frame.timestamp)} '
-                            '· ${frame.positionPercent}%',
+                            match.visionDistance == null
+                                ? 'Matched around ${_formatDuration(frame.timestamp)} '
+                                      '· ${frame.positionPercent}%'
+                                : 'Matched at ${_formatDuration(frame.timestamp, includeMilliseconds: true)} '
+                                      '· Vision ${match.visionDistance!.toStringAsFixed(3)}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.primary,
                             ),
@@ -1127,9 +1607,11 @@ class _HistoryDialogState extends State<_HistoryDialog> {
                     subtitle: Text(
                       '${_formatDateTime(session.createdAt)} · '
                       '${session.lookupMode.label} · '
+                      '${session.lookupMode == MediaLookupMode.videoFromFrame ? '${session.lookupPrecision.label} · ' : ''}'
                       '${_searchedCandidateText(session)} · '
                       '${session.sensitivity.label}'
-                      '${session.hasPartialCoverage ? ' · partial' : ''}',
+                      '${session.hasPartialCoverage ? ' · partial index coverage' : ''}'
+                      '${session.hasStoppedVerification ? ' · stopped early' : ''}',
                     ),
                     onTap: () => widget.onOpen(session),
                     trailing: IconButton(
@@ -1360,6 +1842,10 @@ String _searchedCandidateText(ImageLookupSession session) {
       '${_lookupCandidateNoun(session.lookupMode, count: session.searchedLibraryImages)}';
 }
 
+int _accumulatedMatchCount(List<ImageLookupResult> results) {
+  return results.fold<int>(0, (total, result) => total + result.matches.length);
+}
+
 String _formatDate(DateTime date) {
   return '${date.year}-${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
@@ -1372,16 +1858,90 @@ String _formatDateTime(DateTime date) {
       '${local.minute.toString().padLeft(2, '0')}';
 }
 
-String _formatDuration(Duration duration) {
+String _formatDuration(Duration duration, {bool includeMilliseconds = false}) {
   final totalSeconds = duration.inSeconds;
   final hours = totalSeconds ~/ 3600;
   final minutes = (totalSeconds % 3600) ~/ 60;
   final seconds = totalSeconds % 60;
   if (hours > 0) {
-    return '${hours.toString().padLeft(2, '0')}:'
+    final value =
+        '${hours.toString().padLeft(2, '0')}:'
         '${minutes.toString().padLeft(2, '0')}:'
         '${seconds.toString().padLeft(2, '0')}';
+    return includeMilliseconds ? '$value.${_milliseconds(duration)}' : value;
   }
-  return '${minutes.toString().padLeft(2, '0')}:'
+  final value =
+      '${minutes.toString().padLeft(2, '0')}:'
       '${seconds.toString().padLeft(2, '0')}';
+  return includeMilliseconds ? '$value.${_milliseconds(duration)}' : value;
+}
+
+String _milliseconds(Duration duration) {
+  return duration.inMilliseconds.remainder(1000).toString().padLeft(3, '0');
+}
+
+String _formatElapsed(Duration duration) {
+  final totalSeconds = duration.inSeconds;
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return '${hours.toString().padLeft(2, '0')}'
+        ':${minutes.toString().padLeft(2, '0')}'
+        ':${seconds.toString().padLeft(2, '0')}';
+  }
+  return '${minutes.toString().padLeft(2, '0')}'
+      ':${seconds.toString().padLeft(2, '0')}';
+}
+
+String? _verificationProgressText(ImageLookupVerificationSummary? summary) {
+  if (summary == null || summary.eligibleVideoCount <= 0) {
+    return null;
+  }
+  final completedVideoCount =
+      (summary.verifiedVideoCount +
+              summary.failedVideoCount +
+              summary.invalidIndexVideoCount)
+          .clamp(0, summary.eligibleVideoCount);
+  final parts = <String>[
+    'Checked $completedVideoCount of '
+        '${summary.eligibleVideoCount} videos',
+  ];
+  if (summary.verifiedVideoCount > 0) {
+    parts.add('${summary.verifiedVideoCount} verified');
+  }
+  if (summary.failedVideoCount > 0) {
+    parts.add('${summary.failedVideoCount} unavailable');
+  }
+  if (summary.invalidIndexVideoCount > 0) {
+    parts.add('${summary.invalidIndexVideoCount} skipped');
+  }
+  return parts.join(' · ');
+}
+
+String _stoppedVerificationText(ImageLookupSession session) {
+  final summary = session.verificationSummary;
+  if (summary == null || summary.eligibleVideoCount <= 0) {
+    return 'Verification was stopped. The results below are partial.';
+  }
+  final completedVideoCount =
+      (summary.verifiedVideoCount +
+              summary.failedVideoCount +
+              summary.invalidIndexVideoCount)
+          .clamp(0, summary.eligibleVideoCount);
+  return 'Verification was stopped after checking '
+      '$completedVideoCount of ${summary.eligibleVideoCount} '
+      'eligible videos. The results below are partial.';
+}
+
+String _failedVerificationText(ImageLookupSession session) {
+  final count = session.verificationSummary?.failedVideoCount ?? 0;
+  return '$count ${count == 1 ? 'video could not' : 'videos could not'} '
+      'be checked. Other results remain available.';
+}
+
+String _invalidIndexText(ImageLookupSession session) {
+  final count = session.verificationSummary?.invalidIndexVideoCount ?? 0;
+  return '$count ${count == 1 ? 'video index was' : 'video indexes were'} '
+      'not valid and ${count == 1 ? 'was' : 'were'} skipped.';
 }

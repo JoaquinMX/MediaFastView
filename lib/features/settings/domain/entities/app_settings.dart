@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/models/media_lookup_mode.dart';
+import '../../../../core/models/video_frame_lookup_precision.dart';
 import 'playback_settings.dart';
 
 const int slideshowControlsHideDelayMinSeconds = 1;
@@ -14,6 +15,7 @@ class AppSettings {
     required this.thumbnailDiskCacheEnabled,
     required this.imageLookupHistoryEnabled,
     required this.mediaLookupMode,
+    required this.videoFrameLookupPrecision,
     required this.deleteFromSourceEnabled,
     required this.playbackSettings,
     required this.autoNavigateSiblingDirectories,
@@ -27,6 +29,7 @@ class AppSettings {
       thumbnailDiskCacheEnabled = true,
       imageLookupHistoryEnabled = false,
       mediaLookupMode = MediaLookupMode.mediaMatches,
+      videoFrameLookupPrecision = VideoFrameLookupPrecision.standard,
       deleteFromSourceEnabled = false,
       playbackSettings = const PlaybackSettings.initial(),
       autoNavigateSiblingDirectories = false,
@@ -40,6 +43,9 @@ class AppSettings {
   final bool thumbnailDiskCacheEnabled;
   final bool imageLookupHistoryEnabled;
   final MediaLookupMode mediaLookupMode;
+
+  /// Precision tier used by image-to-video frame lookup.
+  final VideoFrameLookupPrecision videoFrameLookupPrecision;
   final bool deleteFromSourceEnabled;
   final PlaybackSettings playbackSettings;
   final bool autoNavigateSiblingDirectories;
@@ -58,6 +64,7 @@ class AppSettings {
     bool? thumbnailDiskCacheEnabled,
     bool? imageLookupHistoryEnabled,
     MediaLookupMode? mediaLookupMode,
+    VideoFrameLookupPrecision? videoFrameLookupPrecision,
     bool? deleteFromSourceEnabled,
     PlaybackSettings? playbackSettings,
     bool? autoNavigateSiblingDirectories,
@@ -72,6 +79,8 @@ class AppSettings {
       imageLookupHistoryEnabled:
           imageLookupHistoryEnabled ?? this.imageLookupHistoryEnabled,
       mediaLookupMode: mediaLookupMode ?? this.mediaLookupMode,
+      videoFrameLookupPrecision:
+          videoFrameLookupPrecision ?? this.videoFrameLookupPrecision,
       deleteFromSourceEnabled:
           deleteFromSourceEnabled ?? this.deleteFromSourceEnabled,
       playbackSettings: playbackSettings ?? this.playbackSettings,

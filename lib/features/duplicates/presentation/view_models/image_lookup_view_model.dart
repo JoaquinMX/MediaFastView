@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/models/media_lookup_mode.dart';
+import '../../../../core/models/video_frame_lookup_precision.dart';
 import '../../../../core/services/bookmark_service.dart';
 import '../../../../shared/providers/active_profile_provider.dart';
 import '../../../../shared/providers/duplicate_providers.dart';
@@ -15,9 +16,12 @@ import '../../data/services/image_lookup_file_picker.dart';
 import '../../domain/entities/duplicate_scan_progress.dart';
 import '../../domain/entities/duplicate_sensitivity.dart';
 import '../../domain/entities/image_lookup_query.dart';
+import '../../domain/entities/image_lookup_progress.dart';
 import '../../domain/entities/image_lookup_result.dart';
 import '../../domain/entities/image_lookup_session.dart';
 import '../../domain/entities/image_lookup_source.dart';
+import '../../domain/entities/image_lookup_update.dart';
+import '../../domain/entities/image_lookup_verification_summary.dart';
 import '../../domain/repositories/image_lookup_history_repository.dart';
 import '../../domain/use_cases/find_image_matches_use_case.dart';
 import '../../domain/use_cases/get_duplicate_library_coverage_use_case.dart';
@@ -41,19 +45,21 @@ class ImageLookupPreparing extends ImageLookupPhase {
 }
 
 class ImageLookupSearching extends ImageLookupPhase {
-  const ImageLookupSearching({
+  ImageLookupSearching({
     required this.sources,
-    required this.processed,
-    required this.total,
+    required this.progress,
     required this.hasPartialCoverage,
-  });
+    List<ImageLookupResult> results = const <ImageLookupResult>[],
+    this.verificationSummary,
+    this.startedAt,
+  }) : results = List<ImageLookupResult>.unmodifiable(results);
 
   final List<ImageLookupSource> sources;
-  final int processed;
-  final int total;
+  final ImageLookupProgress progress;
   final bool hasPartialCoverage;
-
-  double get fraction => total == 0 ? 0 : processed / total;
+  final List<ImageLookupResult> results;
+  final ImageLookupVerificationSummary? verificationSummary;
+  final DateTime? startedAt;
 }
 
 class ImageLookupResults extends ImageLookupPhase {
@@ -67,9 +73,13 @@ class ImageLookupResults extends ImageLookupPhase {
 }
 
 class ImageLookupFailure extends ImageLookupPhase {
-  const ImageLookupFailure(this.message);
+  const ImageLookupFailure(
+    this.message, {
+    this.sources = const <ImageLookupSource>[],
+  });
 
   final String message;
+  final List<ImageLookupSource> sources;
 }
 
 /// Route-independent state for lookup progress, results, and saved history.
@@ -78,6 +88,7 @@ class ImageLookupViewState {
     this.phase = const ImageLookupIdle(),
     this.sensitivity = DuplicateSensitivity.balanced,
     this.lookupMode = MediaLookupMode.mediaMatches,
+    this.lookupPrecision = VideoFrameLookupPrecision.standard,
     this.history = const <ImageLookupSession>[],
     this.isHistoryLoading = true,
     this.isRunningInBackground = false,
@@ -86,6 +97,7 @@ class ImageLookupViewState {
   final ImageLookupPhase phase;
   final DuplicateSensitivity sensitivity;
   final MediaLookupMode lookupMode;
+  final VideoFrameLookupPrecision lookupPrecision;
   final List<ImageLookupSession> history;
   final bool isHistoryLoading;
   final bool isRunningInBackground;
@@ -97,6 +109,7 @@ class ImageLookupViewState {
     ImageLookupPhase? phase,
     DuplicateSensitivity? sensitivity,
     MediaLookupMode? lookupMode,
+    VideoFrameLookupPrecision? lookupPrecision,
     List<ImageLookupSession>? history,
     bool? isHistoryLoading,
     bool? isRunningInBackground,
@@ -105,6 +118,7 @@ class ImageLookupViewState {
       phase: phase ?? this.phase,
       sensitivity: sensitivity ?? this.sensitivity,
       lookupMode: lookupMode ?? this.lookupMode,
+      lookupPrecision: lookupPrecision ?? this.lookupPrecision,
       history: history ?? this.history,
       isHistoryLoading: isHistoryLoading ?? this.isHistoryLoading,
       isRunningInBackground:
@@ -129,6 +143,11 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
     required Future<void> Function(MediaLookupMode mode) saveLookupMode,
     Future<MediaLookupMode> Function()? loadLookupMode,
     MediaLookupMode initialLookupMode = MediaLookupMode.mediaMatches,
+    Future<void> Function(VideoFrameLookupPrecision precision)?
+    saveLookupPrecision,
+    Future<VideoFrameLookupPrecision> Function()? loadLookupPrecision,
+    VideoFrameLookupPrecision initialLookupPrecision =
+        VideoFrameLookupPrecision.standard,
     Uuid uuid = const Uuid(),
   }) : _profileId = profileId,
        _scanUseCase = scanUseCase,
@@ -142,11 +161,21 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
        _isHistoryEnabled = isHistoryEnabled,
        _saveLookupMode = saveLookupMode,
        _loadLookupMode = loadLookupMode,
+       _saveLookupPrecision = saveLookupPrecision,
+       _loadLookupPrecision = loadLookupPrecision,
        _uuid = uuid,
-       super(ImageLookupViewState(lookupMode: initialLookupMode)) {
+       super(
+         ImageLookupViewState(
+           lookupMode: initialLookupMode,
+           lookupPrecision: initialLookupPrecision,
+         ),
+       ) {
     unawaited(_loadHistory());
     if (_loadLookupMode != null) {
       unawaited(_restoreLookupMode());
+    }
+    if (_loadLookupPrecision != null) {
+      unawaited(_restoreLookupPrecision());
     }
   }
 
@@ -162,12 +191,15 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
   final bool Function() _isHistoryEnabled;
   final Future<void> Function(MediaLookupMode mode) _saveLookupMode;
   final Future<MediaLookupMode> Function()? _loadLookupMode;
+  final Future<void> Function(VideoFrameLookupPrecision precision)?
+  _saveLookupPrecision;
+  final Future<VideoFrameLookupPrecision> Function()? _loadLookupPrecision;
   final Uuid _uuid;
 
   DuplicateScanCancellation? _cancellation;
   final List<String> _activeBookmarks = <String>[];
   int _operation = 0;
-  int? _skipOperation;
+  VideoFrameLookupPrecision? _pendingSettingsPrecision;
 
   Future<void> pickMedia() async {
     try {
@@ -217,7 +249,6 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
   Future<void> startLookup(List<ImageLookupSource> sources) async {
     final operation = ++_operation;
     _cancellation?.cancel();
-    _skipOperation = null;
     await _releaseBookmarks();
     final activeSources = await _activateSources(sources);
     if (!mounted || operation != _operation) {
@@ -234,7 +265,9 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
 
     try {
       if (state.lookupMode == MediaLookupMode.videoFromFrame) {
-        final coverage = await _videoFrameCoverageUseCase();
+        final coverage = await _videoFrameCoverageUseCase(
+          lookupPrecision: state.lookupPrecision,
+        );
         if (!mounted || operation != _operation) {
           return;
         }
@@ -281,9 +314,12 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
   ) async {
     final cancellation = DuplicateScanCancellation();
     _cancellation = cancellation;
+    DuplicateScanProgress? lastProgress;
     await for (final progress in _prepareVideoFramesUseCase(
       cancellation: cancellation,
+      lookupPrecision: state.lookupPrecision,
     )) {
+      lastProgress = progress;
       if (!mounted || operation != _operation) {
         return;
       }
@@ -294,13 +330,33 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
     if (!mounted || operation != _operation) {
       return;
     }
-    final wasSkipped = _skipOperation == operation;
-    _skipOperation = null;
+    if ((lastProgress?.failed ?? 0) > 0) {
+      state = state.copyWith(
+        phase: ImageLookupFailure(
+          '${lastProgress!.failed} video${lastProgress.failed == 1 ? '' : 's'} '
+          'could not be indexed. Retry preparation or choose new media.',
+          sources: sources,
+        ),
+        isRunningInBackground: false,
+      );
+      return;
+    }
     await _search(
       operation: operation,
       sources: sources,
-      hasPartialCoverage: wasSkipped,
+      hasPartialCoverage: false,
     );
+  }
+
+  /// Retries a failed video-frame preparation using the originally selected
+  /// sources, keeping the failure screen actionable without reopening the
+  /// picker.
+  Future<void> retryPreparation() async {
+    final phase = state.phase;
+    if (phase is! ImageLookupFailure || phase.sources.isEmpty || state.isBusy) {
+      return;
+    }
+    await startLookup(List<ImageLookupSource>.from(phase.sources));
   }
 
   Future<void> setLookupMode(MediaLookupMode mode) async {
@@ -308,7 +364,6 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
       return;
     }
     _operation++;
-    _skipOperation = null;
     _cancellation?.cancel();
     await _releaseBookmarks();
     if (!mounted) {
@@ -322,6 +377,58 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
     await _saveLookupMode(mode);
   }
 
+  /// Changes the tier for the next video-from-frame search.
+  ///
+  /// A completed result remains visible until [searchAgain] is selected. This
+  /// avoids unexpectedly starting a potentially long every-frame indexing pass
+  /// from a settings toggle.
+  Future<void> setLookupPrecision(VideoFrameLookupPrecision precision) async {
+    if (precision == state.lookupPrecision || state.isBusy) {
+      return;
+    }
+    state = state.copyWith(lookupPrecision: precision);
+    final save = _saveLookupPrecision;
+    if (save != null) {
+      await save(precision);
+    }
+  }
+
+  /// Applies a settings change without writing it back through the settings
+  /// repository. Busy operations keep their captured tier and apply the new
+  /// preference as soon as they finish, making the next search explicit.
+  void syncLookupPrecisionFromSettings(VideoFrameLookupPrecision precision) {
+    if (state.isBusy) {
+      _pendingSettingsPrecision = precision;
+      return;
+    }
+    _pendingSettingsPrecision = null;
+    if (precision != state.lookupPrecision) {
+      state = state.copyWith(lookupPrecision: precision);
+    }
+  }
+
+  bool get canSearchAgain {
+    final phase = state.phase;
+    return phase is ImageLookupResults &&
+        !phase.isHistorySnapshot &&
+        state.lookupMode == MediaLookupMode.videoFromFrame &&
+        phase.session.lookupPrecision != state.lookupPrecision;
+  }
+
+  Future<void> searchAgain() async {
+    final phase = state.phase;
+    if (phase is! ImageLookupResults ||
+        phase.isHistorySnapshot ||
+        state.isBusy) {
+      return;
+    }
+    await startLookup(
+      phase.session.results
+          .map((result) => result.source)
+          .toList(growable: false),
+    );
+  }
+
   Future<void> _restoreLookupMode() async {
     final operation = _operation;
     try {
@@ -330,6 +437,20 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
           operation == _operation &&
           state.phase is ImageLookupIdle) {
         state = state.copyWith(lookupMode: mode);
+      }
+    } catch (_) {
+      // The safe default remains active when preferences cannot be read.
+    }
+  }
+
+  Future<void> _restoreLookupPrecision() async {
+    final operation = _operation;
+    try {
+      final precision = await _loadLookupPrecision!();
+      if (mounted &&
+          operation == _operation &&
+          state.phase is ImageLookupIdle) {
+        state = state.copyWith(lookupPrecision: precision);
       }
     } catch (_) {
       // The safe default remains active when preferences cannot be read.
@@ -357,32 +478,110 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
     if (!mounted || operation != _operation) {
       return;
     }
-    final wasSkipped = _skipOperation == operation;
-    _skipOperation = null;
     await _search(
       operation: operation,
       sources: sources,
-      hasPartialCoverage: wasSkipped,
+      hasPartialCoverage: false,
     );
   }
 
+  /// Stops preparation and immediately searches indexes already marked
+  /// complete. Cleanup for the abandoned preparation continues independently.
   void skipPreparation() {
-    if (state.phase is! ImageLookupPreparing) {
+    final phase = state.phase;
+    if (phase is! ImageLookupPreparing) {
       return;
     }
-    _skipOperation = _operation;
-    _cancellation?.cancel();
+    final preparationCancellation = _cancellation;
+    final searchOperation = ++_operation;
+    preparationCancellation?.cancel();
+    unawaited(
+      _searchAfterSkippedPreparation(
+        operation: searchOperation,
+        sources: phase.sources,
+      ),
+    );
+  }
+
+  Future<void> _searchAfterSkippedPreparation({
+    required int operation,
+    required List<ImageLookupSource> sources,
+  }) async {
+    try {
+      await _search(
+        operation: operation,
+        sources: sources,
+        hasPartialCoverage: true,
+      );
+    } catch (error) {
+      if (mounted && operation == _operation) {
+        state = state.copyWith(
+          phase: ImageLookupFailure('Media lookup failed: $error'),
+          isRunningInBackground: false,
+        );
+      }
+    }
   }
 
   Future<void> cancel() async {
     _operation++;
-    _skipOperation = null;
     _cancellation?.cancel();
     state = state.copyWith(
       phase: const ImageLookupIdle(),
       isRunningInBackground: false,
     );
+    final pendingPrecision = _pendingSettingsPrecision;
+    _pendingSettingsPrecision = null;
+    if (pendingPrecision != null && pendingPrecision != state.lookupPrecision) {
+      state = state.copyWith(lookupPrecision: pendingPrecision);
+    }
     await _releaseBookmarks();
+  }
+
+  /// Stops active verification while preserving the results received so far.
+  ///
+  /// Unlike [cancel], this creates a clearly marked partial history snapshot.
+  /// The operation token is advanced before cancelling so late native or
+  /// repository callbacks cannot overwrite the saved snapshot.
+  Future<void> stopAndKeepResults() async {
+    final phase = state.phase;
+    if (phase is! ImageLookupSearching) {
+      return;
+    }
+    final operation = ++_operation;
+    _cancellation?.cancel();
+    // Progress totals can represent queries or a shortlist batch, not the
+    // eligible-video population. When native verification has not supplied a
+    // summary yet, keep counts unknown instead of presenting those totals as
+    // video counts.
+    final summary =
+        (phase.verificationSummary ?? const ImageLookupVerificationSummary())
+            .copyWith(stopped: true);
+    final session = ImageLookupSession(
+      id: _uuid.v4(),
+      profileId: _profileId,
+      createdAt: DateTime.now(),
+      sensitivity: state.sensitivity,
+      lookupMode: state.lookupMode,
+      lookupPrecision: state.lookupPrecision,
+      results: List<ImageLookupResult>.unmodifiable(phase.results),
+      hasPartialCoverage: phase.hasPartialCoverage,
+      searchedLibraryImages: summary.eligibleVideoCount,
+      verificationSummary: summary,
+    );
+    if (!mounted || operation != _operation) {
+      return;
+    }
+    state = state.copyWith(
+      phase: ImageLookupResults(session: session),
+      isRunningInBackground: false,
+    );
+    final pendingPrecision = _pendingSettingsPrecision;
+    _pendingSettingsPrecision = null;
+    if (pendingPrecision != null && pendingPrecision != state.lookupPrecision) {
+      state = state.copyWith(lookupPrecision: pendingPrecision);
+    }
+    await _persistIfEnabled(session);
   }
 
   void runInBackground() {
@@ -405,29 +604,53 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
   }) async {
     final cancellation = DuplicateScanCancellation();
     _cancellation = cancellation;
+    final startedAt = DateTime.now();
     state = state.copyWith(
       phase: ImageLookupSearching(
         sources: sources,
-        processed: 0,
-        total: sources.length,
+        progress: ImageLookupProgress.preparingQueries(
+          processed: 0,
+          total: sources.length,
+        ),
         hasPartialCoverage: hasPartialCoverage,
+        startedAt: startedAt,
       ),
     );
     final batch = await _findMatchesUseCase(
       sources: sources,
       sensitivity: state.sensitivity,
       lookupMode: state.lookupMode,
+      lookupPrecision: state.lookupPrecision,
       cancellation: cancellation,
-      onProgress: (processed, total) {
+      onUpdate: (update) {
+        if (!mounted || operation != _operation || cancellation.isCancelled) {
+          return;
+        }
+        _applySearchUpdate(
+          operation: operation,
+          sources: sources,
+          hasPartialCoverage: hasPartialCoverage,
+          startedAt: startedAt,
+          update: update,
+        );
+      },
+      onProgress: (progress) {
         if (!mounted || operation != _operation) {
           return;
         }
+        final currentPhase = state.phase;
         state = state.copyWith(
           phase: ImageLookupSearching(
             sources: sources,
-            processed: processed,
-            total: total,
+            progress: progress,
             hasPartialCoverage: hasPartialCoverage,
+            results: currentPhase is ImageLookupSearching
+                ? currentPhase.results
+                : const <ImageLookupResult>[],
+            verificationSummary: currentPhase is ImageLookupSearching
+                ? currentPhase.verificationSummary
+                : null,
+            startedAt: startedAt,
           ),
         );
       },
@@ -442,19 +665,48 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
       createdAt: DateTime.now(),
       sensitivity: state.sensitivity,
       lookupMode: state.lookupMode,
+      lookupPrecision: state.lookupPrecision,
       results: batch.results,
       hasPartialCoverage: hasPartialCoverage,
       searchedLibraryImages: batch.searchedLibraryImages,
+      verificationSummary: batch.verificationSummary,
     );
     state = state.copyWith(
       phase: ImageLookupResults(session: session),
       isRunningInBackground: false,
     );
+    final pendingPrecision = _pendingSettingsPrecision;
+    _pendingSettingsPrecision = null;
+    if (pendingPrecision != null && pendingPrecision != state.lookupPrecision) {
+      state = state.copyWith(lookupPrecision: pendingPrecision);
+    }
     await _persistIfEnabled(session);
   }
 
+  void _applySearchUpdate({
+    required int operation,
+    required List<ImageLookupSource> sources,
+    required bool hasPartialCoverage,
+    required DateTime startedAt,
+    required ImageLookupUpdate update,
+  }) {
+    if (!mounted || operation != _operation) {
+      return;
+    }
+    state = state.copyWith(
+      phase: ImageLookupSearching(
+        sources: sources,
+        progress: update.progress,
+        hasPartialCoverage: hasPartialCoverage,
+        results: update.results,
+        verificationSummary: update.verificationSummary,
+        startedAt: startedAt,
+      ),
+    );
+  }
+
   Future<void> setSensitivity(DuplicateSensitivity sensitivity) async {
-    if (sensitivity == state.sensitivity) {
+    if (sensitivity == state.sensitivity || state.isBusy) {
       return;
     }
     final phase = state.phase;
@@ -478,12 +730,19 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
         .toList(growable: false);
     final cancellation = DuplicateScanCancellation();
     _cancellation = cancellation;
+    final phaseStartedAt = DateTime.now();
     state = state.copyWith(
       phase: ImageLookupSearching(
         sources: sources,
-        processed: 0,
-        total: queries.length,
+        progress: ImageLookupProgress(
+          stage: ImageLookupProgressStage.searchingIndexedMedia,
+          processed: 0,
+          total: queries.length,
+        ),
         hasPartialCoverage: phase.session.hasPartialCoverage,
+        results: phase.session.results,
+        verificationSummary: phase.session.verificationSummary,
+        startedAt: phaseStartedAt,
       ),
     );
     try {
@@ -491,17 +750,39 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
         queries: queries,
         sensitivity: sensitivity,
         lookupMode: phase.session.lookupMode,
+        lookupPrecision: phase.session.lookupPrecision,
         cancellation: cancellation,
-        onProgress: (processed, total) {
+        onUpdate: (update) {
+          if (!mounted || operation != _operation || cancellation.isCancelled) {
+            return;
+          }
+          _applySearchUpdate(
+            operation: operation,
+            sources: sources,
+            hasPartialCoverage: phase.session.hasPartialCoverage,
+            startedAt: phaseStartedAt,
+            update: update,
+          );
+        },
+        onProgress: (progress) {
           if (!mounted || operation != _operation) {
             return;
           }
+          final currentPhase = state.phase;
+          final currentResults = currentPhase is ImageLookupSearching
+              ? currentPhase.results
+              : phase.session.results;
+          final currentSummary = currentPhase is ImageLookupSearching
+              ? currentPhase.verificationSummary
+              : phase.session.verificationSummary;
           state = state.copyWith(
             phase: ImageLookupSearching(
               sources: sources,
-              processed: processed,
-              total: total,
+              progress: progress,
               hasPartialCoverage: phase.session.hasPartialCoverage,
+              results: currentResults,
+              verificationSummary: currentSummary,
+              startedAt: phaseStartedAt,
             ),
           );
         },
@@ -521,6 +802,7 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
         sensitivity: sensitivity,
         results: results,
         searchedLibraryImages: batch.searchedLibraryImages,
+        verificationSummary: batch.verificationSummary,
       );
       state = state.copyWith(phase: ImageLookupResults(session: session));
       await _persistIfEnabled(session);
@@ -558,6 +840,7 @@ class ImageLookupViewModel extends StateNotifier<ImageLookupViewState> {
       ),
       sensitivity: session.sensitivity,
       lookupMode: session.lookupMode,
+      lookupPrecision: session.lookupPrecision,
       isRunningInBackground: false,
     );
     await _saveLookupMode(session.lookupMode);
@@ -657,7 +940,10 @@ final imageLookupViewModelProvider =
     StateNotifierProvider<ImageLookupViewModel, ImageLookupViewState>((ref) {
       final profileId = ref.watch(activeProfileIdProvider);
       final initialLookupMode = ref.read(mediaLookupModeProvider);
-      return ImageLookupViewModel(
+      final initialLookupPrecision = ref.read(
+        videoFrameLookupPrecisionProvider,
+      );
+      final viewModel = ImageLookupViewModel(
         profileId: profileId,
         scanUseCase: ref.watch(scanForDuplicatesUseCaseProvider),
         coverageUseCase: ref.watch(getDuplicateLibraryCoverageUseCaseProvider),
@@ -680,5 +966,18 @@ final imageLookupViewModelProvider =
           return settings.mediaLookupMode;
         },
         initialLookupMode: initialLookupMode,
+        saveLookupPrecision: (precision) => ref
+            .read(settingsViewModelProvider.notifier)
+            .updateVideoFrameLookupPrecision(precision),
+        loadLookupPrecision: () async {
+          final settings = await ref.read(settingsViewModelProvider.future);
+          return settings.videoFrameLookupPrecision;
+        },
+        initialLookupPrecision: initialLookupPrecision,
       );
+      ref.listen<VideoFrameLookupPrecision>(
+        videoFrameLookupPrecisionProvider,
+        (_, precision) => viewModel.syncLookupPrecisionFromSettings(precision),
+      );
+      return viewModel;
     });
